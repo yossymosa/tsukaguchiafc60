@@ -296,37 +296,28 @@ function makeHpTemplate(schedule, results) {
   const dateStr = dt.m+"月"+Number(dt.d)+"日";
   const title = schedule.title || "";
   const loc = schedule.location || "";
-  const tc = getTC(schedule.type);
   const nums = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"];
 
   const sorted = [...results].sort((a,b)=>Number(a.gameNumber||1)-Number(b.gameNumber||1));
 
-  // 得点者まとめ（全試合）
-  const scorers = [];
-  sorted.forEach(r=>{
-    (r.goals||[]).filter(g=>g.team!=="them"&&g.goalType!=="オウンゴール").forEach(g=>{
-      const name = g.scorerName||"";
-      if(name&&name!=="失点"&&!scorers.includes(name)) scorers.push(name);
-    });
-  });
-
-  let text = dateStr;
-  if(title) text += "「"+title+"」";
-  text += "\n【 "+tc.lb+" 】";
-  if(loc) text += loc;
+  // ヘッダー: 日付 タイトル / 場所
+  let text = dateStr+(title?"「"+title+"」":"");
+  text += "\n"+loc;
   text += "\n";
 
   sorted.forEach((r,i)=>{
     const num = nums[i]||"・";
     const our = r.ourScore||0;
     const their = r.theirScore||0;
-    text += num+"塚口AFCjr "+our+"—"+their+" "+r.opponent+"さん\n";
+    // 試合ごとの得点者
+    const scorers = (r.goals||[])
+      .filter(g=>g.team!=="them"&&g.goalType!=="オウンゴール"&&g.scorerName&&g.scorerName!=="失点")
+      .map(g=>g.scorerName);
+    const scorerStr = scorers.length>0 ? "\n　得点："+scorers.join("、") : "";
+    text += num+"塚口AFCjr "+our+"—"+their+" "+r.opponent+"さん"+scorerStr+"\n";
   });
 
-  if(scorers.length>0) text += "得点："+scorers.join("、");
-  else if(sorted.every(r=>(r.ourScore||0)===0)) text += "得点：なし";
-
-  return text;
+  return text.trimEnd();
 }
 
 function copyToClipboard(text) {
@@ -1480,7 +1471,7 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
   const [schForm,setSchForm]=useState({date:schedule.date||"",title:schedule.title||"",location:schedule.location||"",type:schedule.type||"practice"});
   const [hpModal,setHpModal]=useState(false);
   const [hpText,setHpText]=useState("");
-  const [aiText,setAiText]=useState("");
+  const [aiPrompt,setAiPrompt]=useState("");
   const [aiLoading,setAiLoading]=useState(false);
   const [hpCopied,setHpCopied]=useState(false);
   const saveEditSch=async()=>{
@@ -1497,10 +1488,10 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
   };
   const openHpModal=()=>{
     const text=makeHpTemplate(schedule,dayR);
-    setHpText(text);setAiText("");setHpModal(true);
+    setHpText(text);setAiPrompt("");setHpModal(true);
   };
-  const generateAiComment=async()=>{
-    if(!hpText)return;
+  const runAi=async()=>{
+    if(!aiPrompt.trim())return;
     setAiLoading(true);
     try{
       const resp=await fetch("https://api.anthropic.com/v1/messages",{
@@ -1508,22 +1499,22 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",
-          max_tokens:400,
+          max_tokens:600,
           messages:[{role:"user",content:
-            "以下は少年サッカーチーム「塚口AFCjr」の試合結果テキストです。\n\n"+hpText+
-            "\n\n公式ホームページに掲載する、保護者向けの温かみのある短いコメント（100〜150文字）を1つ日本語で書いてください。選手を励ます内容で。テキストのみ返してください。"
+            "以下は少年サッカーチーム「塚口AFCjr」のHP掲載用テキストです。\n\n"+hpText+
+            "\n\n指示："+aiPrompt.trim()+
+            "\n\nテキストのみ返してください。余計な説明や前置きは不要です。"
           }]
         })
       });
       const d=await resp.json();
       const txt=(d.content||[]).find(x=>x.type==="text")?.text||"";
-      setAiText(txt);
+      if(txt) setHpText(txt);
     }catch(e){alert("AI生成エラー: "+e.message);}
     setAiLoading(false);
   };
   const copyHp=()=>{
-    const full=hpText+(aiText?"\n\n"+aiText:"");
-    copyToClipboard(full);
+    copyToClipboard(hpText);
     setHpCopied(true);setTimeout(()=>setHpCopied(false),2000);
   };
 
@@ -1531,18 +1522,19 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
     // HP用テンプレモーダル
     hpModal&&h(Modal,{title:"📋 HP用テンプレ",onClose:()=>setHpModal(false)},
       h("div",{style:{marginBottom:12}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:6}},"テキスト"),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:6}},"テキスト（編集可）"),
         h("textarea",{value:hpText,onChange:e=>setHpText(e.target.value),rows:10,
           style:{...css.inp,resize:"none",fontSize:13,lineHeight:1.8,fontFamily:"monospace"}})),
-      h("button",{onClick:generateAiComment,disabled:aiLoading,
+      h("div",{style:{marginBottom:10}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#9C27B0",marginBottom:6}},"✨ AIへの指示"),
+        h("textarea",{value:aiPrompt,onChange:e=>setAiPrompt(e.target.value),
+          placeholder:"例：保護者向けに温かいコメントを末尾に追加して\n例：敬語に整えて\n例：試合全体の感想を2〜3文で追加して",
+          rows:3,style:{...css.inp,resize:"none",fontSize:13,lineHeight:1.7}})),
+      h("button",{onClick:runAi,disabled:aiLoading||!aiPrompt.trim(),
         style:{width:"100%",marginBottom:12,padding:"11px",border:"none",borderRadius:12,
-          background:aiLoading?"#ccc":"linear-gradient(135deg,#667eea,#764ba2)",
-          color:"#fff",fontSize:13,fontWeight:700,cursor:aiLoading?"not-allowed":"pointer"}},
-        aiLoading?"✨ 生成中...":"✨ AIでコメントを追加"),
-      aiText&&h("div",{style:{marginBottom:12,padding:12,background:"#F3E5F5",borderRadius:10}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#9C27B0",marginBottom:6}},"AIコメント"),
-        h("textarea",{value:aiText,onChange:e=>setAiText(e.target.value),rows:4,
-          style:{...css.inp,resize:"none",fontSize:13,lineHeight:1.7,background:"transparent",border:"none",padding:0}})),
+          background:aiLoading||!aiPrompt.trim()?"#ccc":"linear-gradient(135deg,#667eea,#764ba2)",
+          color:"#fff",fontSize:13,fontWeight:700,cursor:aiLoading||!aiPrompt.trim()?"not-allowed":"pointer"}},
+        aiLoading?"✨ 生成中...":"✨ AIで書き直す"),
       h("button",{onClick:copyHp,
         style:{width:"100%",padding:14,border:"none",borderRadius:12,
           background:hpCopied?"#4CAF50":"#FF6B35",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}},
