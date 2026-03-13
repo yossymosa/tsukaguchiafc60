@@ -1155,13 +1155,11 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
         h("input",{type:"date",value:to,onChange:e=>setTo(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}})),
       dashTab==="result"&&h("div",{style:{marginTop:10,paddingTop:10,borderTop:"1px solid #f5f5f5"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:6}},"対戦相手"),
-        h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
-          h("button",{onClick:()=>setOppFilter("all"),style:{padding:"5px 12px",border:`2px solid ${oppFilter==="all"?"#FF6B35":"#eee"}`,borderRadius:20,background:oppFilter==="all"?"#FF6B35":"#fff",color:oppFilter==="all"?"#fff":"#666",fontSize:12,fontWeight:oppFilter==="all"?700:400,cursor:"pointer"}},"全相手"),
+        h("select",{value:oppFilter,onChange:e=>setOppFilter(e.target.value),
+          style:{...css.inp,width:"100%",fontSize:13}},
+          h("option",{value:"all"},"全相手"),
           [...new Set(filtered.map(r=>r.opponent).filter(Boolean))].sort().map(opp=>
-            h("button",{key:opp,onClick:()=>setOppFilter(opp===oppFilter?"all":opp),
-              style:{padding:"5px 12px",border:`2px solid ${oppFilter===opp?"#FF6B35":"#eee"}`,borderRadius:20,
-                background:oppFilter===opp?"#FF6B35":"#fff",color:oppFilter===opp?"#fff":"#666",
-                fontSize:12,fontWeight:oppFilter===opp?700:400,cursor:"pointer"}},opp))))),
+            h("option",{key:opp,value:opp},opp))))),
 
     // ── 対戦成績タブ ──
     dashTab==="result"&&h(Fragment,{},
