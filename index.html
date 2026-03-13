@@ -24,7 +24,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 
 
 // ================================================================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbx5aHLLwa6KS7AX5OfveKSemFS87UDBoAkCsJgWIXrq8_NAymG5MfiU2WfooNMV0xy3FA/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxz6Ow3PyIK4T9zqit5dR8hTo-5SYDOBo67dr4G8TsC7Odhe6KvICrLHbRF-JxHsadHlQ/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -137,22 +137,26 @@ function Modal({title,onClose,children}) {
 function Bdg({label,color,bg,small}) {
   return h("span",{style:{background:bg||color+"22",color,borderRadius:6,padding:small?"2px 7px":"3px 10px",fontSize:small?10:11,fontWeight:700,display:"inline-block"}},label);
 }
-function RWdg({our,their}) {
-  const w=Number(our)>Number(their),d=Number(our)===Number(their),c=w?"#4CAF50":d?"#FFC107":"#F44336";
-  return h("span",{style:{background:c,color:"#fff",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},w?"勝利":d?"引分":"敗北");
+function RWdg({our,their,pk}) {
+  const w=Number(our)>Number(their),d=Number(our)===Number(their);
+  const pkW=d&&pk&&Number(pk.our)>Number(pk.their);
+  const pkL=d&&pk&&Number(pk.our)<Number(pk.their);
+  const win=w||pkW, lose=(!w&&!d)||pkL;
+  const c=win?"#4CAF50":lose?"#F44336":"#FFC107";
+  const label=win?"勝ち":lose?"負け":"引分";
+  return h("span",{style:{background:c,color:"#fff",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},label+(pkW?" (PK)":pkL?" (PK)":""));
 }
 function ScoreLine({our,their,size=18}) {
   const c=Number(our)>Number(their)?"#4CAF50":Number(our)===Number(their)?"#FFC107":"#F44336";
   return h("span",{style:{fontSize:size,fontWeight:900,color:c,whiteSpace:"nowrap"}},Number(our),h("span",{style:{color:"#ddd",fontSize:size*0.7,margin:"0 3px"}},"-"),Number(their));
 }
-function AppHeader({user,cnt,onLogout,onRefresh}) {
+function AppHeader({user,onLogout,onRefresh}) {
   return h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",padding:"20px 20px 52px",position:"relative",overflow:"hidden"}},
     h("div",{style:{position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,107,53,0.18)"}}),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"relative"}},
       h("div",{},
-        h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:2,marginBottom:4}},"塚口AFC"),
-        h("div",{style:{fontSize:22,fontWeight:900,color:"#fff"}},"⚽ 塚口AFC"),
-        h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.6)",marginTop:4}},cnt+"人登録")),
+        h("div",{style:{fontSize:18,fontWeight:900,color:"#fff"}},"⚽ 塚口AFC Jr"),
+        h("div",{style:{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:3}},"60期生の記録")),
       h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}},
         h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.85)",fontWeight:600}},user.name),
         h("div",{style:{display:"flex",gap:6}},
@@ -293,19 +297,31 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
   const [ntg,setNtg]=useState({half:"前半",minute:"",second:"",goalType:"通常"});
   const [ytUrls,setYtUrls]=useState({full:match.youtubeUrl||"",first:match.youtubeUrl1st||"",second:match.youtubeUrl2nd||""});
   const [ytCopied,setYtCopied]=useState("");
-  // PK戦
-  const [hasPk,setHasPk]=useState(!!(match.pkOur||match.pkTheir));
-  const [pkOur,setPkOur]=useState(match.pkOur!=null?String(match.pkOur):"");
-  const [pkTheir,setPkTheir]=useState(match.pkTheir!=null?String(match.pkTheir):"");
+  // PK戦 (キッカー方式: [{memberId,success}] )
+  const [hasPk,setHasPk]=useState(!!(match.pkKickers&&match.pkKickers.length));
+  // pkKickers: [{memberId:"", success:true/false}]
+  const parseJson = v => { try{ return typeof v==="string"&&v?JSON.parse(v):v||[]; }catch(e){ return []; }};
+  const initKickers = parseJson(match.pkKickers);
+  const initTheirSeq = parseJson(match.pkTheirSeq);
+  const [pkKickers,setPkKickers]=useState(initKickers.length?initKickers:[]); // 塚口側
+  const [pkTheirSeq,setPkTheirSeq]=useState(initTheirSeq.length?initTheirSeq:[]); // 相手側: [true,false,...]
   const copyYt=(text,key)=>{copyToClipboard(text);setYtCopied(key);setTimeout(()=>setYtCopied(""),2000);};
+  // editGoal: {type:"our"|"their", idx:number}
+  const [editGoal,setEditGoal]=useState(null);
+  const [editNg,setEditNg]=useState(null);
 
   const ourT=goals.length, thT=theirG.length;
   const won=ourT>thT,draw=ourT===thT,rc=won?"#4CAF50":draw?"#FFC107":"#F44336";
-  // PK込みの最終勝敗
-  const pkOn=hasPk&&draw&&(pkOur!==""||pkTheir!=="");
-  const pkWin=pkOn&&Number(pkOur)>Number(pkTheir);
-  const pkLose=pkOn&&Number(pkOur)<Number(pkTheir);
+  // PK集計
+  const pkOurScore=pkKickers.filter(k=>k.success).length;
+  const pkTheirScore=pkTheirSeq.filter(Boolean).length;
+  const pkOn=hasPk&&(pkKickers.length>0||pkTheirSeq.length>0);
+  const pkWin=pkOn&&pkOurScore>pkTheirScore;
+  const pkLose=pkOn&&pkOurScore<pkTheirScore;
   const finalColor=pkWin?"#4CAF50":pkLose?"#F44336":rc;
+  // PK表示文字列
+  const pkOurStr=pkKickers.map(k=>k.success?"○":"×").join("");
+  const pkTheirStr=pkTheirSeq.map(s=>s?"○":"×").join("");
   const tc=getTC(match.type);
   const dt=fmt(match.date||schedule?.date);
   const isFirst=h=>/^(1st|前半|first|1)$/i.test(String(h).trim());
@@ -324,8 +340,10 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
       await api("saveGoals",{
         resultId:match.id,goals,theirGoals:theirG,
         youtubeUrl:ytUrls.full,youtubeUrl1st:ytUrls.first,youtubeUrl2nd:ytUrls.second,
-        pkOur:hasPk?Number(pkOur||0):null,
-        pkTheir:hasPk?Number(pkTheir||0):null,
+        pkKickers:hasPk?pkKickers:null,
+        pkTheirSeq:hasPk?pkTheirSeq:null,
+        pkOur:hasPk?pkOurScore:null,
+        pkTheir:hasPk?pkTheirScore:null,
       });
       onSaved();
     }catch(e){alert("保存エラー: "+e.message);}
@@ -362,34 +380,87 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
           ...[our1,our2,ourT].map((v,i)=>h("div",{key:i,style:{fontSize:i===2?24:18,fontWeight:900,color:rc,textAlign:"center",lineHeight:1}},v)),
           h("div",{style:{fontSize:13,fontWeight:600,color:"#999"}},match.opponent),
           ...[th1,th2,thT].map((v,i)=>h("div",{key:i,style:{fontSize:i===2?24:18,fontWeight:900,color:"#bbb",textAlign:"center",lineHeight:1}},v)))),
-      // PK戦セクション（adminのみ入力、引き分け時または既存PK時に表示）
+      // PK戦セクション（キッカー方式）
       (isAdmin||pkOn)&&h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
         h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
           h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"🥅 PK戦"),
-          isAdmin&&h("button",{onClick:()=>setHasPk(p=>!p),
+          isAdmin&&h("button",{onClick:()=>{setHasPk(p=>{if(p){setPkKickers([]);setPkTheirSeq([]);}return !p;});},
             style:{background:hasPk?"#FFF3EF":"#f0f0f0",color:hasPk?"#FF6B35":"#999",
               border:`2px solid ${hasPk?"#FF6B35":"#eee"}`,borderRadius:20,
               padding:"4px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}},
             hasPk?"PK戦あり ✓":"PK戦を追加")),
         hasPk&&h(Fragment,{},
-          h("div",{style:{display:"flex",alignItems:"center",gap:12,justifyContent:"center",padding:"8px 0"}},
-            h("div",{style:{textAlign:"center",flex:1}},
-              h("div",{style:{fontSize:12,fontWeight:700,color:"#666",marginBottom:6}},"塚口AFC"),
-              isAdmin
-                ? h("input",{value:pkOur,onChange:e=>setPkOur(e.target.value),type:"number",min:"0",max:"20",
-                    style:{width:"100%",border:"2px solid #FF6B35",borderRadius:10,
-                      padding:"8px 0",fontSize:32,fontWeight:900,textAlign:"center",outline:"none",color:"#FF6B35"}})
-                : h("div",{style:{fontSize:40,fontWeight:900,color:"#FF6B35"}},pkOur||"-")),
-            h("div",{style:{fontSize:20,fontWeight:900,color:"#ddd"}},"vs"),
-            h("div",{style:{textAlign:"center",flex:1}},
-              h("div",{style:{fontSize:12,fontWeight:700,color:"#666",marginBottom:6}},match.opponent),
-              isAdmin
-                ? h("input",{value:pkTheir,onChange:e=>setPkTheir(e.target.value),type:"number",min:"0",max:"20",
-                    style:{width:"100%",border:"2px solid #607D8B",borderRadius:10,
-                      padding:"8px 0",fontSize:32,fontWeight:900,textAlign:"center",outline:"none",color:"#607D8B"}})
-                : h("div",{style:{fontSize:40,fontWeight:900,color:"#607D8B"}},pkTheir||"-"))),
-          pkOn&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:800,
-            color:pkWin?"#4CAF50":"#F44336"}},pkWin?"🎉 PK勝ち！":"😔 PK負け"))),
+          // 塚口AFC側
+          h("div",{style:{marginBottom:16}},
+            h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
+              h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e"}},"塚口AFC"),
+              h("div",{style:{fontSize:18,fontWeight:900,color:"#FF6B35"}},pkOurScore,"本")),
+            // キッカー一覧
+            pkKickers.map((k,i)=>{
+              const m=members.find(x=>x.id===k.memberId);
+              return h("div",{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:6,
+                background:"#F8F9FA",borderRadius:10,padding:"6px 10px"}},
+                h("div",{style:{width:20,height:20,borderRadius:5,
+                  background:k.success?"#4CAF50":"#F44336",
+                  color:"#fff",fontSize:12,fontWeight:900,
+                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},
+                  k.success?"○":"×"),
+                h("div",{style:{flex:1,fontSize:13,fontWeight:600,color:"#1a1a2e"}},
+                  (i+1)+"番 "+(m?m.name:"？")),
+                isAdmin&&h(Fragment,{},
+                  h("button",{onClick:()=>setPkKickers(p=>p.map((x,j)=>j===i?{...x,success:!x.success}:x)),
+                    style:{background:k.success?"#4CAF50":"#F44336",color:"#fff",border:"none",
+                      borderRadius:8,padding:"3px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}},
+                    k.success?"○":"×"),
+                  h("button",{onClick:()=>setPkKickers(p=>p.filter((_,j)=>j!==i)),
+                    style:{background:"none",border:"none",color:"#ddd",fontSize:16,cursor:"pointer"}},"×")));
+            }),
+            // 塚口キッカー追加（admin）
+            isAdmin&&h("div",{style:{display:"flex",gap:6,marginTop:6}},
+              h("select",{
+                onChange:e=>{if(!e.target.value)return;
+                  setPkKickers(p=>[...p,{memberId:e.target.value,success:true}]);
+                  e.target.value="";},
+                style:{flex:1,...css.inp,padding:"6px 10px",fontSize:13}},
+                h("option",{value:""},"＋ キッカーを追加"),
+                ["FW","MF","DF","GK"].map(pos=>h("optgroup",{key:pos,label:pos},
+                  members.filter(m=>m.position===pos).sort((a,b)=>Number(a.number)-Number(b.number))
+                    .map(m=>h("option",{key:m.id,value:m.id},"#"+m.number+" "+m.name))))))),
+
+          // 相手チーム側
+          h("div",{style:{borderTop:"1px solid #f0f0f0",paddingTop:12}},
+            h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
+              h("div",{style:{fontSize:12,fontWeight:700,color:"#999"}},match.opponent),
+              h("div",{style:{fontSize:18,fontWeight:900,color:"#607D8B"}},pkTheirScore,"本")),
+            // 相手シーケンス表示
+            h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}},
+              pkTheirSeq.map((s,i)=>h("div",{key:i,style:{display:"flex",alignItems:"center",gap:4,
+                background:"#F8F9FA",borderRadius:8,padding:"4px 8px"}},
+                h("div",{style:{width:18,height:18,borderRadius:4,
+                  background:s?"#607D8B":"#F44336",color:"#fff",fontSize:11,fontWeight:900,
+                  display:"flex",alignItems:"center",justifyContent:"center"}},s?"○":"×"),
+                h("span",{style:{fontSize:11,color:"#999"}},i+1+"番"),
+                isAdmin&&h("button",{onClick:()=>setPkTheirSeq(p=>{const n=[...p];n[i]=!n[i];return n;}),
+                  style:{background:"none",border:"none",color:"#aaa",fontSize:12,cursor:"pointer"}},"切替"),
+                isAdmin&&h("button",{onClick:()=>setPkTheirSeq(p=>p.filter((_,j)=>j!==i)),
+                  style:{background:"none",border:"none",color:"#ddd",fontSize:14,cursor:"pointer"}},"×")))),
+            // 相手キッカー追加（admin）
+            isAdmin&&h("div",{style:{display:"flex",gap:6}},
+              h("button",{onClick:()=>setPkTheirSeq(p=>[...p,true]),
+                style:{flex:1,padding:"6px",background:"#E8F5E9",color:"#4CAF50",border:"2px solid #4CAF50",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}},"＋ ○成功"),
+              h("button",{onClick:()=>setPkTheirSeq(p=>[...p,false]),
+                style:{flex:1,padding:"6px",background:"#FFEBEE",color:"#F44336",border:"2px solid #F44336",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}},"＋ × 失敗"))),
+
+          // PK結果表示
+          pkOn&&h("div",{style:{marginTop:12,padding:"10px 14px",
+            background:pkWin?"#E8F5E9":"#FFEBEE",borderRadius:12,textAlign:"center"}},
+            h("div",{style:{fontSize:13,fontWeight:800,color:pkWin?"#4CAF50":"#F44336"}},
+              "塚口 "+pkOurStr+" "+pkOurScore),
+            h("div",{style:{fontSize:11,color:"#aaa",margin:"2px 0"}},"vs"),
+            h("div",{style:{fontSize:13,fontWeight:800,color:"#607D8B"}},
+              match.opponent+" "+pkTheirStr+" "+pkTheirScore),
+            h("div",{style:{fontSize:15,fontWeight:900,color:pkWin?"#4CAF50":"#F44336",marginTop:6}},
+              pkWin?"🎉 PK勝ち！":"😔 PK負け")))),
 
       // ゴール一覧
       h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -417,7 +488,17 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
                     h("span",{style:{fontSize:13,fontWeight:700,color:isUs?"#FF6B35":"#607D8B"}},isUs?(sc?.name||g.scorerName||"不明"):match.opponent),
                     g.goalType&&g.goalType!=="通常"&&h("span",{style:{background:g.goalType==="PK"?"#FFC107":"#9C27B0",color:g.goalType==="PK"?"#333":"#fff",borderRadius:4,padding:"1px 6px",fontSize:9,fontWeight:700}},g.goalType)),
                   isUs&&(as||g.assistName)&&h("div",{style:{fontSize:11,color:"#aaa",marginTop:2}},"🅰 "+(as?.name||g.assistName))),
-                isAdmin&&h("button",{onClick:()=>{if(isUs)setGoals(p=>p.filter((_,j)=>j!==goals.indexOf(g)));else setTheirG(p=>p.filter((_,j)=>j!==theirG.indexOf(g)));},style:{background:"none",border:"none",color:"#ddd",fontSize:18,cursor:"pointer"}},"×"));
+                isAdmin&&h("div",{style:{display:"flex",flexDirection:"column",gap:3}},
+                  h("button",{onClick:()=>{
+                      const baseG={...g,minute:String(g.minute),second:String(g.second||0)};
+                      setEditGoal({type:isUs?"our":"their",idx:isUs?goals.indexOf(g):theirG.indexOf(g)});
+                      setEditNg(baseG);
+                      setModal("editGoal");
+                    },style:{background:"none",border:"1px solid #ddd",borderRadius:6,color:"#aaa",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"編集"),
+                  h("button",{onClick:()=>{
+                      if(isUs)setGoals(p=>p.filter((_,j)=>j!==goals.indexOf(g)));
+                      else setTheirG(p=>p.filter((_,j)=>j!==theirG.indexOf(g)));
+                    },style:{background:"none",border:"1px solid #ffcccc",borderRadius:6,color:"#F44336",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"削除")));
             }));
         })),
       isAdmin&&h("button",{onClick:save,style:{...css.bS,width:"100%",padding:16,fontSize:15,marginBottom:16}},"💾 保存する"),
@@ -430,13 +511,14 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
         // URLリンク表示（既存URL）
         (match.youtubeUrl||match.youtubeUrl1st||match.youtubeUrl2nd)&&h("div",{style:{marginBottom:14}},
           [
-            match.youtubeUrl1st  &&{label:"前半",url:match.youtubeUrl1st},
-            match.youtubeUrl2nd  &&{label:"後半",url:match.youtubeUrl2nd},
+            match.youtubeUrl    &&{label:"通し",url:match.youtubeUrl},
+            match.youtubeUrl1st &&{label:"前半",url:match.youtubeUrl1st},
+            match.youtubeUrl2nd &&{label:"後半",url:match.youtubeUrl2nd},
           ].filter(Boolean).map(x=>h("a",{key:x.label,href:x.url,target:"_blank",rel:"noopener",style:{display:"inline-flex",alignItems:"center",gap:5,background:"#FF0000",color:"#fff",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,textDecoration:"none",marginRight:8,marginBottom:6}},"▶ "+x.label))),
 
         // URL入力（admin）
         isAdmin&&h("div",{style:{marginBottom:14}},
-          [{l:"前半URL",k:"first"},{l:"後半URL",k:"second"}].map(f=>
+          [{l:"通しURL（1本）",k:"full"},{l:"前半URL",k:"first"},{l:"後半URL",k:"second"}].map(f=>
             h("div",{key:f.k,style:{marginBottom:8}},
               h("div",{style:{fontSize:11,fontWeight:600,color:"#888",marginBottom:4}},f.l),
               h("input",{value:ytUrls[f.k],onChange:e=>setYtUrls(p=>({...p,[f.k]:e.target.value})),placeholder:"https://youtube.com/...",style:{...css.inp,fontSize:12,padding:"8px 12px"}})))),
@@ -445,6 +527,10 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
         isAdmin&&h(Fragment,{},
           h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"テンプレコピー"),
           [
+            ...(ytUrls.full?[
+              {label:"通し タイトル", key:"t_full", text:()=>makeYtTitle(match,schedule,"通し")},
+              {label:"通し 説明欄",   key:"d_full", text:()=>makeYtDesc(match,members,"通し")},
+            ]:[]),
             {label:"前半 タイトル", key:"t_first",  text:()=>makeYtTitle(match,schedule,"前半")},
             {label:"前半 説明欄",   key:"d_first",  text:()=>makeYtDesc(match,members,"前半")},
             {label:"後半 タイトル", key:"t_second", text:()=>makeYtTitle(match,schedule,"後半")},
@@ -489,7 +575,49 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒（任意）"),h("input",{value:ntg.second,onChange:e=>setNtg(p=>({...p,second:e.target.value})),type:"number",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
       h("div",{style:{marginBottom:20}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"種別"),
         h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#607D8B"},{v:"オウンゴール",c:"#4CAF50"}].map(x=>h("button",{key:x.v,onClick:()=>setNtg(p=>({...p,goalType:x.v})),style:{flex:1,padding:10,border:`2px solid ${ntg.goalType===x.v?x.c:"#eee"}`,borderRadius:10,background:ntg.goalType===x.v?x.c:"#fff",color:ntg.goalType===x.v?"#fff":"#666",fontSize:12,fontWeight:700,cursor:"pointer"}},x.v)))),
-      h("div",{style:{display:"flex",gap:10}},h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),h("button",{onClick:addTheir,style:{...css.bS,background:"#607D8B"}},"追加"))));
+      h("div",{style:{display:"flex",gap:10}},h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),h("button",{onClick:addTheir,style:{...css.bS,background:"#607D8B"}},"追加"))),
+
+    // ゴール編集モーダル
+    modal==="editGoal"&&editNg&&editGoal&&h(Modal,{title:"✏️ ゴールを編集",onClose:()=>setModal(null)},
+      editGoal.type==="our"&&h("div",{style:{marginBottom:14}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"前半 / 後半"),
+        h("div",{style:{display:"flex",gap:8}},["前半","後半"].map(hf=>h("button",{key:hf,onClick:()=>setEditNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`2px solid ${editNg.half===hf?"#FF6B35":"#eee"}`,borderRadius:10,background:editNg.half===hf?"#FF6B35":"#fff",color:editNg.half===hf?"#fff":"#666",fontSize:15,fontWeight:700,cursor:"pointer"}},hf)))),
+      editGoal.type==="their"&&h("div",{style:{marginBottom:14}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"前半 / 後半"),
+        h("div",{style:{display:"flex",gap:8}},["前半","後半"].map(hf=>h("button",{key:hf,onClick:()=>setEditNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`2px solid ${editNg.half===hf?"#607D8B":"#eee"}`,borderRadius:10,background:editNg.half===hf?"#607D8B":"#fff",color:editNg.half===hf?"#fff":"#666",fontSize:15,fontWeight:700,cursor:"pointer"}},hf)))),
+      h("div",{style:{display:"flex",gap:10,marginBottom:14}},
+        h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),
+          h("input",{value:editNg.minute,onChange:e=>setEditNg(p=>({...p,minute:e.target.value})),type:"number",min:"0",max:"90",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
+        h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒（任意）"),
+          h("input",{value:editNg.second,onChange:e=>setEditNg(p=>({...p,second:e.target.value})),type:"number",min:"0",max:"59",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
+      editGoal.type==="our"&&h("div",{style:{marginBottom:14}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"得点者"),
+        h("select",{value:editNg.scorerId||"",onChange:e=>setEditNg(p=>({...p,scorerId:e.target.value})),style:css.inp},
+          h("option",{value:""},"選んでください"),
+          ["FW","MF","DF","GK"].map(pos=>h("optgroup",{key:pos,label:pos},
+            members.filter(m=>m.position===pos).sort((a,b)=>Number(a.number)-Number(b.number))
+              .map(m=>h("option",{key:m.id,value:m.id},"#"+m.number+" "+m.name)))))),
+      editGoal.type==="our"&&h("div",{style:{marginBottom:14}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"アシスト（任意）"),
+        h("select",{value:editNg.assistId||"",onChange:e=>setEditNg(p=>({...p,assistId:e.target.value})),style:css.inp},
+          h("option",{value:""},"なし"),
+          members.filter(m=>m.id!==editNg.scorerId).map(m=>h("option",{key:m.id,value:m.id},"#"+m.number+" "+m.name)))),
+      editGoal.type==="our"&&h("div",{style:{marginBottom:20}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"種別"),
+        h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#4CAF50"},{v:"PK",c:"#FFC107"},{v:"オウンゴール",c:"#9C27B0"}].map(x=>
+          h("button",{key:x.v,onClick:()=>setEditNg(p=>({...p,goalType:x.v})),
+            style:{flex:1,padding:10,border:`2px solid ${editNg.goalType===x.v?x.c:"#eee"}`,borderRadius:10,
+              background:editNg.goalType===x.v?x.c:"#fff",
+              color:editNg.goalType===x.v?(x.v==="PK"?"#333":"#fff"):"#666",
+              fontSize:12,fontWeight:700,cursor:"pointer"}},x.v)))),
+      h("div",{style:{display:"flex",gap:10}},
+        h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),
+        h("button",{onClick:()=>{
+          const updated={...editNg,minute:+editNg.minute,second:+(editNg.second||0)};
+          if(editGoal.type==="our") setGoals(p=>p.map((g,j)=>j===editGoal.idx?updated:g));
+          else setTheirG(p=>p.map((g,j)=>j===editGoal.idx?updated:g));
+          setModal(null);setEditGoal(null);setEditNg(null);
+        },style:css.bS},"保存"))));
 }
 
 // ── ホームタブ ─────────────────────────────────────────────────
@@ -796,6 +924,7 @@ function AddMatchModal({schedule,results,onSave,onClose}) {
 
 // ── 成績タブ ───────────────────────────────────────────────────
 function DashTab({results,members,schedules}) {
+  const [dashTab,setDashTab]=useState("rank"); // "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
   const [from,setFrom]=useState(""); const [to,setTo]=useState("");
   function typeMatch(r,typeF){
@@ -855,17 +984,48 @@ function DashTab({results,members,schedules}) {
         h("div",{style:{fontSize:22,fontWeight:900,color:i===0?"#FF6B35":"#1a1a2e"}},x.cnt,h("span",{style:{fontSize:12,color:"#aaa",fontWeight:400}},unit)));
     }));
 
+  // 個人成績: メンバー別集計
+  const personalStats = useMemo(()=>members.map(m=>{
+    let goals=0,assists=0,pkMade=0,pkTotal=0,mvpCount=0;
+    filtered.forEach(r=>{
+      (r.goals||[]).forEach(g=>{
+        const scId=g.scorerId||(g.scorerName&&members.find(x=>x.name===g.scorerName)?.id)||"";
+        const asId=g.assistId||(g.assistName&&members.find(x=>x.name===g.assistName)?.id)||"";
+        if(scId===m.id){ goals++; if(g.goalType==="PK"){pkMade++;pkTotal++;} }
+        if(asId===m.id) assists++;
+      });
+    });
+    schedules.forEach(s=>{
+      if(!s.mvp) return;
+      if(!["official","cup","公式戦","カップ戦"].includes(s.type)) return;
+      const sd=nd(s.date); if(from&&sd<from) return; if(to&&sd>to) return;
+      const mv=members.find(x=>x.name===s.mvp||x.id===s.mvp);
+      if(mv&&mv.id===m.id) mvpCount++;
+    });
+    return {...m,goals,assists,pkMade,pkTotal,mvpCount};
+  }).filter(m=>m.goals>0||m.assists>0||m.mvpCount>0).sort((a,b)=>b.goals-a.goals||b.assists-a.assists)
+  ,[filtered,members,schedules,from,to]);
+
+  const FilterBar = ()=>h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+    h("div",{style:{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}},
+      [{k:"all",l:"全体"},{k:"official",l:"公式戦"},{k:"cup",l:"カップ戦"},{k:"training",l:"トレマ"}].map(t=>h("button",{key:t.k,onClick:()=>setTypeF(t.k),style:{padding:"7px 14px",border:`2px solid ${typeF===t.k?"#FF6B35":"#eee"}`,borderRadius:20,background:typeF===t.k?"#FF6B35":"#fff",color:typeF===t.k?"#fff":"#666",fontSize:12,fontWeight:typeF===t.k?700:400,cursor:"pointer"}},t.l))),
+    h("div",{style:{display:"flex",gap:8,alignItems:"center"}},
+      h("input",{type:"date",value:from,onChange:e=>setFrom(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}}),
+      h("span",{style:{color:"#ccc",flexShrink:0}},"〜"),
+      h("input",{type:"date",value:to,onChange:e=>setTo(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}}),
+      (from||to)&&h("button",{onClick:()=>{setFrom("");setTo("");},style:{background:"#f0f0f0",border:"none",borderRadius:8,padding:"8px 10px",cursor:"pointer",fontSize:12,color:"#666",flexShrink:0,whiteSpace:"nowrap"}},"クリア")));
+
   return h(Fragment,{},
+    // サブタブ
+    h("div",{style:{display:"flex",background:"#fff",borderRadius:16,padding:4,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+      [{k:"rank",l:"📊 ランキング"},{k:"personal",l:"👤 個人成績"}].map(t=>
+        h("button",{key:t.k,onClick:()=>setDashTab(t.k),
+          style:{flex:1,padding:"10px 4px",border:"none",borderRadius:12,
+            background:dashTab===t.k?"#FF6B35":"transparent",
+            color:dashTab===t.k?"#fff":"#aaa",fontSize:13,fontWeight:700,cursor:"pointer"}},t.l))),
     // フィルター
-    h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"絞り込み"),
-      h("div",{style:{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}},
-        [{k:"all",l:"全体"},{k:"official",l:"公式戦"},{k:"cup",l:"カップ戦"},{k:"training",l:"トレマ"}].map(t=>h("button",{key:t.k,onClick:()=>setTypeF(t.k),style:{padding:"7px 14px",border:`2px solid ${typeF===t.k?"#FF6B35":"#eee"}`,borderRadius:20,background:typeF===t.k?"#FF6B35":"#fff",color:typeF===t.k?"#fff":"#666",fontSize:12,fontWeight:typeF===t.k?700:400,cursor:"pointer"}},t.l))),
-      h("div",{style:{display:"flex",gap:8,alignItems:"center"}},
-        h("input",{type:"date",value:from,onChange:e=>setFrom(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}}),
-        h("span",{style:{color:"#ccc",flexShrink:0}},"〜"),
-        h("input",{type:"date",value:to,onChange:e=>setTo(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}}),
-        (from||to)&&h("button",{onClick:()=>{setFrom("");setTo("");},style:{background:"#f0f0f0",border:"none",borderRadius:8,padding:"8px 10px",cursor:"pointer",fontSize:12,color:"#666",flexShrink:0,whiteSpace:"nowrap"}},"クリア"))),
+    h(FilterBar,{}),
+    dashTab==="rank"&&h(Fragment,{},
     // 成績カード
     h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.45)",letterSpacing:2,marginBottom:12}},"OVERVIEW · "+filtered.length+"試合"),
@@ -923,7 +1083,30 @@ function DashTab({results,members,schedules}) {
                 "PK "+r.pkOur+"-"+r.pkTheir),
               h("div",{style:{background:pkW2?"#4CAF50":"#F44336",color:"#fff",borderRadius:6,padding:"2px 8px",fontSize:10,fontWeight:700}},pkW2?"勝":"負"));
           }));
-      })()));
+      })())),  // end rank tab
+
+    // 個人成績タブ
+    dashTab==="personal"&&h(Fragment,{},
+      personalStats.length===0
+        ? h("div",{style:{background:"#fff",borderRadius:16,padding:32,textAlign:"center",color:"#ccc",fontSize:13}},"データがありません")
+        : personalStats.map(m=>{
+          const pc=PC[m.position]||{bg:"#999"};
+          const pkRate=m.pkTotal>0?Math.round(m.pkMade/m.pkTotal*100)+"%":"-";
+          return h("div",{key:m.id,style:{background:"#fff",borderRadius:16,padding:18,marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+            h("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:12}},
+              h("div",{style:{width:40,height:40,borderRadius:10,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700}},m.number),
+              h("div",{style:{flex:1}},
+                h("div",{style:{fontSize:15,fontWeight:800,color:"#1a1a2e"}},m.name),
+                h("div",{style:{fontSize:11,color:"#aaa"}},m.grade+" · "+m.position))),
+            h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,textAlign:"center"}},
+              [{l:"⚽ ゴール",v:m.goals,c:"#FF6B35"},
+               {l:"🅰 アシスト",v:m.assists,c:"#2196F3"},
+               {l:"🥅 PK成功率",v:pkRate,c:"#FFC107"},
+               {l:"🏅 MVP",v:m.mvpCount,c:"#9C27B0"},
+              ].map(x=>h("div",{key:x.l,style:{background:"#F8F9FA",borderRadius:10,padding:"8px 4px"}},
+                h("div",{style:{fontSize:18,fontWeight:900,color:x.c}},x.v),
+                h("div",{style:{fontSize:9,color:"#aaa",marginTop:2}},x.l)))));
+        })));
 }
 
 // ── 日程タブ：カレンダー＋今月の予定＋日程追加 ─────────────────
@@ -1072,6 +1255,7 @@ function MemoTab({news,isAdmin,user,onAdd,onDelete}) {
 
 // ── その日の試合まとめページ ─────────────────────────────────────
 function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit,onDelete,onBack,onHome,onSaveMvp}) {
+  const [dayTab,setDayTab]=useState("matches"); // "matches"|"attend"
   const tc=getTC(schedule.type);
   const dt=fmt(schedule.date);
   const dayR=results
@@ -1104,8 +1288,15 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
       h("div",{style:{fontSize:13,color:"rgba(255,255,255,0.6)"}},dt.full+(schedule.location?" ／ 📍"+schedule.location:""))),
 
     h("div",{style:{padding:"0 16px",marginTop:-20}},
-      // 1日トータル勝敗カード
-      dayR.length>0&&h("div",{style:{background:"#fff",borderRadius:18,padding:"16px 20px",marginBottom:14,boxShadow:"0 4px 20px rgba(0,0,0,0.12)"}},
+      // 内部タブ（試合一覧 / 出欠）
+      h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
+        [{k:"matches",l:"⚽ 試合一覧"},{k:"attend",l:"📋 出欠"}].map(t=>
+          h("button",{key:t.k,onClick:()=>setDayTab(t.k),
+            style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
+              background:dayTab===t.k?"#FF6B35":"transparent",
+              color:dayTab===t.k?"#fff":"#aaa",fontSize:13,fontWeight:700,cursor:"pointer"}},t.l))),
+      // 試合一覧・成績（matches タブ）
+      dayTab==="matches"&&dayR.length>0&&h("div",{style:{background:"#fff",borderRadius:18,padding:"16px 20px",marginBottom:14,boxShadow:"0 4px 20px rgba(0,0,0,0.12)"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"本日の成績"),
         h("div",{style:{display:"flex",justifyContent:"center",gap:16}},
           h("div",{style:{textAlign:"center",padding:"10px 20px",borderRadius:12,background:"#E8F5E9"}},
@@ -1118,13 +1309,10 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
             h("div",{style:{fontSize:28,fontWeight:900,color:"#F44336"}},st.losses),
             h("div",{style:{fontSize:11,color:"#F44336",fontWeight:700,marginTop:2}},"敗")))),
 
-      // 出欠セクション（試合一覧の上）
-      h(AttendSection,{schedule,members,user,isAdmin}),
-
-      // 試合リスト
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10,marginTop:14}},"試合一覧"),
-      dayR.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:"20px",textAlign:"center",color:"#ccc",fontSize:13,marginBottom:10}},"試合記録がありません"),
-      dayR.map(r=>
+      // 試合リスト (matches タブ)
+      dayTab==="matches"&&h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10,marginTop:14}},"試合一覧"),
+      dayTab==="matches"&&dayR.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:"20px",textAlign:"center",color:"#ccc",fontSize:13,marginBottom:10}},"試合記録がありません"),
+      dayTab==="matches"&&dayR.map(r=>
         h("div",{key:r.id,style:{background:"#fff",borderRadius:14,padding:"14px 16px",marginBottom:10,
                  boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
           h("div",{style:{display:"flex",alignItems:"center",gap:14,cursor:"pointer"},onClick:()=>onGoToMatch(r,schedule)},
@@ -1144,12 +1332,15 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
             h("button",{onClick:()=>onDelete(r),
               style:{flex:1,padding:"6px",background:"#FFEBEE",color:"#F44336",border:"none",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer"}},"🗑 削除")))),
 
-      // 試合追加ボタン（admin）
-      isAdmin&&h("button",{onClick:()=>onAdd(schedule),
+      // 試合追加ボタン（admin）- matches タブのみ
+      dayTab==="matches"&&isAdmin&&h("button",{onClick:()=>onAdd(schedule),
         style:{...css.bS,width:"100%",padding:14,fontSize:14,marginTop:4}},"+ 試合を追加"),
 
-      // MVP入力欄（公式戦・カップ戦のみ）
-      isMvpTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+      // 出欠タブ
+      dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin}),
+
+      // MVP入力欄（公式戦・カップ戦のみ・matchesタブ）
+      dayTab==="matches"&&isMvpTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"🏅 MVP"),
         // 現在のMVP表示
         schedule.mvp&&h("div",{style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"linear-gradient(135deg,#FFF8E1,#FFF3CD)",borderRadius:12,marginBottom:12}},
@@ -1302,7 +1493,7 @@ function App() {
   return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
     h("div",{className:"page"},
-      h(AppHeader,{user,cnt:members.length,onLogout:()=>setUser(null),onRefresh:()=>load("更新中...")}),
+      h(AppHeader,{user,onLogout:()=>setUser(null),onRefresh:()=>load("更新中...")}),
       h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,
         boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
         h("div",{style:{display:"flex"}},
