@@ -18,13 +18,19 @@ input,select,textarea,button{font-family:'Noto Sans JP',sans-serif;}
 <body>
 <div id="app"></div>
 <script>
+// デバッグ用エラーキャッチ
+window.onerror = function(msg, src, line, col, err) {
+  document.getElementById('app').innerHTML = 
+    '<div style="padding:20px;background:#fff;margin:20px;border-radius:12px;font-family:monospace">' +
+    '<b style="color:red">⚠ JSエラー</b><br>' + msg + '<br>line:' + line + '</div>';
+};
 // Preact globals from UMD
 const { h, render, Fragment } = preact;
 const { useState, useEffect, useCallback, useMemo } = preactHooks;
 
 
 // ================================================================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxv4XQQ1vkn8UGGAl0LceXuSiqJI9FrR7TIfn0G_L_QdgN0-tVCF9a6LjhTzsftMUBCiA/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyNIjqFEfnBADrovyteKDDGf9Dp_2YgB8sEg3slM13LyQ2SPSOhoIM1I8i5KpfXt2Nhrw/exec";
 // ================================================================
 
 const HOME_LINKS = [
