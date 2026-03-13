@@ -231,8 +231,8 @@ function secToTime(min, sec) {
 
 // チャプター形式の説明欄生成（前半 or 後半）
 function makeYtDesc(match, members, half) {
-  const isH1 = half === "前半";
-  const halfKey = isH1 ? ["前半","1st"] : ["後半","2nd"];
+  const isH1 = half === "1st";
+  const halfKey = isH1 ? ["1st","1st"] : ["2nd","2nd"];
   const halfLabel = isH1 ? "1st" : "2nd";
 
   // その前半/後半の得点のみ抽出してソート
@@ -293,8 +293,8 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
   const [theirG,setTheirG]=useState((match.theirGoals||[]).map(g=>({...g})));
   const [modal,setModal]=useState(null);
   const [loading,setLoading]=useState(false);
-  const [ng,setNg]=useState({scorerId:"",assistId:"",half:"前半",minute:"",second:"",goalType:"通常"});
-  const [ntg,setNtg]=useState({half:"前半",minute:"",second:"",goalType:"通常"});
+  const [ng,setNg]=useState({scorerId:"",assistId:"",half:"1st",minute:"",second:"",goalType:"通常"});
+  const [ntg,setNtg]=useState({half:"1st",minute:"",second:"",goalType:"通常"});
   const [ytUrls,setYtUrls]=useState({full:match.youtubeUrl||"",first:match.youtubeUrl1st||"",second:match.youtubeUrl2nd||""});
   const [ytCopied,setYtCopied]=useState("");
   // PK戦
@@ -326,11 +326,11 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
   const dt=fmt(match.date||schedule?.date);
   const isFirst=h=>/^(1st|前半|first|1)$/i.test(String(h).trim());
   const isSecond=h=>/^(2nd|後半|second|2)$/i.test(String(h).trim());
-  const normHalf=h=>isFirst(h)?"前半":isSecond(h)?"後半":h;
+  const normHalf=h=>isFirst(h)?"1st":isSecond(h)?"2nd":h;
   const our1=goals.filter(g=>isFirst(g.half)).length, our2=goals.filter(g=>isSecond(g.half)).length;
   const th1=theirG.filter(g=>isFirst(g.half)).length, th2=theirG.filter(g=>isSecond(g.half)).length;
   const all=[...goals.map(g=>({...g,team:"us"})),...theirG.map(g=>({...g,team:"them"}))]
-    .sort((a,b)=>(normHalf(a.half)==="前半"?0:1)-(normHalf(b.half)==="前半"?0:1)||Number(a.minute)-Number(b.minute)||Number(a.second)-Number(b.second));
+    .sort((a,b)=>(normHalf(a.half)==="1st"?0:1)-(normHalf(b.half)==="1st"?0:1)||Number(a.minute)-Number(b.minute)||Number(a.second)-Number(b.second));
 
   const addOur=()=>{if(!ng.scorerId)return alert("得点者を選んでください");if(ng.minute==="")return alert("時間を入力してください");setGoals(p=>[...p,{...ng,minute:+ng.minute,second:+(ng.second||0)}]);setNg(p=>({...p,scorerId:"",assistId:"",minute:"",second:""}));setModal(null);};
   const addTheir=()=>{if(ntg.minute==="")return alert("時間を入力してください");setTheirG(p=>[...p,{...ntg,minute:+ntg.minute,second:+(ntg.second||0)}]);setNtg(p=>({...p,minute:"",second:""}));setModal(null);};
@@ -375,7 +375,7 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
       h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"SCOREBOARD"),
         h("div",{style:{display:"grid",gridTemplateColumns:"1fr 52px 52px 52px",gap:8,alignItems:"center"}},
-          h("div",{}),["前半","後半","計"].map(lb=>h("div",{key:lb,style:{fontSize:11,color:"#999",textAlign:"center",fontWeight:600}},lb)),
+          h("div",{}),["1st","2nd","計"].map(lb=>h("div",{key:lb,style:{fontSize:11,color:"#999",textAlign:"center",fontWeight:600}},lb)),
           h("div",{style:{fontSize:13,fontWeight:700}},"塚口AFC"),
           ...[our1,our2,ourT].map((v,i)=>h("div",{key:i,style:{fontSize:i===2?24:18,fontWeight:900,color:rc,textAlign:"center",lineHeight:1}},v)),
           h("div",{style:{fontSize:13,fontWeight:600,color:"#999"}},match.opponent),
@@ -458,7 +458,7 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
             h("button",{onClick:()=>setModal("our"),style:{background:"#FF6B35",color:"#fff",border:"none",borderRadius:16,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}},"⚽ 得点"),
             h("button",{onClick:()=>setModal("their"),style:{background:"#607D8B",color:"#fff",border:"none",borderRadius:16,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}},"💀 失点"))),
         all.length===0&&h("div",{style:{textAlign:"center",padding:"20px",color:"#ccc",fontSize:13}},"ゴール記録なし"),
-        ["前半","後半"].map(half=>{
+        ["1st","2nd"].map(half=>{
           const items=all.filter(g=>normHalf(g.half)===half);
           if(!items.length) return null;
           return h(Fragment,{key:half},
@@ -500,8 +500,8 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
         (match.youtubeUrl||match.youtubeUrl1st||match.youtubeUrl2nd)&&h("div",{style:{marginBottom:14}},
           [
             match.youtubeUrl    &&{label:"通し",url:match.youtubeUrl},
-            match.youtubeUrl1st &&{label:"前半",url:match.youtubeUrl1st},
-            match.youtubeUrl2nd &&{label:"後半",url:match.youtubeUrl2nd},
+            match.youtubeUrl1st &&{label:"1st",url:match.youtubeUrl1st},
+            match.youtubeUrl2nd &&{label:"2nd",url:match.youtubeUrl2nd},
           ].filter(Boolean).map(x=>h("a",{key:x.label,href:x.url,target:"_blank",rel:"noopener",style:{display:"inline-flex",alignItems:"center",gap:5,background:"#FF0000",color:"#fff",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,textDecoration:"none",marginRight:8,marginBottom:6}},"▶ "+x.label))),
 
         // URL入力（admin）
@@ -519,10 +519,10 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
               {label:"通し タイトル", key:"t_full", text:()=>makeYtTitle(match,schedule,"通し")},
               {label:"通し 説明欄",   key:"d_full", text:()=>makeYtDesc(match,members,"通し")},
             ]:[]),
-            {label:"前半 タイトル", key:"t_first",  text:()=>makeYtTitle(match,schedule,"前半")},
-            {label:"前半 説明欄",   key:"d_first",  text:()=>makeYtDesc(match,members,"前半")},
-            {label:"後半 タイトル", key:"t_second", text:()=>makeYtTitle(match,schedule,"後半")},
-            {label:"後半 説明欄",   key:"d_second", text:()=>makeYtDesc(match,members,"後半")},
+            {label:"前半 タイトル", key:"t_first",  text:()=>makeYtTitle(match,schedule,"1st")},
+            {label:"前半 説明欄",   key:"d_first",  text:()=>makeYtDesc(match,members,"1st")},
+            {label:"後半 タイトル", key:"t_second", text:()=>makeYtTitle(match,schedule,"2nd")},
+            {label:"後半 説明欄",   key:"d_second", text:()=>makeYtDesc(match,members,"2nd")},
           ].map(item=>{
             const text=item.text();
             const copied=ytCopied===item.key;
@@ -536,8 +536,8 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"⚽ 得点を追加",onClose:()=>setModal(null)},
-      h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"前半 / 後半"),
-        h("div",{style:{display:"flex",gap:8}},["前半","後半"].map(hf=>h("button",{key:hf,onClick:()=>setNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`2px solid ${ng.half===hf?"#FF6B35":"#eee"}`,borderRadius:10,background:ng.half===hf?"#FF6B35":"#fff",color:ng.half===hf?"#fff":"#666",fontSize:15,fontWeight:700,cursor:"pointer"}},hf)))),
+      h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"1st / 2nd"),
+        h("div",{style:{display:"flex",gap:8}},["1st","2nd"].map(hf=>h("button",{key:hf,onClick:()=>setNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`2px solid ${ng.half===hf?"#FF6B35":"#eee"}`,borderRadius:10,background:ng.half===hf?"#FF6B35":"#fff",color:ng.half===hf?"#fff":"#666",fontSize:15,fontWeight:700,cursor:"pointer"}},hf)))),
       h("div",{style:{display:"flex",gap:10,marginBottom:14}},
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),h("input",{value:ng.minute,onChange:e=>setNg(p=>({...p,minute:e.target.value})),type:"number",min:"0",max:"90",placeholder:"12",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒（任意）"),h("input",{value:ng.second,onChange:e=>setNg(p=>({...p,second:e.target.value})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
@@ -556,8 +556,8 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 
     // 失点モーダル
     modal==="their"&&h(Modal,{title:"💀 失点を追加",onClose:()=>setModal(null)},
-      h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"前半 / 後半"),
-        h("div",{style:{display:"flex",gap:8}},["前半","後半"].map(hf=>h("button",{key:hf,onClick:()=>setNtg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`2px solid ${ntg.half===hf?"#607D8B":"#eee"}`,borderRadius:10,background:ntg.half===hf?"#607D8B":"#fff",color:ntg.half===hf?"#fff":"#666",fontSize:15,fontWeight:700,cursor:"pointer"}},hf)))),
+      h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"1st / 2nd"),
+        h("div",{style:{display:"flex",gap:8}},["1st","2nd"].map(hf=>h("button",{key:hf,onClick:()=>setNtg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`2px solid ${ntg.half===hf?"#607D8B":"#eee"}`,borderRadius:10,background:ntg.half===hf?"#607D8B":"#fff",color:ntg.half===hf?"#fff":"#666",fontSize:15,fontWeight:700,cursor:"pointer"}},hf)))),
       h("div",{style:{display:"flex",gap:10,marginBottom:14}},
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),h("input",{value:ntg.minute,onChange:e=>setNtg(p=>({...p,minute:e.target.value})),type:"number",placeholder:"8",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒（任意）"),h("input",{value:ntg.second,onChange:e=>setNtg(p=>({...p,second:e.target.value})),type:"number",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
@@ -568,11 +568,11 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
     // ゴール編集モーダル
     modal==="editGoal"&&editNg&&editGoal&&h(Modal,{title:"✏️ ゴールを編集",onClose:()=>setModal(null)},
       editGoal.type==="our"&&h("div",{style:{marginBottom:14}},
-        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"前半 / 後半"),
-        h("div",{style:{display:"flex",gap:8}},["前半","後半"].map(hf=>h("button",{key:hf,onClick:()=>setEditNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`2px solid ${editNg.half===hf?"#FF6B35":"#eee"}`,borderRadius:10,background:editNg.half===hf?"#FF6B35":"#fff",color:editNg.half===hf?"#fff":"#666",fontSize:15,fontWeight:700,cursor:"pointer"}},hf)))),
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"1st / 2nd"),
+        h("div",{style:{display:"flex",gap:8}},["1st","2nd"].map(hf=>h("button",{key:hf,onClick:()=>setEditNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`2px solid ${editNg.half===hf?"#FF6B35":"#eee"}`,borderRadius:10,background:editNg.half===hf?"#FF6B35":"#fff",color:editNg.half===hf?"#fff":"#666",fontSize:15,fontWeight:700,cursor:"pointer"}},hf)))),
       editGoal.type==="their"&&h("div",{style:{marginBottom:14}},
-        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"前半 / 後半"),
-        h("div",{style:{display:"flex",gap:8}},["前半","後半"].map(hf=>h("button",{key:hf,onClick:()=>setEditNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`2px solid ${editNg.half===hf?"#607D8B":"#eee"}`,borderRadius:10,background:editNg.half===hf?"#607D8B":"#fff",color:editNg.half===hf?"#fff":"#666",fontSize:15,fontWeight:700,cursor:"pointer"}},hf)))),
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"1st / 2nd"),
+        h("div",{style:{display:"flex",gap:8}},["1st","2nd"].map(hf=>h("button",{key:hf,onClick:()=>setEditNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`2px solid ${editNg.half===hf?"#607D8B":"#eee"}`,borderRadius:10,background:editNg.half===hf?"#607D8B":"#fff",color:editNg.half===hf?"#fff":"#666",fontSize:15,fontWeight:700,cursor:"pointer"}},hf)))),
       h("div",{style:{display:"flex",gap:10,marginBottom:14}},
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),
           h("input",{value:editNg.minute,onChange:e=>setEditNg(p=>({...p,minute:e.target.value})),type:"number",min:"0",max:"90",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
