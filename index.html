@@ -289,6 +289,46 @@ function makeYtDesc(match, members, half) {
   return scoreLine + "\n\n" + lines.join("\n");
 }
 
+
+// ── HP用テンプレ生成 ─────────────────────────────────────────
+function makeHpTemplate(schedule, results) {
+  const dt = fmt(schedule.date);
+  const dateStr = dt.m+"月"+Number(dt.d)+"日";
+  const title = schedule.title || "";
+  const loc = schedule.location || "";
+  const tc = getTC(schedule.type);
+  const nums = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"];
+
+  const sorted = [...results].sort((a,b)=>Number(a.gameNumber||1)-Number(b.gameNumber||1));
+
+  // 得点者まとめ（全試合）
+  const scorers = [];
+  sorted.forEach(r=>{
+    (r.goals||[]).filter(g=>g.team!=="them"&&g.goalType!=="オウンゴール").forEach(g=>{
+      const name = g.scorerName||"";
+      if(name&&name!=="失点"&&!scorers.includes(name)) scorers.push(name);
+    });
+  });
+
+  let text = dateStr;
+  if(title) text += "「"+title+"」";
+  text += "\n【 "+tc.lb+" 】";
+  if(loc) text += loc;
+  text += "\n";
+
+  sorted.forEach((r,i)=>{
+    const num = nums[i]||"・";
+    const our = r.ourScore||0;
+    const their = r.theirScore||0;
+    text += num+"塚口AFCjr "+our+"—"+their+" "+r.opponent+"さん\n";
+  });
+
+  if(scorers.length>0) text += "得点："+scorers.join("、");
+  else if(sorted.every(r=>(r.ourScore||0)===0)) text += "得点：なし";
+
+  return text;
+}
+
 function copyToClipboard(text) {
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).catch(()=>{});
@@ -722,6 +762,10 @@ function AttendSection({schedule, members, user, isAdmin}) {
 
   // 集計
   const counts = ["○","×","△"].map(s => Object.values(attend).filter(v=>v===s).length);
+  // 名前リスト
+  const nameList = (status) => members.filter(m => attend[m.id]===status)
+    .sort((a,b)=>Number(a.number)-Number(b.number));
+  const unresolved = members.filter(m => !attend[m.id] || attend[m.id]==="未");
 
   if (loading) return h("div",{style:{textAlign:"center",padding:16,color:"#aaa",fontSize:13}},"読み込み中...");
 
@@ -729,11 +773,23 @@ function AttendSection({schedule, members, user, isAdmin}) {
     h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"📋 出欠"),
 
     // 集計バー
-    h("div",{style:{display:"flex",gap:8,marginBottom:16,padding:"10px 14px",background:"#F8F9FA",borderRadius:12}},
-      [["○","参加","#4CAF50"],["×","不参加","#F44336"],["△","未定","#FFC107"]].map(([s,l,c],i)=>
+    h("div",{style:{display:"flex",gap:8,marginBottom:12,padding:"10px 14px",background:"#F8F9FA",borderRadius:12}},
+      [["○","参加","#4CAF50"],["×","不参加","#F44336"],["△","未定","#FFC107"]].map(([s,l,col],i)=>
         h("div",{key:s,style:{flex:1,textAlign:"center"}},
-          h("div",{style:{fontSize:22,fontWeight:900,color:c}},counts[i]),
+          h("div",{style:{fontSize:22,fontWeight:900,color:col}},counts[i]),
           h("div",{style:{fontSize:10,color:"#aaa"}},l)))),
+
+    // 名前リスト（参加・欠席・未回答）
+    [
+      {status:"○", label:"✅ 参加", color:"#4CAF50", bg:"#E8F5E9", list:nameList("○")},
+      {status:"×", label:"❌ 欠席", color:"#F44336", bg:"#FFEBEE", list:nameList("×")},
+      {status:"△", label:"🔸 未定", color:"#FF9800", bg:"#FFF3E0", list:nameList("△")},
+      {status:"未", label:"⬜ 未回答", color:"#aaa",   bg:"#F8F9FA", list:unresolved},
+    ].filter(g=>g.list.length>0).map(g=>
+      h("div",{key:g.status,style:{marginBottom:10,padding:"10px 12px",background:g.bg,borderRadius:10}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:g.color,marginBottom:6}},g.label+" ("+g.list.length+"人)"),
+        h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+          g.list.map(m=>h("span",{key:m.id,style:{fontSize:12,fontWeight:600,color:"#333",background:"#fff",borderRadius:6,padding:"3px 8px"}},m.name))))),
 
     // 一般ユーザー：自分だけ
     !isAdmin && myMember && h("div",{},
@@ -1137,7 +1193,6 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
 
     // ── 個人成績タブ ──
     dashTab==="personal"&&h(Fragment,{},
-      h(LiftingRanking,{members,liftings:liftings||[]}),
       isAdmin&&h(LiftingInput,{members,liftings:liftings||[]}),
       personalStats.length===0
         ? h("div",{style:{background:"#fff",borderRadius:16,padding:32,textAlign:"center",color:"#ccc",fontSize:13}},"データがありません")
@@ -1162,29 +1217,6 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
                 h("div",{style:{fontSize:9,color:"#aaa",marginTop:2}},x.l)))));
         })),
   );
-}
-
-// リフティングランキングコンポーネント
-function LiftingRanking({members,liftings}) {
-  const sorted=[...members].map(m=>{
-    const lf=liftings.find(x=>x.memberId===m.id);
-    return {...m,count:lf?Number(lf.count||0):null};
-  }).filter(m=>m.count!==null).sort((a,b)=>b.count-a.count);
-  return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-    h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🏃 リフティングランキング"),
-    sorted.length===0
-      ? h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:16}},"まだ記録がありません")
-      : sorted.map((m,i)=>{
-          const pc=PC[m.position]||{bg:"#999"};
-          return h("div",{key:m.id,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<sorted.length-1?10:0}},
-            h("div",{style:{width:24,fontSize:i===0?20:14,fontWeight:900,color:i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":"#ccc",textAlign:"center"}},i+1),
-            h("div",{style:{width:34,height:34,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},m.number),
-            h("div",{style:{flex:1}},
-              h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},m.name),
-              h("div",{style:{fontSize:11,color:"#aaa"}},m.grade+" · "+m.position)),
-            h("div",{style:{fontSize:24,fontWeight:900,color:i===0?"#FF6B35":"#1a1a2e"}},m.count,
-              h("span",{style:{fontSize:12,color:"#aaa",fontWeight:400}},"回")));
-        }));
 }
 
 // リフティング記録入力コンポーネント
@@ -1446,6 +1478,11 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
   const [mvpSaving,setMvpSaving]=useState(false);
   const [editSch,setEditSch]=useState(false);
   const [schForm,setSchForm]=useState({date:schedule.date||"",title:schedule.title||"",location:schedule.location||"",type:schedule.type||"practice"});
+  const [hpModal,setHpModal]=useState(false);
+  const [hpText,setHpText]=useState("");
+  const [aiText,setAiText]=useState("");
+  const [aiLoading,setAiLoading]=useState(false);
+  const [hpCopied,setHpCopied]=useState(false);
   const saveEditSch=async()=>{
     await api("updateSchedule",{schedule:{...schForm,id:schedule.id,mvp:schedule.mvp||""}});
     // ローカルでscheduleを更新（再ロードせず）
@@ -1458,8 +1495,58 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
     await onSaveMvp(schedule.id,mvp);
     setMvpSaving(false);
   };
+  const openHpModal=()=>{
+    const text=makeHpTemplate(schedule,dayR);
+    setHpText(text);setAiText("");setHpModal(true);
+  };
+  const generateAiComment=async()=>{
+    if(!hpText)return;
+    setAiLoading(true);
+    try{
+      const resp=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:400,
+          messages:[{role:"user",content:
+            "以下は少年サッカーチーム「塚口AFCjr」の試合結果テキストです。\n\n"+hpText+
+            "\n\n公式ホームページに掲載する、保護者向けの温かみのある短いコメント（100〜150文字）を1つ日本語で書いてください。選手を励ます内容で。テキストのみ返してください。"
+          }]
+        })
+      });
+      const d=await resp.json();
+      const txt=(d.content||[]).find(x=>x.type==="text")?.text||"";
+      setAiText(txt);
+    }catch(e){alert("AI生成エラー: "+e.message);}
+    setAiLoading(false);
+  };
+  const copyHp=()=>{
+    const full=hpText+(aiText?"\n\n"+aiText:"");
+    copyToClipboard(full);
+    setHpCopied(true);setTimeout(()=>setHpCopied(false),2000);
+  };
 
   return h("div",{className:"page"},
+    // HP用テンプレモーダル
+    hpModal&&h(Modal,{title:"📋 HP用テンプレ",onClose:()=>setHpModal(false)},
+      h("div",{style:{marginBottom:12}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:6}},"テキスト"),
+        h("textarea",{value:hpText,onChange:e=>setHpText(e.target.value),rows:10,
+          style:{...css.inp,resize:"none",fontSize:13,lineHeight:1.8,fontFamily:"monospace"}})),
+      h("button",{onClick:generateAiComment,disabled:aiLoading,
+        style:{width:"100%",marginBottom:12,padding:"11px",border:"none",borderRadius:12,
+          background:aiLoading?"#ccc":"linear-gradient(135deg,#667eea,#764ba2)",
+          color:"#fff",fontSize:13,fontWeight:700,cursor:aiLoading?"not-allowed":"pointer"}},
+        aiLoading?"✨ 生成中...":"✨ AIでコメントを追加"),
+      aiText&&h("div",{style:{marginBottom:12,padding:12,background:"#F3E5F5",borderRadius:10}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#9C27B0",marginBottom:6}},"AIコメント"),
+        h("textarea",{value:aiText,onChange:e=>setAiText(e.target.value),rows:4,
+          style:{...css.inp,resize:"none",fontSize:13,lineHeight:1.7,background:"transparent",border:"none",padding:0}})),
+      h("button",{onClick:copyHp,
+        style:{width:"100%",padding:14,border:"none",borderRadius:12,
+          background:hpCopied?"#4CAF50":"#FF6B35",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}},
+        hpCopied?"✓ コピーしました！":"📋 コピーする")),
     // 日程編集モーダル
     editSch&&h(Modal,{title:"📅 日程を編集",onClose:()=>setEditSch(false)},
       h("div",{style:{marginBottom:12}},
@@ -1498,6 +1585,11 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
             style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
               background:dayTab===t.k?"#FF6B35":"transparent",
               color:dayTab===t.k?"#fff":"#aaa",fontSize:13,fontWeight:700,cursor:"pointer"}},t.l))),
+      // HP用テンプレボタン（admin、試合あり）
+      dayTab==="matches"&&dayR.length>0&&isAdmin&&h("button",{onClick:openHpModal,
+        style:{width:"100%",padding:"11px",marginBottom:10,border:"2px solid #9C27B0",borderRadius:12,
+          background:"#F3E5F5",color:"#9C27B0",fontSize:13,fontWeight:700,cursor:"pointer"}},
+        "📋 HP用テンプレをコピー"),
       // 試合一覧・成績（matches タブ）
       dayTab==="matches"&&dayR.length>0&&h("div",{style:{background:"#fff",borderRadius:18,padding:"16px 20px",marginBottom:14,boxShadow:"0 4px 20px rgba(0,0,0,0.12)"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"本日の成績"),
