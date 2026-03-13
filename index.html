@@ -109,8 +109,11 @@ function calcStats(rs) {
   if(!rs.length) return {games:0,wins:0,draws:0,losses:0,gf:0,ga:0,pct:"-"};
   // PK戦がある試合のみPKスコアで勝敗判定、それ以外は通常スコア
   const hasPkData = r => {
-    const o=r.pkOur, t=r.pkTheir;
-    return o!=null && o!=="" && isFinite(o) && t!=null && t!=="" && isFinite(t);
+    // pkKickers配列があれば確実にPK戦あり
+    try { const k=JSON.parse(r.pkKickers); if(Array.isArray(k)&&k.length>0) return true; } catch(e){}
+    // 旧データ: pkOur/pkTheirが両方数値かつ合計1以上
+    const o=Number(r.pkOur), t=Number(r.pkTheir);
+    return !isNaN(o) && !isNaN(t) && r.pkOur!=="" && r.pkTheir!=="" && (o+t)>0;
   };
   const isWin = r => {
     const our=Number(r.ourScore), their=Number(r.theirScore);
@@ -1067,7 +1070,11 @@ function DashTab({results,members,schedules}) {
 
     // PK戦成績（勝ち負け+勝率のみ）
     (()=>{
-      const pkGames=filtered.filter(r=>r.pkOur!=null&&r.pkOur!==""&&isFinite(r.pkOur)&&r.pkTheir!=null&&r.pkTheir!==""&&isFinite(r.pkTheir));
+      const pkGames=filtered.filter(r=>{
+        try { const k=JSON.parse(r.pkKickers); if(Array.isArray(k)&&k.length>0) return true; } catch(e){}
+        const o=Number(r.pkOur), t=Number(r.pkTheir);
+        return !isNaN(o)&&!isNaN(t)&&r.pkOur!==""&&r.pkTheir!==""&&(o+t)>0;
+      });
       if(!pkGames.length) return null;
       const pkW=pkGames.filter(r=>Number(r.pkOur)>Number(r.pkTheir)).length;
       const pkL=pkGames.filter(r=>Number(r.pkOur)<Number(r.pkTheir)).length;
