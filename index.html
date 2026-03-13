@@ -1086,7 +1086,8 @@ function DashTab({results,members,schedules}) {
             .map(x=>h("div",{key:x.l,style:{flex:1,textAlign:"center",background:"#F8F9FA",borderRadius:12,padding:"10px 4px"}},
               h("div",{style:{fontSize:20,fontWeight:900,color:x.c}},x.v),
               h("div",{style:{fontSize:10,color:"#aaa",marginTop:2}},x.l)))));
-    })()),  // end rank tab
+    })()  // PK戦成績ここまで
+    ),  // end rank Fragment
 
     // 個人成績タブ
     dashTab==="personal"&&h(Fragment,{},
