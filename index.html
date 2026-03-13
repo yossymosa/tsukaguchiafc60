@@ -1035,10 +1035,11 @@ function RankList({title,icon,data,unit}) {
 }
 
 function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
-  const [dashTab,setDashTab]=useState("rank"); // "rank" | "personal"
+  const [dashTab,setDashTab]=useState("result"); // "result" | "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
   const [periodF,setPeriodF]=useState("year"); // "year"|"month"|"lastmonth"|"custom"
   const [from,setFrom]=useState(""); const [to,setTo]=useState("");
+  const [oppFilter,setOppFilter]=useState("all"); // "all" or opponent name
   function typeMatch(r,typeF){
     if(typeF==="all") return true;
     if(r.type===typeF) return true;
@@ -1064,6 +1065,9 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
     if(periodRange.t&&d>periodRange.t) return false;
     return true;
   }),[results,typeF,periodRange]);
+  const oppFiltered=useMemo(()=>
+    oppFilter==="all"?filtered:filtered.filter(r=>r.opponent===oppFilter)
+  ,[filtered,oppFilter]);
   const st=calcStats(filtered);
 
   // ランキング集計
@@ -1134,11 +1138,11 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
   return h(Fragment,{},
     // サブタブ
     h("div",{style:{display:"flex",background:"#fff",borderRadius:16,padding:4,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-      [{k:"rank",l:"📊 ランキング"},{k:"personal",l:"👤 個人成績"}].map(t=>
+      [{k:"result",l:"🆚 対戦成績"},{k:"rank",l:"📊 ランキング"},{k:"personal",l:"👤 個人成績"}].map(t=>
         h("button",{key:t.k,onClick:()=>setDashTab(t.k),
           style:{flex:1,padding:"10px 4px",border:"none",borderRadius:12,
             background:dashTab===t.k?"#FF6B35":"transparent",
-            color:dashTab===t.k?"#fff":"#aaa",fontSize:13,fontWeight:700,cursor:"pointer"}},t.l))),
+            color:dashTab===t.k?"#fff":"#aaa",fontSize:11,fontWeight:700,cursor:"pointer"}},t.l))),
     // フィルター（インライン）
     h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
       h("div",{style:{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}},
@@ -1148,7 +1152,81 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
       periodF==="custom"&&h("div",{style:{display:"flex",gap:8,alignItems:"center",marginTop:4}},
         h("input",{type:"date",value:from,onChange:e=>setFrom(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}}),
         h("span",{style:{color:"#ccc",flexShrink:0}},"〜"),
-        h("input",{type:"date",value:to,onChange:e=>setTo(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}}))),
+        h("input",{type:"date",value:to,onChange:e=>setTo(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}})),
+      dashTab==="result"&&h("div",{style:{marginTop:10,paddingTop:10,borderTop:"1px solid #f5f5f5"}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:6}},"対戦相手"),
+        h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+          h("button",{onClick:()=>setOppFilter("all"),style:{padding:"5px 12px",border:`2px solid ${oppFilter==="all"?"#FF6B35":"#eee"}`,borderRadius:20,background:oppFilter==="all"?"#FF6B35":"#fff",color:oppFilter==="all"?"#fff":"#666",fontSize:12,fontWeight:oppFilter==="all"?700:400,cursor:"pointer"}},"全相手"),
+          [...new Set(filtered.map(r=>r.opponent).filter(Boolean))].sort().map(opp=>
+            h("button",{key:opp,onClick:()=>setOppFilter(opp===oppFilter?"all":opp),
+              style:{padding:"5px 12px",border:`2px solid ${oppFilter===opp?"#FF6B35":"#eee"}`,borderRadius:20,
+                background:oppFilter===opp?"#FF6B35":"#fff",color:oppFilter===opp?"#fff":"#666",
+                fontSize:12,fontWeight:oppFilter===opp?700:400,cursor:"pointer"}},opp))))),
+
+    // ── 対戦成績タブ ──
+    dashTab==="result"&&h(Fragment,{},
+      (()=>{
+        const st2=calcStats(oppFiltered);
+        const oppMap={};
+        filtered.forEach(r=>{
+          if(!r.opponent) return;
+          if(!oppMap[r.opponent]) oppMap[r.opponent]={w:0,d:0,l:0,gf:0,ga:0};
+          const o=oppMap[r.opponent];
+          const our=Number(r.ourScore||0),their=Number(r.theirScore||0);
+          o.gf+=our; o.ga+=their;
+          if(our>their)o.w++; else if(our===their)o.d++; else o.l++;
+        });
+        const opps=Object.entries(oppMap).sort((a,b)=>(b[1].w-a[1].w));
+        return h(Fragment,{},
+          // 集計カード
+          h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}},
+            h("div",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.45)",letterSpacing:2,marginBottom:12}},
+              (oppFilter==="all"?"全体":"vs "+oppFilter)+" · "+oppFiltered.length+"試合"),
+            st2.games>0&&h(Fragment,{},
+              h("div",{style:{display:"flex",gap:2,height:8,borderRadius:4,overflow:"hidden",background:"rgba(0,0,0,0.2)",marginBottom:6}},
+                h("div",{style:{width:`${st2.wins/st2.games*100}%`,background:"#4CAF50"}}),
+                h("div",{style:{width:`${st2.draws/st2.games*100}%`,background:"#FFC107"}}),
+                h("div",{style:{width:`${st2.losses/st2.games*100}%`,background:"#F44336"}})),
+              h("div",{style:{display:"flex",gap:8,fontSize:10,color:"rgba(255,255,255,0.4)",marginBottom:14}},
+                h("span",{},"■ 勝 "+st2.wins),h("span",{},"■ 分 "+st2.draws),h("span",{},"■ 負 "+st2.losses))),
+            h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,textAlign:"center"}},
+              [{l:"勝率",v:st2.pct,c:"#fff"},{l:"総得点",v:st2.gf,c:"#FF6B35"},{l:"総失点",v:st2.ga,c:"#F44336"},{l:"得失点差",v:(st2.gf-st2.ga>=0?"+":"")+(st2.gf-st2.ga),c:st2.gf-st2.ga>=0?"#4CAF50":"#F44336"}]
+                .map(x=>h("div",{key:x.l,style:{background:"rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 4px"}},
+                  h("div",{style:{fontSize:20,fontWeight:900,color:x.c}},x.v),
+                  h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:2}},x.l))))),
+          // 対戦相手別サマリー（全相手表示中のみ）
+          oppFilter==="all"&&opps.length>0&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+            h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🆚 対戦相手別"),
+            opps.map(([opp,s],i)=>
+              h("div",{key:opp,onClick:()=>setOppFilter(opp),
+                style:{display:"flex",alignItems:"center",gap:10,marginBottom:i<opps.length-1?8:0,
+                  padding:"8px 10px",background:"#F8F9FA",borderRadius:10,cursor:"pointer"}},
+                h("div",{style:{flex:1,fontSize:13,fontWeight:700,color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},opp),
+                h("div",{style:{display:"flex",gap:4,flexShrink:0}},
+                  h("span",{style:{fontSize:11,fontWeight:700,color:"#4CAF50",background:"#E8F5E9",borderRadius:6,padding:"2px 6px"}},s.w+"勝"),
+                  h("span",{style:{fontSize:11,fontWeight:700,color:"#FFC107",background:"#FFFDE7",borderRadius:6,padding:"2px 6px"}},s.d+"分"),
+                  h("span",{style:{fontSize:11,fontWeight:700,color:"#F44336",background:"#FFEBEE",borderRadius:6,padding:"2px 6px"}},s.l+"敗")),
+                h("div",{style:{fontSize:11,color:"#aaa",flexShrink:0,marginLeft:4}},s.gf+"-"+s.ga),
+                h("div",{style:{color:"#ccc",fontSize:14,marginLeft:4}},"›")))),
+          // 試合一覧
+          h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+            h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"📋 試合一覧"),
+            oppFiltered.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:16}},"試合がありません"),
+            oppFiltered.map((r,i)=>{
+              const tc=getTC(r.type);
+              const dt=fmt(r.date);
+              const our=Number(r.ourScore||0),their=Number(r.theirScore||0);
+              const rw=our>their?"勝":our===their?"分":"負";
+              const rwc=our>their?"#4CAF50":our===their?"#FFC107":"#F44336";
+              return h("div",{key:r.id,style:{display:"flex",alignItems:"center",gap:10,
+                marginBottom:i<oppFiltered.length-1?8:0,padding:"8px 10px",background:"#F8F9FA",borderRadius:10}},
+                h("div",{style:{fontSize:11,color:"#aaa",flexShrink:0,width:36,textAlign:"center"}},dt.short),
+                h("div",{style:{width:3,height:32,background:tc.bg,borderRadius:2,flexShrink:0}}),
+                h("div",{style:{flex:1,fontSize:13,fontWeight:600,color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},"vs "+r.opponent),
+                h("div",{style:{fontSize:14,fontWeight:900,color:"#1a1a2e",flexShrink:0}},our+" - "+their),
+                h("div",{style:{fontSize:11,fontWeight:700,color:rwc,background:rwc+"22",borderRadius:6,padding:"2px 6px",flexShrink:0}},rw));
+            })));
+      })()),
 
     // ── ランキングタブ ──
     dashTab==="rank"&&h(Fragment,{},
@@ -1183,31 +1261,6 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
               h("div",{style:{flex:1}},h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},x.m.name),h("div",{style:{fontSize:11,color:"#aaa"}},x.m.grade+" · "+x.m.position)),
               h("div",{style:{fontSize:22,fontWeight:900,color:i===0?"#FF6B35":"#1a1a2e"}},x.cnt,h("span",{style:{fontSize:12,color:"#aaa",fontWeight:400}},"本")));
           })),
-
-      // 対戦相手別成績
-      (()=>{
-        const oppMap={};
-        filtered.forEach(r=>{
-          if(!r.opponent) return;
-          if(!oppMap[r.opponent]) oppMap[r.opponent]={w:0,d:0,l:0,gf:0,ga:0};
-          const o=oppMap[r.opponent];
-          const our=Number(r.ourScore||0), their=Number(r.theirScore||0);
-          o.gf+=our; o.ga+=their;
-          if(our>their) o.w++; else if(our===their) o.d++; else o.l++;
-        });
-        const opps=Object.entries(oppMap).sort((a,b)=>(b[1].w-a[1].w)||(b[1].gf-b[1].ga)-(a[1].gf-a[1].ga));
-        if(!opps.length) return null;
-        return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-          h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🆚 対戦相手別成績"),
-          opps.map(([opp,s],i)=>
-            h("div",{key:opp,style:{display:"flex",alignItems:"center",gap:10,marginBottom:i<opps.length-1?8:0,padding:"8px 10px",background:"#F8F9FA",borderRadius:10}},
-              h("div",{style:{flex:1,fontSize:13,fontWeight:700,color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},opp),
-              h("div",{style:{display:"flex",gap:4,flexShrink:0}},
-                h("span",{style:{fontSize:11,fontWeight:700,color:"#4CAF50",background:"#E8F5E9",borderRadius:6,padding:"2px 6px"}},s.w+"勝"),
-                h("span",{style:{fontSize:11,fontWeight:700,color:"#FFC107",background:"#FFFDE7",borderRadius:6,padding:"2px 6px"}},s.d+"分"),
-                h("span",{style:{fontSize:11,fontWeight:700,color:"#F44336",background:"#FFEBEE",borderRadius:6,padding:"2px 6px"}},s.l+"敗")),
-              h("div",{style:{fontSize:11,color:"#aaa",flexShrink:0,marginLeft:4}},s.gf+"-"+s.ga))));
-      })(),
 
       // PK戦成績
       (()=>{
