@@ -28,9 +28,8 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbwxPPdtRTh16Ho6HN1ubcZO
 // ================================================================
 
 const HOME_LINKS = [
-  {label:"公式HP",  url:"https://example.com",         icon:"🌐"},
-  {label:"YouTube", url:"https://youtube.com",          icon:"▶️"},
-  {label:"LINE",    url:"https://line.me/R/ti/g/xxxxx", icon:"💬"},
+  {label:"公式HP",  url:"https://tsukaguchi-afc.jr", icon:"🌐"},
+  {label:"YouTube", url:"https://youtube.com/playlist?list=PLLo2VVDM0WelHQk4YEdf-dvejZLkVbJ2N&si=xEJa9OEtTiQmKHWU", icon:"▶️"},
 ];
 const FORMATS = [
   {label:"10分ハーフ",hm:10,hv:2},{label:"12分ハーフ",hm:12,hv:2},
@@ -163,8 +162,11 @@ function AppHeader({user,cnt,onLogout,onRefresh}) {
 
 // ── ログイン ─────────────────────────────────────────────────
 function Login({onLogin}) {
-  const [email,setEmail]=useState(""); const [pass,setPass]=useState("");
-  const [err,setErr]=useState(""); const [loading,setLoading]=useState(false);
+  const [email,setEmail]=useState("");
+  const [pass,setPass]=useState("");
+  const [showPass,setShowPass]=useState(false);
+  const [err,setErr]=useState("");
+  const [loading,setLoading]=useState(false);
   const login=async()=>{
     if(!email||!pass){setErr("メールとパスワードを入力してください");return;}
     setLoading(true);setErr("");
@@ -175,12 +177,34 @@ function Login({onLogin}) {
   return h("div",{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a1a2e,#0f3460)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}},
     loading&&h(Loader,{msg:"ログイン中..."}),
     h("div",{style:{background:"#fff",borderRadius:24,padding:32,width:"100%",maxWidth:360,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}},
-      h("div",{style:{textAlign:"center",marginBottom:28}},h("div",{style:{fontSize:52}},"⚽"),h("div",{style:{fontSize:22,fontWeight:900,color:"#1a1a2e"}},"塚口AFC")),
-      h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"メールアドレス"),h("input",{value:email,onChange:e=>setEmail(e.target.value),type:"email",placeholder:"coach@example.com",autoComplete:"email",style:css.inp,onKeyDown:e=>e.key==="Enter"&&login()})),
-      h("div",{style:{marginBottom:16}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"パスワード"),h("input",{value:pass,onChange:e=>setPass(e.target.value),type:"password",placeholder:"パスワード",autoComplete:"current-password",autoCorrect:"off",autoCapitalize:"off",spellCheck:false,style:css.inp,onKeyDown:e=>e.key==="Enter"&&login()})),
+      h("div",{style:{textAlign:"center",marginBottom:28}},
+        h("div",{style:{fontSize:52}},"⚽"),
+        h("div",{style:{fontSize:22,fontWeight:900,color:"#1a1a2e"}},"塚口AFC Jr"),
+        h("div",{style:{fontSize:12,color:"#aaa",marginTop:4}},"60期生")),
+      h("div",{style:{marginBottom:14}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"メールアドレス"),
+        h("input",{value:email,onChange:e=>setEmail(e.target.value),type:"email",
+          placeholder:"coach@example.com",autoComplete:"email",
+          style:css.inp,onKeyDown:e=>e.key==="Enter"&&login()})),
+      h("div",{style:{marginBottom:16}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"パスワード"),
+        h("div",{style:{position:"relative"}},
+          h("input",{value:pass,onChange:e=>setPass(e.target.value),
+            type:showPass?"text":"password",
+            placeholder:"パスワード",
+            autoComplete:"current-password",autoCorrect:"off",autoCapitalize:"off",spellCheck:false,
+            style:{...css.inp,paddingRight:48},
+            onKeyDown:e=>e.key==="Enter"&&login()}),
+          h("button",{onClick:()=>setShowPass(p=>!p),
+            style:{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",
+              background:"none",border:"none",cursor:"pointer",fontSize:18,color:"#aaa",padding:4}},
+            showPass?"🙈":"👁"))),
       err&&h("div",{style:{color:"#F44336",fontSize:13,marginBottom:12,background:"#FFF3EF",padding:"8px 12px",borderRadius:8}},err),
       h("button",{onClick:login,style:{width:"100%",padding:14,background:"#FF6B35",color:"#fff",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:"pointer"}},"ログイン"),
-      h("div",{style:{marginTop:10,fontSize:11,color:"#ccc",textAlign:"center"}},"アカウントはコーチに確認してください")));
+      h("div",{style:{marginTop:14,fontSize:12,color:"#aaa",textAlign:"center",lineHeight:1.6}},
+        "ログインできない場合は",
+        h("span",{style:{color:"#FF6B35",fontWeight:700}},"吉本"),
+        "まで")));
 }
 
 // ── YouTube テンプレ生成 ─────────────────────────────────────
