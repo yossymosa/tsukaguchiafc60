@@ -24,7 +24,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 
 
 // ================================================================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwFB_43TIhR7NVJbP55qWIor5Vv42SIsk8JzRQ1e09MUoTT25owRLjSAI2gATO11wYw/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxQd-QS4pECO6kpom0THTBGRMDwDatXE4BNlPpXXkmkS_0xW9uKM4-bp-CnyCJW3pteBQ/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -1494,22 +1494,11 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
     if(!aiPrompt.trim())return;
     setAiLoading(true);
     try{
-      const resp=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:600,
-          messages:[{role:"user",content:
-            "以下は少年サッカーチーム「塚口AFCjr」のHP掲載用テキストです。\n\n"+hpText+
-            "\n\n指示："+aiPrompt.trim()+
-            "\n\nテキストのみ返してください。余計な説明や前置きは不要です。"
-          }]
-        })
-      });
-      const d=await resp.json();
-      const txt=(d.content||[]).find(x=>x.type==="text")?.text||"";
-      if(txt) setHpText(txt);
+      const prompt="以下は少年サッカーチーム「塚口AFCjr」のHP掲載用テキストです。\n\n"+hpText+
+        "\n\n指示："+aiPrompt.trim()+
+        "\n\nテキストのみ返してください。余計な説明や前置きは不要です。";
+      const d=await api("aiGenerate",{prompt});
+      if(d.text) setHpText(d.text);
     }catch(e){alert("AI生成エラー: "+e.message);}
     setAiLoading(false);
   };
