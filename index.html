@@ -18,12 +18,6 @@ input,select,textarea,button{font-family:'Noto Sans JP',sans-serif;}
 <body>
 <div id="app"></div>
 <script>
-// デバッグ用エラーキャッチ
-window.onerror = function(msg, src, line, col, err) {
-  document.getElementById('app').innerHTML = 
-    '<div style="padding:20px;background:#fff;margin:20px;border-radius:12px;font-family:monospace">' +
-    '<b style="color:red">⚠ JSエラー</b><br>' + msg + '<br>line:' + line + '</div>';
-};
 // Preact globals from UMD
 const { h, render, Fragment } = preact;
 const { useState, useEffect, useCallback, useMemo } = preactHooks;
@@ -44,20 +38,6 @@ const FORMATS = [
   {label:"15分 1本", hm:15,hv:1},{label:"20分 1本",  hm:20,hv:1},
 ];
 // スプシ「種類」列は英語・日本語どちらでも対応
-function getTC(type) {
-  const map={
-    practice:{bg:"#4CAF50",lb:"練習"},
-    official:{bg:"#FF6B35",lb:"公式戦"},
-    training:{bg:"#2196F3",lb:"トレマ"},
-    cup:     {bg:"#9C27B0",lb:"カップ戦"},
-    "練習":  {bg:"#4CAF50",lb:"練習"},
-    "公式戦":{bg:"#FF6B35",lb:"公式戦"},
-    "トレマ":{bg:"#2196F3",lb:"トレマ"},
-    "カップ戦":{bg:"#9C27B0",lb:"カップ戦"},
-    "トレーニングマッチ":{bg:"#2196F3",lb:"トレマ"},
-  };
-  return map[type]||{bg:"#999",lb:type||"その他"};
-}
 // スプシ「種類」列は英語・日本語どちらでも対応
 function getTC(type) {
   const m={
@@ -958,7 +938,7 @@ function AddMatchModal({schedule,results,onSave,onClose}) {
 }
 
 // ── 成績タブ ───────────────────────────────────────────────────
-function DashTab({results,members,schedules}) {
+function DashTab({results,members,schedules,liftings=[]}) {
   const [dashTab,setDashTab]=useState("rank"); // "rank" | "personal" | "lifting"
   const [typeF,setTypeF]=useState("all");
   const [periodF,setPeriodF]=useState("year"); // "year"|"month"|"lastmonth"|"custom"
@@ -1170,32 +1150,33 @@ function DashTab({results,members,schedules}) {
 
     // ── リフティングタブ ──
     dashTab==="lifting"&&h(Fragment,{},
-      (()=>{
-        // 全メンバーのリフティング記録をランキング表示＋記録入力
-        const sorted=[...members].map(m=>{
-          const lf=liftings.find(x=>x.memberId===m.id);
-          return {...m, count:lf?Number(lf.count||0):null};
-        }).filter(m=>m.count!==null).sort((a,b)=>b.count-a.count);
-        return h(Fragment,{},
-          // ランキング
-          h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-            h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🏃 リフティングランキング"),
-            sorted.length===0
-              ? h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:16}},"まだ記録がありません")
-              : sorted.map((m,i)=>{
-                const pc=PC[m.position]||{bg:"#999"};
-                return h("div",{key:m.id,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<sorted.length-1?10:0}},
-                  h("div",{style:{width:24,fontSize:i===0?20:14,fontWeight:900,color:i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":"#ccc",textAlign:"center"}},i+1),
-                  h("div",{style:{width:34,height:34,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},m.number),
-                  h("div",{style:{flex:1}},
-                    h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},m.name),
-                    h("div",{style:{fontSize:11,color:"#aaa"}},m.grade+" · "+m.position)),
-                  h("div",{style:{fontSize:24,fontWeight:900,color:i===0?"#FF6B35":"#1a1a2e"}},m.count,h("span",{style:{fontSize:12,color:"#aaa",fontWeight:400}},"回")));
-              }))),
-          // 記録入力（admin）
-          h(LiftingInput,{members,liftings}));
-      })()
+      h(LiftingRanking,{members,liftings}),
+      h(LiftingInput,{members,liftings})
+    )
   );
+}
+
+// リフティングランキングコンポーネント
+function LiftingRanking({members,liftings}) {
+  const sorted=[...members].map(m=>{
+    const lf=liftings.find(x=>x.memberId===m.id);
+    return {...m,count:lf?Number(lf.count||0):null};
+  }).filter(m=>m.count!==null).sort((a,b)=>b.count-a.count);
+  return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+    h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🏃 リフティングランキング"),
+    sorted.length===0
+      ? h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:16}},"まだ記録がありません")
+      : sorted.map((m,i)=>{
+          const pc=PC[m.position]||{bg:"#999"};
+          return h("div",{key:m.id,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<sorted.length-1?10:0}},
+            h("div",{style:{width:24,fontSize:i===0?20:14,fontWeight:900,color:i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":"#ccc",textAlign:"center"}},i+1),
+            h("div",{style:{width:34,height:34,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},m.number),
+            h("div",{style:{flex:1}},
+              h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},m.name),
+              h("div",{style:{fontSize:11,color:"#aaa"}},m.grade+" · "+m.position)),
+            h("div",{style:{fontSize:24,fontWeight:900,color:i===0?"#FF6B35":"#1a1a2e"}},m.count,
+              h("span",{style:{fontSize:12,color:"#aaa",fontWeight:400}},"回")));
+        }));
 }
 
 // リフティング記録入力コンポーネント
