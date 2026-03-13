@@ -107,8 +107,24 @@ function fmt(v) {
 }
 function calcStats(rs) {
   if(!rs.length) return {games:0,wins:0,draws:0,losses:0,gf:0,ga:0,pct:"-"};
-  const w=rs.filter(r=>Number(r.ourScore)>Number(r.theirScore)).length;
-  const dr=rs.filter(r=>Number(r.ourScore)===Number(r.theirScore)).length;
+  // PK戦がある試合のみPKスコアで勝敗判定、それ以外は通常スコア
+  const hasPkData = r => r.pkOur!=null && r.pkTheir!=null;
+  const isWin = r => {
+    const our=Number(r.ourScore), their=Number(r.theirScore);
+    if(our>their) return true;
+    if(our<their) return false;
+    // 引き分けでPKあり
+    if(hasPkData(r)) return Number(r.pkOur)>Number(r.pkTheir);
+    return false;
+  };
+  const isDraw = r => {
+    const our=Number(r.ourScore), their=Number(r.theirScore);
+    if(our!==their) return false;
+    if(hasPkData(r)) return false; // PKあれば引き分けなし
+    return true;
+  };
+  const w=rs.filter(isWin).length;
+  const dr=rs.filter(isDraw).length;
   const gf=rs.reduce((a,r)=>a+Number(r.ourScore||0),0);
   const ga=rs.reduce((a,r)=>a+Number(r.theirScore||0),0);
   return {games:rs.length,wins:w,draws:dr,losses:rs.length-w-dr,gf,ga,pct:Math.round(w/rs.length*100)+"%"};
@@ -1092,7 +1108,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
   const [year,setYear]=useState(today.getFullYear());
   const [month,setMonth]=useState(today.getMonth());
   const [modal,setModal]=useState(false);
-  const [fs,setFs]=useState({date:"",allDay:true,time:"",title:"",location:"",type:"official"});
+  const [fs,setFs]=useState({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official"});
   const todayStr=today.toISOString().slice(0,10);
 
   // 過去の場所一覧（重複除去）
@@ -1111,9 +1127,10 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
     const titleVal=isPractice?"練習":fs.title;
     if(!fs.date) return alert("日付を入力してください");
     if(!titleVal) return alert("タイトルを入力してください");
-    const dateVal=(!fs.allDay&&fs.time)?fs.date+"T"+fs.time:fs.date;
-    await onAddSchedule({...fs,title:titleVal,date:dateVal});
-    setFs({date:"",allDay:true,time:"",title:"",location:"",type:"official"});
+    const dateVal=(!fs.allDay&&fs.timeFrom)?fs.date+"T"+fs.timeFrom:fs.date;
+    const timeLabel=(!fs.allDay&&fs.timeFrom)?(fs.timeFrom+(fs.timeTo?" - "+fs.timeTo:"")):"";
+    await onAddSchedule({...fs,title:titleVal,date:dateVal,timeLabel});
+    setFs({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official"});
     setModal(false);
   };
 
@@ -1226,8 +1243,12 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
               style:{flex:1,padding:"9px",border:"2px solid "+(fs.allDay===opt.k?"#FF6B35":"#eee"),
                 borderRadius:10,background:fs.allDay===opt.k?"#FF6B35":"#fff",
                 color:fs.allDay===opt.k?"#fff":"#666",fontSize:13,fontWeight:700,cursor:"pointer"}},opt.l))),
-        !fs.allDay&&h("input",{type:"time",value:fs.time,onChange:e=>setFs(p=>({...p,time:e.target.value})),
-          style:{...css.inp,marginTop:8}})),
+        !fs.allDay&&h("div",{style:{display:"flex",alignItems:"center",gap:8,marginTop:8}},
+          h("input",{type:"time",value:fs.timeFrom,onChange:e=>setFs(p=>({...p,timeFrom:e.target.value})),
+            style:{...css.inp,flex:1}}),
+          h("span",{style:{color:"#aaa",flexShrink:0,fontWeight:700}},"〜"),
+          h("input",{type:"time",value:fs.timeTo,onChange:e=>setFs(p=>({...p,timeTo:e.target.value})),
+            style:{...css.inp,flex:1}}))),
 
       // 3. タイトル（練習以外）
       fs.type!=="practice"&&h("div",{style:{marginBottom:14}},
