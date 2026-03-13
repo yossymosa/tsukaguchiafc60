@@ -242,10 +242,20 @@ function makeYtDesc(match, members, half) {
   const isH1 = half === "1st";
   const halfKey = isH1 ? "1st" : "2nd";
 
-  // 試合全体スコア（1試合分）
+  // 全体スコア（前半+後半合計）
   const allOur   = (match.goals||[]).filter(g=>g.team!=="them").length;
   const allTheir = (match.theirGoals||[]).length + (match.goals||[]).filter(g=>g.team==="them").length;
-  const scoreLine = "塚口AFC " + allOur + " - " + allTheir + " " + match.opponent;
+
+  // 前半・後半別スコア
+  const h1Our   = (match.goals||[]).filter(g=>g.team!=="them" && String(g.half).toLowerCase()==="1st").length;
+  const h1Their = (match.theirGoals||[]).filter(g=>String(g.half).toLowerCase()==="1st").length
+                + (match.goals||[]).filter(g=>g.team==="them" && String(g.half).toLowerCase()==="1st").length;
+  const h2Our   = (match.goals||[]).filter(g=>g.team!=="them" && String(g.half).toLowerCase()==="2nd").length;
+  const h2Their = (match.theirGoals||[]).filter(g=>String(g.half).toLowerCase()==="2nd").length
+                + (match.goals||[]).filter(g=>g.team==="them" && String(g.half).toLowerCase()==="2nd").length;
+
+  const scoreLine = "塚口AFC " + allOur + " - " + allTheir + " " + match.opponent
+    + "\n前半 " + h1Our + "-" + h1Their + "  後半 " + h2Our + "-" + h2Their;
 
   // チャプター: 指定ハーフのゴールのみ
   const myG = (match.goals||[])
@@ -531,12 +541,14 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
           ].filter(Boolean).map(x=>h("a",{key:x.label,href:x.url,target:"_blank",rel:"noopener",
             style:{display:"inline-flex",alignItems:"center",gap:5,background:"#FF0000",color:"#fff",borderRadius:10,padding:"10px 20px",fontSize:14,fontWeight:700,textDecoration:"none"}},x.label))),
 
-        // URL入力（admin）- URLは入力欄のみ、表示なし
-        isAdmin&&h("div",{style:{marginBottom:14}},
-          [{l:"通しURL",k:"full"},{l:"前半URL",k:"first"},{l:"後半URL",k:"second"}].map(f=>
-            h("div",{key:f.k,style:{marginBottom:6,display:"flex",alignItems:"center",gap:8}},
-              h("div",{style:{fontSize:11,fontWeight:600,color:"#888",width:56,flexShrink:0}},f.l),
-              h("input",{value:ytUrls[f.k],onChange:e=>setYtUrls(p=>({...p,[f.k]:e.target.value})),placeholder:"https://youtube.com/...",style:{...css.inp,fontSize:11,padding:"6px 10px",flex:1}})))),
+        // URL入力（admin）- 折りたたみ式
+        isAdmin&&h("details",{style:{marginBottom:14}},
+          h("summary",{style:{fontSize:11,fontWeight:600,color:"#aaa",cursor:"pointer",padding:"4px 0"}},"URL編集"),
+          h("div",{style:{marginTop:8}},
+            [{l:"通しURL",k:"full"},{l:"前半URL",k:"first"},{l:"後半URL",k:"second"}].map(f=>
+              h("div",{key:f.k,style:{marginBottom:6,display:"flex",alignItems:"center",gap:8}},
+                h("div",{style:{fontSize:11,fontWeight:600,color:"#888",width:56,flexShrink:0}},f.l),
+                h("input",{value:ytUrls[f.k],onChange:e=>setYtUrls(p=>({...p,[f.k]:e.target.value})),placeholder:"https://youtube.com/...",style:{...css.inp,fontSize:11,padding:"6px 10px",flex:1}}))))),
 
         // テンプレ生成（adminのみ）
         isAdmin&&h(Fragment,{},
@@ -939,7 +951,7 @@ function AddMatchModal({schedule,results,onSave,onClose}) {
 
 // ── 成績タブ ───────────────────────────────────────────────────
 function DashTab({results,members,schedules,liftings=[]}) {
-  const [dashTab,setDashTab]=useState("rank"); // "rank" | "personal" | "lifting"
+  const [dashTab,setDashTab]=useState("rank"); // "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
   const [periodF,setPeriodF]=useState("year"); // "year"|"month"|"lastmonth"|"custom"
   const [from,setFrom]=useState(""); const [to,setTo]=useState("");
@@ -1060,7 +1072,7 @@ function DashTab({results,members,schedules,liftings=[]}) {
   return h(Fragment,{},
     // サブタブ
     h("div",{style:{display:"flex",background:"#fff",borderRadius:16,padding:4,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-      [{k:"rank",l:"📊 ランキング"},{k:"personal",l:"👤 個人成績"},{k:"lifting",l:"🏃 リフティング"}].map(t=>
+      [{k:"rank",l:"📊 ランキング"},{k:"personal",l:"👤 個人成績"}].map(t=>
         h("button",{key:t.k,onClick:()=>setDashTab(t.k),
           style:{flex:1,padding:"10px 4px",border:"none",borderRadius:12,
             background:dashTab===t.k?"#FF6B35":"transparent",
@@ -1125,6 +1137,8 @@ function DashTab({results,members,schedules,liftings=[]}) {
 
     // ── 個人成績タブ ──
     dashTab==="personal"&&h(Fragment,{},
+      h(LiftingRanking,{members,liftings}),
+      isAdmin&&h(LiftingInput,{members,liftings}),
       personalStats.length===0
         ? h("div",{style:{background:"#fff",borderRadius:16,padding:32,textAlign:"center",color:"#ccc",fontSize:13}},"データがありません")
         : personalStats.map(m=>{
@@ -1147,12 +1161,6 @@ function DashTab({results,members,schedules,liftings=[]}) {
                 h("div",{style:{fontSize:16,fontWeight:900,color:x.c}},x.v),
                 h("div",{style:{fontSize:9,color:"#aaa",marginTop:2}},x.l)))));
         })),
-
-    // ── リフティングタブ ──
-    dashTab==="lifting"&&h(Fragment,{},
-      h(LiftingRanking,{members,liftings}),
-      h(LiftingInput,{members,liftings})
-    )
   );
 }
 
