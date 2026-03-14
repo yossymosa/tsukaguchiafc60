@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#FF6B35">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="塚口AFC">
+  <link rel="apple-touch-icon" href="/icon-192.png">
 <title>⚽ 塚口AFC</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;900&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/preact@10.19.3/dist/preact.umd.js"></script>
@@ -276,7 +282,7 @@ function makeYtDesc(match, members, half) {
       const type = g.goalType && g.goalType!=="通常" ? "("+g.goalType+")" : "";
       const assistStr = assistName ? " アシスト "+assistName : "";
       return { min:Number(g.minute)||0, sec:Number(g.second)||0,
-               text: secToTime(g.minute,g.second)+" ⚽"+scorerName+type+assistStr };
+               text: secToTime(g.minute,g.second)+" [得点]"+scorerName+type+assistStr };
     }),
     ...thG.map(g => {
       const type = g.goalType && g.goalType!=="通常" ? "("+g.goalType+")" : "";
@@ -1775,7 +1781,10 @@ function MemberTab({members,liftings=[]}) {
 
 // ── メインアプリ ───────────────────────────────────────────────
 function App() {
-  const [user,setUser]=useState(null);
+  const [user,setUser]=useState(()=>{
+    try{ const u=localStorage.getItem("afc_user"); return u?JSON.parse(u):null; }catch(e){ return null; }
+  });
+  const saveUser=(u)=>{ setUser(u); try{ if(u) localStorage.setItem("afc_user",JSON.stringify(u)); else localStorage.removeItem("afc_user"); }catch(e){} };
   const [loading,setLoading]=useState(false);
   const [loadMsg,setLoadMsg]=useState("読み込み中...");
   const [tab,setTab]=useState("home");
@@ -1851,7 +1860,7 @@ function App() {
   };
 
   // ── ページルーティング ────────────────────────────────────────
-  if(!user) return h(Login,{onLogin:setUser});
+  if(!user) return h(Login,{onLogin:saveUser});
 
   if(page?.type==="matchDetail") return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
@@ -1905,7 +1914,7 @@ function App() {
   return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
     h("div",{className:"page"},
-      h(AppHeader,{user,onLogout:()=>setUser(null),onRefresh:()=>load("更新中...")}),
+      h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中...")}),
       h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,
         boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
         h("div",{style:{display:"flex"}},
@@ -1927,6 +1936,11 @@ function App() {
 
 
 render(h(App,{}),document.getElementById("app"));
+
+// Service Worker登録
+if("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(()=>{});
+}
 
 </script>
 </body>
