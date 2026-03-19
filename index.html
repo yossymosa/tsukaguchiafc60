@@ -55,6 +55,8 @@ function getTC(type) {
     "公式戦":{bg:"#FF6B35",lb:"公式戦"},
     "トレマ":{bg:"#2196F3",lb:"トレマ"},
     "カップ戦":{bg:"#9C27B0",lb:"カップ戦"},
+    "event":{bg:"#009688",lb:"イベント"},
+    "イベント":{bg:"#009688",lb:"イベント"},
   };
   return m[type]||{bg:"#999",lb:type||"その他"};
 }
@@ -739,6 +741,165 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
       })));
 }
 
+
+// ── 詳細セクション ────────────────────────────────────────────
+function DetailSection({schedule, members, isAdmin, onSave}) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    gatherTime: schedule.gatherTime||"",
+    startTime:  schedule.startTime||"",
+    duty:       schedule.duty||"",
+    coach:      schedule.coach||"",
+    note:       schedule.note||"",
+  });
+  const [saving, setSaving] = useState(false);
+  const [attend, setAttend] = useState({});
+  const [attendLoading, setAttendLoading] = useState(true);
+
+  useEffect(()=>{
+    let cancelled=false;
+    api("getAttend",{scheduleId:schedule.id}).then(r=>{
+      if(cancelled)return;
+      const map={};
+      (r.attend||[]).forEach(a=>{map[a.memberId]=a.status;});
+      setAttend(map);setAttendLoading(false);
+    }).catch(()=>setAttendLoading(false));
+    return ()=>{cancelled=true;};
+  },[schedule.id]);
+
+  const participants = members.filter(m=>attend[m.id]==="○").sort((a,b)=>Number(a.number)-Number(b.number));
+  const save = async() => {
+    setSaving(true);
+    await onSave({...form, date:schedule.date, title:schedule.title, location:schedule.location, type:schedule.type});
+    Object.assign(schedule, form);
+    setSaving(false); setEditing(false);
+  };
+  const rows = [
+    {l:"集合時間", v:schedule.gatherTime||"-", k:"gatherTime"},
+    {l:"開始時間", v:schedule.startTime||"-",  k:"startTime"},
+    {l:"当番",     v:schedule.duty||"-",        k:"duty"},
+    {l:"コーチ",   v:schedule.coach||"-",       k:"coach"},
+    {l:"備考",     v:schedule.note||"-",        k:"note"},
+  ];
+  return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+    h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"📋 詳細"),
+      isAdmin&&h("button",{onClick:()=>setEditing(e=>!e),
+        style:{fontSize:11,fontWeight:700,color:"#FF6B35",background:"none",border:"1px solid #FF6B35",borderRadius:8,padding:"4px 10px",cursor:"pointer"}},
+        editing?"キャンセル":"✏️ 編集")),
+    editing
+      ? h(Fragment,{},
+          [
+            {l:"集合時間",k:"gatherTime",ph:"例: 8:30"},
+            {l:"開始時間",k:"startTime", ph:"例: 9:00"},
+            {l:"当番",    k:"duty",      ph:"例: 山田さん"},
+            {l:"コーチ",  k:"coach",     ph:"例: 吉本コーチ"},
+          ].map(f=>h("div",{key:f.k,style:{marginBottom:10}},
+            h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},f.l),
+            h("input",{value:form[f.k],onChange:e=>setForm(p=>({...p,[f.k]:e.target.value})),
+              placeholder:f.ph,style:{...css.inp,width:"100%"}}))),
+          h("div",{style:{marginBottom:16}},
+            h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"備考"),
+            h("textarea",{value:form.note,onChange:e=>setForm(p=>({...p,note:e.target.value})),
+              rows:3,style:{...css.inp,width:"100%",resize:"none"}})),
+          h("button",{onClick:save,disabled:saving,style:{...css.bS,width:"100%"}},saving?"保存中...":"保存する"))
+      : h(Fragment,{},
+          rows.slice(0,4).map(r=>h("div",{key:r.k,style:{display:"flex",gap:12,marginBottom:10,padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
+            h("div",{style:{fontSize:12,fontWeight:700,color:"#aaa",width:60,flexShrink:0}},r.l),
+            h("div",{style:{fontSize:13,fontWeight:600,color:"#1a1a2e"}},r.v))),
+          schedule.note&&h("div",{style:{padding:"8px 12px",background:"#FFF8E1",borderRadius:10,fontSize:13,color:"#666",lineHeight:1.7,marginBottom:10}},schedule.note),
+          h("div",{style:{padding:"12px",background:"#F8F9FA",borderRadius:10}},
+            h("div",{style:{fontSize:12,fontWeight:700,color:"#aaa",marginBottom:8}},"参加者 "+(attendLoading?"":"("+participants.length+"人)")),
+            attendLoading
+              ? h("div",{style:{fontSize:13,color:"#ccc"}},"読み込み中...")
+              : participants.length===0
+                ? h("div",{style:{fontSize:13,color:"#ccc"}},"参加者なし（出欠未回答）")
+                : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+                    participants.map(m=>{
+                      const pc=PC[m.position]||{bg:"#999"};
+                      return h("span",{key:m.id,style:{fontSize:12,fontWeight:700,color:"#fff",background:pc.bg,borderRadius:8,padding:"3px 10px"}},"#"+m.number+" "+m.name);
+                    })))));
+}
+
+// ── 配車セクション ────────────────────────────────────────────
+function CarpoolSection({schedule, user, isAdmin}) {
+  const [carpools, setCarpools] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [my, setMy] = useState({available:"", capacity:"", note:""});
+  const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(false);
+
+  useEffect(()=>{
+    let cancelled=false;
+    api("getCarpool",{scheduleId:schedule.id}).then(r=>{
+      if(cancelled)return;
+      setCarpools(r.carpools||[]);
+      const mine=(r.carpools||[]).find(c=>c.userId===user.id);
+      if(mine) setMy({available:mine.available||"",capacity:mine.capacity||"",note:mine.note||""});
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+    return ()=>{cancelled=true;};
+  },[schedule.id]);
+
+  const save=async()=>{
+    if(!my.available) return alert("可否を選択してください");
+    setSaving(true);
+    await api("saveCarpool",{scheduleId:schedule.id,userId:user.id,userName:user.name,...my});
+    const next=[...carpools.filter(c=>c.userId!==user.id),{scheduleId:schedule.id,userId:user.id,userName:user.name,...my}];
+    setCarpools(next);
+    setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2000);
+  };
+
+  const total=carpools.filter(c=>c.available==="可").reduce((a,c)=>a+Number(c.capacity||0),0);
+
+  if(loading) return h("div",{style:{textAlign:"center",padding:20,color:"#aaa",fontSize:13}},"読み込み中...");
+
+  return h("div",{style:{marginTop:14}},
+    // 自分の回答
+    h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:14}},"🚗 配車回答"),
+      h("div",{style:{marginBottom:12}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"配車できますか？"),
+        h("div",{style:{display:"flex",gap:8}},
+          [["可","#4CAF50"],["不可","#F44336"],["未定","#FF9800"]].map(([v,col])=>
+            h("button",{key:v,onClick:()=>setMy(p=>({...p,available:v})),
+              style:{flex:1,padding:"11px 0",border:`2px solid ${my.available===v?col:"#eee"}`,
+                borderRadius:12,background:my.available===v?col:"#fff",
+                color:my.available===v?"#fff":"#aaa",fontSize:14,fontWeight:700,cursor:"pointer"}},v)))),
+      my.available==="可"&&h("div",{style:{marginBottom:12}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"何人乗せられますか？"),
+        h("div",{style:{display:"flex",gap:8}},
+          [1,2,3,4,5,6].map(n=>
+            h("button",{key:n,onClick:()=>setMy(p=>({...p,capacity:String(n)})),
+              style:{flex:1,padding:"10px 0",border:`2px solid ${my.capacity===String(n)?"#2196F3":"#eee"}`,
+                borderRadius:10,background:my.capacity===String(n)?"#2196F3":"#fff",
+                color:my.capacity===String(n)?"#fff":"#aaa",fontSize:14,fontWeight:700,cursor:"pointer"}},n)))),
+      h("div",{style:{marginBottom:14}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"備考（任意）"),
+        h("textarea",{value:my.note,onChange:e=>setMy(p=>({...p,note:e.target.value})),
+          rows:2,placeholder:"例: 駅集合ならOK",style:{...css.inp,resize:"none"}})),
+      h("button",{onClick:save,disabled:saving,
+        style:{...css.bS,width:"100%",opacity:saving?0.6:1}},
+        saved?"✓ 保存済":saving?"保存中...":"回答する")),
+
+    // 集計（admin全員分、一般は合計のみ）
+    h("div",{style:{background:"#fff",borderRadius:16,padding:18,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+      h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"集計"),
+        h("div",{style:{fontSize:13,fontWeight:700,color:"#4CAF50"}},"合計 "+total+"人")),
+      carpools.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:12}},"まだ回答がありません"),
+      isAdmin&&carpools.map(cp=>
+        h("div",{key:cp.userId,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,
+          padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
+          h("div",{style:{flex:1,fontSize:13,fontWeight:700,color:"#1a1a2e"}},cp.userName||"不明"),
+          h("div",{style:{fontSize:12,fontWeight:700,
+            color:cp.available==="可"?"#4CAF50":cp.available==="不可"?"#F44336":"#FF9800"}},cp.available),
+          cp.available==="可"&&h("div",{style:{fontSize:12,color:"#2196F3",fontWeight:700}},cp.capacity+"人"),
+          cp.note&&h("div",{style:{fontSize:11,color:"#aaa",flex:1,textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},cp.note))),
+      !isAdmin&&carpools.length>0&&h("div",{style:{fontSize:13,color:"#666",textAlign:"center",padding:8}},
+        "配車可: "+carpools.filter(c=>c.available==="可").length+"人 / "+carpools.length+"人回答")));
+}
+
 // ── 出欠セクション（DayPage内で使用） ────────────────────────
 function AttendSection({schedule, members, user, isAdmin}) {
   const [attend, setAttend] = useState({});   // {memberId: status}
@@ -1387,7 +1548,6 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
   return h(Fragment,{},
     // ── カレンダー本体
     h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
         h("button",{onClick:prev,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"‹"),
         h("div",{style:{fontSize:17,fontWeight:800,color:"#1a1a2e"}},year+"年 "+(month+1)+"月"),
         h("button",{onClick:next,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"›")),
@@ -1401,6 +1561,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
           const isToday=dStr===todayStr;
           const hasPrac=evs.some(e=>["practice"].includes(e.type)||e.type==="練習");
           const hasMatch=evs.some(e=>["official","training","cup","公式戦","トレマ","カップ戦"].includes(e.type));
+          const hasEvent=evs.some(e=>["event","イベント"].includes(e.type));
           const clickDay=()=>{
             if(!evs.length) return;
             onGoToDay(evs[0]); // その日のまとめページへ
@@ -1409,13 +1570,14 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
             h("div",{style:{fontSize:13,fontWeight:isToday?900:400,color:isToday?"#fff":di===0?"#F44336":di===6?"#2196F3":"#1a1a2e"}},d),
             h("div",{style:{display:"flex",gap:1,justifyContent:"center",marginTop:3}},
               hasPrac&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#4CAF50"}}),
-              hasMatch&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#FF6B35"}})));
-        })))),
+              hasMatch&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#FF6B35"}}),
+              hasEvent&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#009688"}})));
+        })))
 
     // 凡例＋追加ボタン
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
       h("div",{style:{display:"flex",gap:12}},
-        [{c:"#4CAF50",l:"練習"},{c:"#FF6B35",l:"試合系"}].map(x=>
+        [{c:"#4CAF50",l:"練習"},{c:"#FF6B35",l:"試合系"},{c:"#009688",l:"イベント"}].map(x=>
           h("div",{key:x.l,style:{display:"flex",alignItems:"center",gap:5}},
             h("div",{style:{width:10,height:10,borderRadius:"50%",background:x.c}}),
             h("span",{style:{fontSize:11,color:"#888"}},x.l)))),
@@ -1625,7 +1787,7 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
       h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"種類"),
         h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
-          [{k:"practice",l:"練習"},{k:"official",l:"公式戦"},{k:"training",l:"トレマ"},{k:"cup",l:"カップ戦"}].map(t=>
+          [{k:"practice",l:"練習"},{k:"official",l:"公式戦"},{k:"training",l:"トレマ"},{k:"cup",l:"カップ戦"},{k:"event",l:"イベント"}].map(t=>
             h("button",{key:t.k,onClick:()=>setSchForm(p=>({...p,type:t.k})),style:{padding:"7px 14px",border:`2px solid ${schForm.type===t.k?"#FF6B35":"#eee"}`,borderRadius:20,background:schForm.type===t.k?"#FF6B35":"#fff",color:schForm.type===t.k?"#fff":"#666",fontSize:12,fontWeight:700,cursor:"pointer"}},t.l)))),
       h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"日付"),
@@ -1656,7 +1818,7 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
     h("div",{style:{padding:"0 16px",marginTop:-20}},
       // 内部タブ（試合一覧 / 出欠）
       h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
-        [{k:"matches",l:"⚽ 試合一覧"},{k:"attend",l:"📋 出欠"}].map(t=>
+        [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"carpool",l:"🚗 配車"},{k:"attend",l:"✅ 出欠"}].map(t=>
           h("button",{key:t.k,onClick:()=>setDayTab(t.k),
             style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
               background:dayTab===t.k?"#FF6B35":"transparent",
@@ -1718,6 +1880,15 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
       // 試合追加ボタン（admin）- matches タブのみ
       dayTab==="matches"&&isAdmin&&h("button",{onClick:()=>onAdd(schedule),
         style:{...css.bS,width:"100%",padding:14,fontSize:14,marginTop:4}},"+ 試合を追加"),
+
+      // 詳細タブ
+      dayTab==="detail"&&h(DetailSection,{schedule,members,isAdmin,onSave:async(detail)=>{
+        await api("updateSchedule",{schedule:{...detail,id:schedule.id,mvp:schedule.mvp||"",deadline:schedule.deadline||""}});
+        Object.assign(schedule,detail);
+      }}),
+
+      // 配車タブ
+      dayTab==="carpool"&&h(CarpoolSection,{schedule,user,isAdmin}),
 
       // 出欠タブ
       dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin}),
