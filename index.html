@@ -1546,33 +1546,56 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
   const next=()=>{if(month===11){setYear(y=>y+1);setMonth(0);}else setMonth(m=>m+1);};
 
   return h(Fragment,{},
-    // ── カレンダー本体
-    h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-        h("button",{onClick:prev,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"‹"),
-        h("div",{style:{fontSize:17,fontWeight:800,color:"#1a1a2e"}},year+"年 "+(month+1)+"月"),
-        h("button",{onClick:next,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"›")),
-      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:6}},
-        ["日","月","火","水","木","金","土"].map((d,i)=>h("div",{key:d,style:{textAlign:"center",fontSize:11,fontWeight:700,color:i===0?"#F44336":i===6?"#2196F3":"#aaa",padding:"4px 0"}},d))),
-      weeks.map((wk,wi)=>h("div",{key:wi,style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}},
-        wk.map((d,di)=>{
-          if(!d) return h("div",{key:di});
-          const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-          const evs=dayData[d]||[];
-          const isToday=dStr===todayStr;
-          const hasPrac=evs.some(e=>["practice"].includes(e.type)||e.type==="練習");
-          const hasMatch=evs.some(e=>["official","training","cup","公式戦","トレマ","カップ戦"].includes(e.type));
-          const hasEvent=evs.some(e=>["event","イベント"].includes(e.type));
-          const clickDay=()=>{
-            if(!evs.length) return;
-            onGoToDay(evs[0]); // その日のまとめページへ
-          };
-          return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"6px 2px",borderRadius:8,background:isToday?"#FF6B35":evs.length>0?"#FFF3EF":"transparent",minHeight:42,cursor:evs.length>0?"pointer":"default"}},
-            h("div",{style:{fontSize:13,fontWeight:isToday?900:400,color:isToday?"#fff":di===0?"#F44336":di===6?"#2196F3":"#1a1a2e"}},d),
-            h("div",{style:{display:"flex",gap:1,justifyContent:"center",marginTop:3}},
-              hasPrac&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#4CAF50"}}),
-              hasMatch&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#FF6B35"}}),
-              hasEvent&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#009688"}})));
-        })))
+// ── カレンダー本体
+h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+
+  h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}},
+    h("button",{onClick:prev,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"‹"),
+    h("div",{style:{fontSize:17,fontWeight:800,color:"#1a1a2e"}},year+"年 "+(month+1)+"月"),
+    h("button",{onClick:next,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"›")
+  ),
+
+  h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:6}},
+    ["日","月","火","水","木","金","土"].map((d,i)=>h("div",{key:d,style:{textAlign:"center",fontSize:11,fontWeight:700,color:i===0?"#F44336":i===6?"#2196F3":"#aaa",padding:"4px 0"}},d))
+  ),
+
+  weeks.map((wk,wi)=>h("div",{key:wi,style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}},
+    wk.map((d,di)=>{
+      if(!d) return h("div",{key:di});
+      const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      const evs=dayData[d]||[];
+      const isToday=dStr===todayStr;
+      const hasPrac=evs.some(e=>["practice"].includes(e.type)||e.type==="練習");
+      const hasMatch=evs.some(e=>["official","training","cup","公式戦","トレマ","カップ戦"].includes(e.type));
+      const hasEvent=evs.some(e=>["event","イベント"].includes(e.type));
+      const clickDay=()=>{
+        if(!evs.length) return;
+        onGoToDay(evs[0]); // その日のまとめページへ
+      };
+      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"6px 2px",borderRadius:8,background:isToday?"#FF6B35":evs.length>0?"#FFF3EF":"transparent",minHeight:42,cursor:evs.length>0?"pointer":"default"}},
+        h("div",{style:{fontSize:13,fontWeight:isToday?900:400,color:isToday?"#fff":di===0?"#F44336":di===6?"#2196F3":"#1a1a2e"}},d),
+        h("div",{style:{display:"flex",gap:1,justifyContent:"center",marginTop:3}},
+          hasPrac&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#4CAF50"}}),
+          hasMatch&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#FF6B35"}}),
+          hasEvent&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#009688"}})
+        )
+      );
+    })
+  )),
+
+  // 凡例＋追加ボタン
+  h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
+    h("div",{style:{display:"flex",gap:12}},
+      [{c:"#4CAF50",l:"練習"},{c:"#FF6B35",l:"試合系"},{c:"#009688",l:"イベント"}].map(x=>
+        h("div",{key:x.l,style:{display:"flex",alignItems:"center",gap:5}},
+          h("div",{style:{width:10,height:10,borderRadius:"50%",background:x.c}}),
+          h("span",{style:{fontSize:11,color:"#888"}},x.l)
+        )
+      )
+    ),
+    isAdmin&&h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"7px 14px",fontSize:12}},"+ 日程追加")
+  )
+),
 
     // 凡例＋追加ボタン
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
