@@ -775,22 +775,22 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   },[schedule.id]);
 
   const participants = members.filter(m=>attend[m.id]==="○").sort((a,b)=>Number(a.number)-Number(b.number));
-  // 学年別グループ
-  const gradeGroups = {};
-  participants.forEach(m=>{
-    const g = m.grade||"その他";
-    if(!gradeGroups[g]) gradeGroups[g]=[];
-    gradeGroups[g].push(m);
-  });
-
-  // 苗字抽出（スペース・「さん」区切り）
-  const lastName = name => (name||"").replace(/さん$|コーチ$|先生$/,"").split(/[\s　]/)[0];
-  // 当番候補（ユーザーの苗字、重複除去）
-  const dutyOpts = [...new Set(users.map(u=>lastName(u.name)).filter(Boolean))].sort();
   // メンバー選択肢（ポジション順）
   const memberOpts = ["FW","MF","DF","GK"].flatMap(pos=>
     members.filter(m=>m.position===pos).sort((a,b)=>Number(a.number)-Number(b.number))
   ).concat(members.filter(m=>!["FW","MF","DF","GK"].includes(m.position)));
+  // 学年別グループ
+  const gradeGroups = {};
+  participants.forEach(m=>{
+    const g=m.grade||"その他";
+    if(!gradeGroups[g]) gradeGroups[g]=[];
+    gradeGroups[g].push(m);
+  });
+  const toSurname = (name) => {
+    if(!name) return name;
+    const parts = name.split(/[ 　]/);
+    return parts[0]+(parts.length>1?"さん":"");
+  };
 
   const save = async() => {
     setSaving(true);
@@ -799,30 +799,19 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
     setSaving(false); setEditing(false);
   };
 
-  // 時間入力（type=time）
-  const TimeInput = ({k,label}) => h("div",{style:{flex:1}},
+  // 時間入力ヘルパー（関数として呼ぶ、コンポーネントではない）
+  const timeField = (k,label) => h("div",{style:{flex:1}},
     h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},label),
     h("input",{type:"time",value:form[k],onChange:e=>setForm(p=>({...p,[k]:e.target.value})),
       style:{...css.inp,width:"100%",fontSize:15}}));
 
-  // メンバーセレクト共通
-  const MemberSelect = ({k,label,extra=[]}) => h("div",{style:{marginBottom:12}},
+  // メンバーセレクトヘルパー
+  const memberField = (k,label,extra=[]) => h("div",{style:{marginBottom:12}},
     h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},label),
     h("select",{value:form[k],onChange:e=>setForm(p=>({...p,[k]:e.target.value})),style:{...css.inp,width:"100%"}},
       h("option",{value:""},"-- 未設定 --"),
       memberOpts.map(m=>h("option",{key:m.id,value:m.name},m.name.split(/[ 　]/)[0]+"さん")),
       extra.map(v=>h("option",{key:v,value:v},v))));
-
-  // 苗字+さん変換
-  const toSurname = (name) => {
-    if(!name) return name;
-    const parts = name.split(/[ 　]/);
-    return parts[0]+(parts.length>1?"さん":"");
-  };
-  // 表示用ブロック
-  const Row = ({label,value,pre=false}) => value&&value!=="-"&&h("div",{style:{display:"flex",gap:10,marginBottom:8,padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
-    h("div",{style:{fontSize:12,fontWeight:700,color:"#aaa",width:80,flexShrink:0,lineHeight:1.5}},label),
-    h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.7,whiteSpace:pre?"pre-wrap":"normal",flex:1}},value));
 
   return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}},
@@ -836,9 +825,9 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
       h("div",{style:{background:"#F8F9FA",borderRadius:12,padding:12,marginBottom:14}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:10}},"時間"),
         h("div",{style:{display:"flex",gap:10}},
-          TimeInput({k:"gatherTime",label:"集合時間"}),
-          TimeInput({k:"upTime",label:"アップ開始"}),
-          TimeInput({k:"matchTime",label:"試合開始"}))),
+          timeField("gatherTime","集合時間"),
+          timeField("upTime","アップ開始"),
+          timeField("matchTime","試合開始"))),
       // 服装
       h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"服装・持ち物"),
@@ -855,16 +844,16 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
           h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"当番"),
           h("select",{value:form.duty,onChange:e=>setForm(p=>({...p,duty:e.target.value})),style:{...css.inp,width:"100%"}},
             h("option",{value:""},"-- 未設定 --"),
-            dutyOpts.map(n=>h("option",{key:n,value:n+"さん"},n+"さん")),
+            memberOpts.map(m=>h("option",{key:m.id,value:m.name},m.name.split(/[ 　]/)[0]+"さん")),
             h("option",{value:"その他"},"その他"))),
         h("div",{style:{marginBottom:12}},
           h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"当番メモ"),
           h("textarea",{value:form.dutyNote,onChange:e=>setForm(p=>({...p,dutyNote:e.target.value})),
             placeholder:"例: 試合スコア、HPアップ、コーチ弁当",
             rows:2,style:{...css.inp,width:"100%",resize:"none"}})),
-        MemberSelect({k:"luggagePerson",label:"荷物担当"}),
-        MemberSelect({k:"firstAidPerson",label:"救急バッグ"}),
-        MemberSelect({k:"coach",label:"コーチ",extra:["丸尾コーチ","健太郎先生","その他"]})),
+        memberField("luggagePerson","荷物担当"),
+        memberField("firstAidPerson","救急バッグ"),
+        memberField("coach","コーチ",["丸尾コーチ","健太郎先生","その他"])),
       // 備考
       h("div",{style:{marginBottom:16}},
         h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"備考"),
