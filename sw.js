@@ -1,4 +1,4 @@
-const CACHE = "tsukaguchi-afc-v1";
+const CACHE = "tsukaguchi-afc-v2";
 const ASSETS = ["/"];
 
 self.addEventListener("install", e => {
