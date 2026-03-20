@@ -998,7 +998,7 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"集計"),
         h("div",{style:{fontSize:13,fontWeight:700,color:"#4CAF50"}},"合計 "+total+"人")),
       carpools.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:12}},"まだ回答がありません"),
-      carpools.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:12}},"まだ回答がありません"),
+     
       carpools.map(cp=>
         h("div",{key:cp.userId,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,
           padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
@@ -1797,19 +1797,7 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
     })
   )),
 
-  // 凡例＋追加ボタン
-  h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
-    h("div",{style:{display:"flex",gap:12}},
-      [{c:"#4CAF50",l:"練習"},{c:"#FF6B35",l:"試合系"},{c:"#009688",l:"イベント"}].map(x=>
-        h("div",{key:x.l,style:{display:"flex",alignItems:"center",gap:5}},
-          h("div",{style:{width:10,height:10,borderRadius:"50%",background:x.c}}),
-          h("span",{style:{fontSize:11,color:"#888"}},x.l)
-        )
-      )
-    ),
-    isAdmin&&h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"7px 14px",fontSize:12}},"+ 日程追加")
-  )
-),
+
 
     // 凡例＋追加ボタン
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
