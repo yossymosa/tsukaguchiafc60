@@ -2422,4 +2422,103 @@ function App() {
   ];
 
   return h(Fragment,{},
-    load
+    loading&&h(Loader,{msg:loadMsg}),
+    h("div",{className:"page"},
+      h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中...")}),
+      h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,
+        boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
+        h("div",{style:{display:"flex"}},
+          TABS.map(t=>h("button",{key:t.k,onClick:()=>setTab(t.k),
+            style:{flex:1,padding:"11px 2px 9px",border:"none",
+              background:tab===t.k?"#FF6B35":"transparent",cursor:"pointer",
+              display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
+            h("span",{style:{fontSize:17}},t.i),
+            h("span",{style:{fontSize:9,fontWeight:tab===t.k?700:400,
+              color:tab===t.k?"#fff":"#aaa"}},t.l))))),
+      h("div",{style:{padding:"0 16px"}},
+        tab==="home" &&h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch}),
+        tab==="cal"  &&h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule}),
+        tab==="match"&&h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch}),
+        tab==="dash" &&h(DashTab,{results,members,schedules,liftings,isAdmin}),
+        tab==="member"&&h(MemberTab,{members,liftings}),
+        tab==="memo" &&h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews}))));
+}
+
+
+function showFatalError(err) {
+  const root = document.getElementById("app") || document.body;
+  const box = document.createElement("div");
+  box.style.padding = "16px";
+  box.style.margin = "16px";
+  box.style.background = "#fff3f0";
+  box.style.border = "2px solid #f44336";
+  box.style.borderRadius = "12px";
+  box.style.color = "#8b1e1e";
+  box.style.fontFamily = "'Noto Sans JP',sans-serif";
+  box.style.whiteSpace = "pre-wrap";
+  box.textContent = "画面の初期化でエラーが発生しました。\n\n" + (err && err.stack ? err.stack : String(err));
+  root.innerHTML = "";
+  root.appendChild(box);
+}
+
+function showBootStatus(msg) {
+  let box = document.getElementById("__boot_status__");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "__boot_status__";
+    box.style.position = "fixed";
+    box.style.top = "8px";
+    box.style.right = "8px";
+    box.style.zIndex = "99999";
+    box.style.maxWidth = "320px";
+    box.style.padding = "10px 12px";
+    box.style.background = "rgba(26,26,46,0.92)";
+    box.style.color = "#fff";
+    box.style.borderRadius = "10px";
+    box.style.fontSize = "12px";
+    box.style.lineHeight = "1.5";
+    box.style.fontFamily = "'Noto Sans JP',sans-serif";
+    document.body.appendChild(box);
+  }
+  box.textContent = msg;
+}
+
+window.addEventListener("error", e => {
+  showFatalError(e.error || e.message || "Unknown error");
+});
+
+window.addEventListener("unhandledrejection", e => {
+  showFatalError(e.reason || "Unhandled promise rejection");
+});
+
+try {
+  const root = document.getElementById("app");
+  showBootStatus(
+    [
+      "boot:start",
+      "root=" + !!root,
+      "preact=" + !!window.preact,
+      "hooks=" + !!window.preactHooks,
+      "savedUser=" + !!localStorage.getItem("afc_user")
+    ].join(" | ")
+  );
+  render(h(App,{}),root);
+  setTimeout(() => {
+    const app = document.getElementById("app");
+    const text = app ? (app.innerText || "").trim() : "";
+    const htmlLen = app ? app.innerHTML.length : 0;
+    showBootStatus(
+      [
+        "boot:rendered",
+        "html=" + htmlLen,
+        "text=" + (text ? text.slice(0, 40) : "(empty)")
+      ].join(" | ")
+    );
+  }, 300);
+} catch (e) {
+  showFatalError(e);
+}
+
+</script>
+</body>
+</html>
