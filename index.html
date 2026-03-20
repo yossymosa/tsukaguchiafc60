@@ -744,7 +744,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
 
 
 // ── 詳細セクション ────────────────────────────────────────────
-function DetailSection({schedule, members, isAdmin, onSave}) {
+function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     gatherTime:  schedule.gatherTime||"",
@@ -756,7 +756,7 @@ function DetailSection({schedule, members, isAdmin, onSave}) {
     dutyNote:    schedule.dutyNote||"",
     luggagePerson: schedule.luggagePerson||"",
     firstAidPerson: schedule.firstAidPerson||"",
-    coach:       schedule.coach||"",
+    coach:       schedule.coach||"丸尾コーチ",
     note:        schedule.note||"",
   });
   const [saving, setSaving] = useState(false);
@@ -844,7 +844,7 @@ function DetailSection({schedule, members, isAdmin, onSave}) {
           h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"当番"),
           h("select",{value:form.duty,onChange:e=>setForm(p=>({...p,duty:e.target.value})),style:{...css.inp,width:"100%"}},
             h("option",{value:""},"-- 未設定 --"),
-            memberOpts.map(m=>h("option",{key:m.id,value:m.name},m.name.split(/[ 　]/)[0]+"さん")),
+            users.map(u=>h("option",{key:u.id,value:u.name.split(/[ 　]/)[0]+"さん"},u.name.split(/[ 　]/)[0]+"さん")),
             h("option",{value:"その他"},"その他"))),
         h("div",{style:{marginBottom:12}},
           h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"当番メモ"),
@@ -853,7 +853,14 @@ function DetailSection({schedule, members, isAdmin, onSave}) {
             rows:2,style:{...css.inp,width:"100%",resize:"none"}})),
         memberField("luggagePerson","荷物担当"),
         memberField("firstAidPerson","救急バッグ"),
-        memberField("coach","コーチ",["丸尾コーチ","健太郎先生","その他"])),
+        h("div",{style:{marginBottom:12}},
+          h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"コーチ"),
+          h("div",{style:{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}},
+            ["丸尾コーチ","健太郎先生"].map(v=>h("button",{key:v,onClick:()=>setForm(p=>({...p,coach:v})),
+              style:{padding:"5px 10px",border:"2px solid "+(form.coach===v?"#FF6B35":"#eee"),borderRadius:8,
+                background:form.coach===v?"#FF6B35":"#fff",color:form.coach===v?"#fff":"#666",fontSize:12,cursor:"pointer"}},v))),
+          h("input",{value:form.coach,onChange:e=>setForm(p=>({...p,coach:e.target.value})),
+            placeholder:"その他の場合はここに入力",style:{...css.inp,width:"100%"}})),
       // 備考
       h("div",{style:{marginBottom:16}},
         h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"備考"),
@@ -905,7 +912,7 @@ function DetailSection({schedule, members, isAdmin, onSave}) {
             : Object.entries(gradeGroups).sort().map(([grade,ms])=>
                 h("div",{key:grade,style:{marginBottom:8}},
                   h("div",{style:{fontSize:11,fontWeight:700,color:"#aaa",marginBottom:4}},grade+": "+ms.length+"名"),
-                  h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.8}},ms.map(m=>m.name).join("、")))))));
+                  h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.8}},ms.map(m=>m.name).join("、"))))))));
 }
 
 // ── 配車セクション ────────────────────────────────────────────
@@ -991,7 +998,8 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"集計"),
         h("div",{style:{fontSize:13,fontWeight:700,color:"#4CAF50"}},"合計 "+total+"人")),
       carpools.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:12}},"まだ回答がありません"),
-      isAdmin&&carpools.map(cp=>
+      carpools.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:12}},"まだ回答がありません"),
+      carpools.map(cp=>
         h("div",{key:cp.userId,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,
           padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
           h("div",{style:{flex:1,fontSize:13,fontWeight:700,color:"#1a1a2e"}},cp.userName||"不明"),
@@ -999,8 +1007,7 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
             color:cp.available==="可"?"#4CAF50":cp.available==="不可"?"#F44336":"#FF9800"}},cp.available),
           cp.available==="可"&&h("div",{style:{fontSize:12,color:"#2196F3",fontWeight:700}},cp.capacity+"人"),
           cp.note&&h("div",{style:{fontSize:11,color:"#aaa",flex:1,textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},cp.note))),
-      !isAdmin&&carpools.length>0&&h("div",{style:{fontSize:13,color:"#666",textAlign:"center",padding:8}},
-        "配車可: "+carpools.filter(c=>c.available==="可").length+"人 / "+carpools.length+"人回答")),
+      !isAdmin&&carpools.length===0&&h("div",{})),
 
     // 配車割り当て（adminのみ）
     isAdmin&&cars.length>0&&participants.length>0&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -1073,6 +1080,11 @@ function AttendSection({schedule, members, user, isAdmin}) {
   const [attend, setAttend] = useState({});   // {memberId: status}
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
+  const [accompanying, setAccompanying] = useState([]); // 帯同メンバーIDリスト
+  // 3年生メンバー
+  const grade3 = members.filter(m=>m.grade==="3年"||m.grade==="３年");
+  // 2年以下メンバー
+  const under2 = members.filter(m=>!["3年","３年"].includes(m.grade||""));
 
   // スケジュールの出欠を読み込み
   useEffect(() => {
@@ -1160,38 +1172,70 @@ function AttendSection({schedule, members, user, isAdmin}) {
     !isAdmin && !myMember && h("div",{style:{color:"#aaa",fontSize:13,textAlign:"center",padding:"8px 0"}},
       "出欠登録にはメンバー紐づけが必要です（コーチに連絡）"),
 
-    // admin：全員一覧
+    // admin：3年生一覧（デフォルト）＋帯同選択
     isAdmin && h("div",{},
-      ["FW","MF","DF","GK"].map(pos => {
-        const group = members.filter(m=>m.position===pos).sort((a,b)=>Number(a.number)-Number(b.number));
-        if (!group.length) return null;
-        return h("div",{key:pos,style:{marginBottom:14}},
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},pos),
-          group.map(m => {
+      // 3年生の出欠
+      (()=>{
+        const grade3 = members.filter(m=>["3年","３年"].includes(m.grade||""));
+        return h("div",{},
+          grade3.length===0
+            ? h("div",{style:{color:"#ccc",fontSize:13,padding:8}},"3年生メンバーなし")
+            : ["FW","MF","DF","GK"].map(pos => {
+                const group = grade3.filter(m=>m.position===pos).sort((a,b)=>Number(a.number)-Number(b.number));
+                if (!group.length) return null;
+                return h("div",{key:pos,style:{marginBottom:14}},
+                  h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},pos),
+                  group.map(m => {
+                    const cur = attend[m.id]||"未";
+                    const isSaving = saving === m.id;
+                    return h("div",{key:m.id,
+                      style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,
+                        padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
+                      h("div",{style:{width:28,height:28,borderRadius:6,
+                        background:(PC[m.position]||{bg:"#999"}).bg,
+                        display:"flex",alignItems:"center",justifyContent:"center",
+                        color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
+                      h("div",{style:{flex:1,fontSize:13,fontWeight:600,color:"#1a1a2e"}},m.name),
+                      h("div",{style:{display:"flex",gap:4}},
+                        ["○","×","△"].map(s => {
+                          const st = ATTEND_STYLE[s];
+                          const active = cur === s;
+                          return h("button",{key:s,onClick:()=>save(m.id,s),
+                            disabled:isSaving,
+                            style:{width:34,height:34,border:"none",borderRadius:8,
+                              background:active?st.bg:"#eee",
+                              color:active?st.c:"#aaa",
+                              fontSize:14,fontWeight:700,cursor:"pointer",
+                              opacity:isSaving?0.5:1}},s);
+                        })));
+                  }));
+              }));
+      })(),
+      // 帯同選択（2年生以下）
+      (()=>{
+        const under2 = members.filter(m=>!["3年","３年"].includes(m.grade||"")).sort((a,b)=>Number(a.number)-Number(b.number));
+        if(!under2.length) return null;
+        return h("div",{style:{marginTop:12,padding:"12px 14px",background:"#E3F2FD",borderRadius:12}},
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#2196F3",marginBottom:10}},"帯同メンバー（2年生以下）"),
+          under2.map(m=>{
             const cur = attend[m.id]||"未";
-            const isSaving = saving === m.id;
-            return h("div",{key:m.id,
-              style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,
-                padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
-              h("div",{style:{width:28,height:28,borderRadius:6,
-                background:(PC[m.position]||{bg:"#999"}).bg,
-                display:"flex",alignItems:"center",justifyContent:"center",
-                color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
+            return h("div",{key:m.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,
+              padding:"8px 12px",background:"#fff",borderRadius:10}},
+              h("div",{style:{width:28,height:28,borderRadius:6,background:(PC[m.position]||{bg:"#999"}).bg,
+                display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
               h("div",{style:{flex:1,fontSize:13,fontWeight:600,color:"#1a1a2e"}},m.name),
+              h("div",{style:{fontSize:11,color:"#aaa",marginRight:6}},m.grade||""),
               h("div",{style:{display:"flex",gap:4}},
-                ["○","×","△"].map(s => {
-                  const st = ATTEND_STYLE[s];
-                  const active = cur === s;
+                ["○","×","△"].map(s=>{
+                  const st=ATTEND_STYLE[s];
+                  const active=cur===s;
                   return h("button",{key:s,onClick:()=>save(m.id,s),
-                    disabled:isSaving,
                     style:{width:34,height:34,border:"none",borderRadius:8,
-                      background:active?st.bg:"#eee",
-                      color:active?st.c:"#aaa",
-                      fontSize:14,fontWeight:700,cursor:"pointer",
-                      opacity:isSaving?0.5:1}},s);
+                      background:active?st.bg:"#eee",color:active?st.c:"#aaa",
+                      fontSize:14,fontWeight:700,cursor:"pointer"}},s);
                 })));
           }));
-      })));
+      })()));
 }
 
 // ── 試合結果編集モーダル ─────────────────────────────────────
@@ -1898,7 +1942,7 @@ function MemoTab({news,isAdmin,user,onAdd,onDelete}) {
 }
 
 // ── その日の試合まとめページ ─────────────────────────────────────
-function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit,onDelete,onBack,onHome,onSaveMvp}) {
+function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onAdd,onEdit,onDelete,onBack,onHome,onSaveMvp}) {
   const [dayTab,setDayTab]=useState("matches"); // "matches"|"attend"
   const tc=getTC(schedule.type);
   const dt=fmt(schedule.date);
@@ -2084,7 +2128,7 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
         style:{...css.bS,width:"100%",padding:14,fontSize:14,marginTop:4}},"+ 試合を追加"),
 
       // 詳細タブ
-      dayTab==="detail"&&h(DetailSection,{schedule,members,isAdmin,onSave:async(detail)=>{
+      dayTab==="detail"&&h(DetailSection,{schedule,members,users,isAdmin,onSave:async(detail)=>{
         await api("updateSchedule",{schedule:{...detail,id:schedule.id,mvp:schedule.mvp||"",deadline:schedule.deadline||""}});
         Object.assign(schedule,detail);
       }}),
@@ -2123,10 +2167,18 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
 // ── メンバータブ ────────────────────────────────────────────
 function MemberTab({members,liftings=[]}) {
   const [pos,setPos]=useState("all");
-  const positions=["all","FW","MF","DF","GK"];
-  const filtered=pos==="all"?members:members.filter(m=>m.position===pos);
+  const [gradeF,setGradeF]=useState("3年");
+  const grades=["3年",...[...new Set(members.map(m=>m.grade||"").filter(g=>g&&g!=="3年"))].sort(),"全員"];
+  const gradeFiltered=gradeF==="全員"?members:members.filter(m=>(m.grade||"")===(gradeF==="3年"?"3年":gradeF)||(m.grade||"")===(gradeF==="3年"?"３年":gradeF));
+  const filtered=pos==="all"?gradeFiltered:gradeFiltered.filter(m=>m.position===pos);
   const sorted=[...filtered].sort((a,b)=>Number(a.number||99)-Number(b.number||99));
   return h(Fragment,{},
+    // 学年フィルター
+    h("div",{style:{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}},
+      grades.map(g=>h("button",{key:g,onClick:()=>setGradeF(g),
+        style:{padding:"5px 12px",border:"2px solid "+(gradeF===g?"#FF6B35":"#eee"),borderRadius:20,
+          background:gradeF===g?"#FF6B35":"#fff",color:gradeF===g?"#fff":"#666",
+          fontSize:12,fontWeight:gradeF===g?700:400,cursor:"pointer"}},g))),
     // ポジションフィルター
     h("div",{style:{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}},
       [{k:"all",l:"全員"},{k:"FW",l:"FW"},{k:"MF",l:"MF"},{k:"DF",l:"DF"},{k:"GK",l:"GK"}].map(t=>
@@ -2266,7 +2318,7 @@ function App() {
       setLoading(false);setEditResult(null);
     },onClose:()=>setEditResult(null)}),
     h(DayPage,{
-      schedule:page.schedule,results,members,isAdmin,user,
+      schedule:page.schedule,results,members,isAdmin,user,users,
       onGoToMatch:(r,s)=>setPage({type:"matchDetail",match:r,schedule:s}),
       onAdd:s=>setPage({type:"addMatch",schedule:s}),
       onEdit:r=>setEditResult(r),
