@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
@@ -28,7 +28,11 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 
 
 // ================================================================
-const GAS_URL = "https://script.google.com/macros/s/AKfycby0yKSv7ZGluZnsQB4LqrP-lvfLfokcWuS8K_Ygi7ZIOjS36-f1MDN0rYsOTf2hRcNS/exec";
+// Vercel/GitHub 運用:
+// 1. GAS を更新して Web アプリを再デプロイ
+// 2. 発行された /exec URL をここへ貼り替える
+// 3. index.html を GitHub に push して Vercel を更新
+const GAS_URL = "https://script.google.com/macros/s/AKfycbynaMnSxvSnDzZ4YCsOMCRBf6LbrsUBPp4LMBHVd-4rGqd-2E9lvofcyB4DV3sDx17rFg/exec";
 // ================================================================
 
 const HOME_LINKS = [
