@@ -902,7 +902,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
           h("span",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},form.coach))),
       // 備考
       form.note&&h("div",{style:{marginBottom:8,padding:"10px 14px",background:"#F8F9FA",borderRadius:10,fontSize:13,color:"#666",lineHeight:1.7,whiteSpace:"pre-wrap"}},form.note),
-      // 参加メンバー
+         // 参加メンバー
       h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:10}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#aaa",marginBottom:8}},
           "参加メンバー "+(attendLoading?"":"("+participants.length+"人)")),
@@ -910,11 +910,13 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
           ? h("div",{style:{fontSize:13,color:"#ccc"}},"読み込み中...")
           : participants.length===0
             ? h("div",{style:{fontSize:13,color:"#ccc"}},"参加者なし")
-            : Object.entries(gradeGroups).sort().map(([grade,ms])=>
+            : Object.entries(gradeGroups).sort().map(([grade,ms]) =>
                 h("div",{key:grade,style:{marginBottom:8}},
                   h("div",{style:{fontSize:11,fontWeight:700,color:"#aaa",marginBottom:4}},grade+": "+ms.length+"名"),
-                  h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.8}},ms.map(m=>m.name).join("、"))))))));
-}
+                  h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.8}},ms.map(m=>m.name).join("、"))
+                )
+              )
+      )
 
 // ── 配車セクション ────────────────────────────────────────────
 function CarpoolSection({schedule, user, isAdmin, members}) {
