@@ -822,7 +822,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         style:{fontSize:11,fontWeight:700,color:"#FF6B35",background:"none",border:"1px solid #FF6B35",borderRadius:8,padding:"4px 10px",cursor:"pointer"}},
         editing?"キャンセル":"✏️ 編集")),
 
-    editing ? h(Fragment,{},
+    (editing ? h(Fragment,{},
       // 時間
       h("div",{style:{background:"#F8F9FA",borderRadius:12,padding:12,marginBottom:14}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:10}},"時間"),
@@ -914,7 +914,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
             : Object.entries(gradeGroups).sort().map(([grade,ms])=>
                 h("div",{key:grade,style:{marginBottom:8}},
                   h("div",{style:{fontSize:11,fontWeight:700,color:"#aaa",marginBottom:4}},grade+": "+ms.length+"名"),
-                  h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.8}},ms.map(m=>m.name).join("、"))))))));
+                h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.8}},ms.map(m=>m.name).join("、")))))))));
 }
 
 // ── 配車セクション ────────────────────────────────────────────
