@@ -1983,10 +1983,18 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
           background:aiLoading||!aiPrompt.trim()?"#ccc":"linear-gradient(135deg,#667eea,#764ba2)",
           color:"#fff",fontSize:13,fontWeight:700,cursor:aiLoading||!aiPrompt.trim()?"not-allowed":"pointer"}},
         aiLoading?"✨ 生成中...":"✨ AIで書き直す"),
-      h("button",{onClick:copyHp,
-        style:{width:"100%",padding:14,border:"none",borderRadius:12,
-          background:hpCopied?"#4CAF50":"#FF6B35",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}},
-        hpCopied?"✓ コピーしました！":"📋 コピーする")),
+      h("div",{style:{display:"flex",gap:8}},
+        h("button",{onClick:copyHp,
+          style:{flex:1,padding:14,border:"none",borderRadius:12,
+            background:hpCopied?"#4CAF50":"#FF6B35",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}},
+          hpCopied?"✓ コピー済":"📋 コピー"),
+        h("button",{onClick:()=>{
+          const subject=encodeURIComponent((schedule.title||"試合結果")+" "+fmt(schedule.date).full);
+          const body=encodeURIComponent(hpText);
+          window.location.href="mailto:t.afcjr@gmail.com?subject="+subject+"&body="+body;
+        },style:{flex:1,padding:14,border:"none",borderRadius:12,
+          background:"#FF9800",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}},
+        "📧 メールで送る"))),
     // 日程編集モーダル
     editSch&&h(Modal,{title:"📅 日程を編集",onClose:()=>setEditSch(false)},
       h("div",{style:{marginBottom:12}},
@@ -2029,19 +2037,10 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
               background:dayTab===t.k?"#FF6B35":"transparent",
               color:dayTab===t.k?"#fff":"#aaa",fontSize:13,fontWeight:700,cursor:"pointer"}},t.l))),
       // HP用テンプレボタン（admin、試合あり）
-      dayTab==="matches"&&dayR.length>0&&isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
-        h("button",{onClick:openHpModal,
-          style:{flex:1,padding:"11px",border:"2px solid #9C27B0",borderRadius:12,
-            background:"#F3E5F5",color:"#9C27B0",fontSize:13,fontWeight:700,cursor:"pointer"}},
-          "📋 HP用テンプレ"),
-        h("button",{onClick:()=>{
-          const text=makeHpTemplate(schedule,dayR);
-          const subject=encodeURIComponent((schedule.title||"試合結果")+" "+fmt(schedule.date).full);
-          const body=encodeURIComponent(text);
-          window.location.href="mailto:t.afcjr@gmail.com?subject="+subject+"&body="+body;
-        },style:{flex:1,padding:"11px",border:"2px solid #FF9800",borderRadius:12,
-          background:"#FFF3E0",color:"#FF9800",fontSize:13,fontWeight:700,cursor:"pointer"}},
-          "📧 メールで送る")),
+      dayTab==="matches"&&dayR.length>0&&isAdmin&&h("button",{onClick:openHpModal,
+        style:{width:"100%",padding:"11px",marginBottom:10,border:"2px solid #9C27B0",borderRadius:12,
+          background:"#F3E5F5",color:"#9C27B0",fontSize:13,fontWeight:700,cursor:"pointer"}},
+        "📋 HP用テンプレ"),
       // 試合一覧・成績（matches タブ）
       dayTab==="matches"&&dayR.length>0&&h("div",{style:{background:"#fff",borderRadius:18,padding:"16px 20px",marginBottom:14,boxShadow:"0 4px 20px rgba(0,0,0,0.12)"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"本日の成績"),
