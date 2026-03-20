@@ -30,7 +30,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 
 
 // ================================================================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzOt7V60ndx5rrrIXsYCskp6q3LNwOp3DVQlxuGWeqL9tCm_IEMdkwLxwxPZifK25Aulw/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwyUG3bCqpeqs17g389nIf7u6nN4PH_spuX00gouIsDOg4gagAA1LqPA8VSHF3HKhtZVQ/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -861,7 +861,6 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
                 background:form.coach===v?"#FF6B35":"#fff",color:form.coach===v?"#fff":"#666",fontSize:12,cursor:"pointer"}},v))),
           h("input",{value:form.coach,onChange:e=>setForm(p=>({...p,coach:e.target.value})),
             placeholder:"その他の場合はここに入力",style:{...css.inp,width:"100%"}})),
-        ),
       // 備考
       h("div",{style:{marginBottom:16}},
         h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"備考"),
@@ -902,7 +901,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
           h("span",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},form.coach))),
       // 備考
       form.note&&h("div",{style:{marginBottom:8,padding:"10px 14px",background:"#F8F9FA",borderRadius:10,fontSize:13,color:"#666",lineHeight:1.7,whiteSpace:"pre-wrap"}},form.note),
-         // 参加メンバー
+      // 参加メンバー
       h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:10}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#aaa",marginBottom:8}},
           "参加メンバー "+(attendLoading?"":"("+participants.length+"人)")),
@@ -910,14 +909,11 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
           ? h("div",{style:{fontSize:13,color:"#ccc"}},"読み込み中...")
           : participants.length===0
             ? h("div",{style:{fontSize:13,color:"#ccc"}},"参加者なし")
-            : Object.entries(gradeGroups).sort().map(([grade,ms]) =>
+            : Object.entries(gradeGroups).sort().map(([grade,ms])=>
                 h("div",{key:grade,style:{marginBottom:8}},
                   h("div",{style:{fontSize:11,fontWeight:700,color:"#aaa",marginBottom:4}},grade+": "+ms.length+"名"),
-                  h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.8}},ms.map(m=>m.name).join("、"))
-                )
-              )
-      );
-
+                  h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.8}},ms.map(m=>m.name).join("、"))))))));
+}
 
 // ── 配車セクション ────────────────────────────────────────────
 function CarpoolSection({schedule, user, isAdmin, members}) {
@@ -1002,7 +998,7 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"集計"),
         h("div",{style:{fontSize:13,fontWeight:700,color:"#4CAF50"}},"合計 "+total+"人")),
       carpools.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:12}},"まだ回答がありません"),
-     
+      carpools.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:12}},"まだ回答がありません"),
       carpools.map(cp=>
         h("div",{key:cp.userId,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,
           padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
@@ -1801,7 +1797,19 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
     })
   )),
 
-
+  // 凡例＋追加ボタン
+  h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
+    h("div",{style:{display:"flex",gap:12}},
+      [{c:"#4CAF50",l:"練習"},{c:"#FF6B35",l:"試合系"},{c:"#009688",l:"イベント"}].map(x=>
+        h("div",{key:x.l,style:{display:"flex",alignItems:"center",gap:5}},
+          h("div",{style:{width:10,height:10,borderRadius:"50%",background:x.c}}),
+          h("span",{style:{fontSize:11,color:"#888"}},x.l)
+        )
+      )
+    ),
+    isAdmin&&h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"7px 14px",fontSize:12}},"+ 日程追加")
+  )
+),
 
     // 凡例＋追加ボタン
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
