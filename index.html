@@ -744,7 +744,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
 
 
 // ── 詳細セクション ────────────────────────────────────────────
-function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
+function DetailSection({schedule, members, isAdmin, onSave}) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     gatherTime:  schedule.gatherTime||"",
@@ -2084,7 +2084,7 @@ function DayPage({schedule,results,members,isAdmin,user,onGoToMatch,onAdd,onEdit
         style:{...css.bS,width:"100%",padding:14,fontSize:14,marginTop:4}},"+ 試合を追加"),
 
       // 詳細タブ
-      dayTab==="detail"&&h(DetailSection,{schedule,members,users,isAdmin,onSave:async(detail)=>{
+      dayTab==="detail"&&h(DetailSection,{schedule,members,isAdmin,onSave:async(detail)=>{
         await api("updateSchedule",{schedule:{...detail,id:schedule.id,mvp:schedule.mvp||"",deadline:schedule.deadline||""}});
         Object.assign(schedule,detail);
       }}),
