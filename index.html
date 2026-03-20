@@ -749,174 +749,255 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
 function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
-    gatherTime:  schedule.gatherTime||"",
-    upTime:      schedule.upTime||"",
-    matchTime:   schedule.matchTime||"",
-    clothes:     schedule.clothes||"",
-    belongings:  schedule.belongings||"",
-    duty:        schedule.duty||"",
-    dutyNote:    schedule.dutyNote||"",
-    luggagePerson: schedule.luggagePerson||"",
-    firstAidPerson: schedule.firstAidPerson||"",
-    coach:       schedule.coach||"丸尾コーチ",
-    note:        schedule.note||"",
+    gatherTime: schedule.gatherTime || "",
+    upTime: schedule.upTime || "",
+    matchTime: schedule.matchTime || "",
+    clothes: schedule.clothes || "",
+    belongings: schedule.belongings || "",
+    duty: schedule.duty || "",
+    dutyNote: schedule.dutyNote || "",
+    luggagePerson: schedule.luggagePerson || "",
+    firstAidPerson: schedule.firstAidPerson || "",
+    coach: schedule.coach || "丸尾コーチ",
+    note: schedule.note || "",
   });
   const [saving, setSaving] = useState(false);
   const [attend, setAttend] = useState({});
   const [attendLoading, setAttendLoading] = useState(true);
 
-  useEffect(()=>{
-    let cancelled=false;
-    api("getAttend",{scheduleId:schedule.id}).then(r=>{
-      if(cancelled)return;
-      const map={};
-      (r.attend||[]).forEach(a=>{map[a.memberId]=a.status;});
-      setAttend(map);setAttendLoading(false);
-    }).catch(()=>setAttendLoading(false));
-    return ()=>{cancelled=true;};
-  },[schedule.id]);
+  useEffect(() => {
+    let cancelled = false;
+    api("getAttend", { scheduleId: schedule.id })
+      .then(r => {
+        if (cancelled) return;
+        const map = {};
+        (r.attend || []).forEach(a => {
+          map[a.memberId] = a.status;
+        });
+        setAttend(map);
+        setAttendLoading(false);
+      })
+      .catch(() => setAttendLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [schedule.id]);
 
-  const participants = members.filter(m=>attend[m.id]==="○").sort((a,b)=>Number(a.number)-Number(b.number));
-  // メンバー選択肢（ポジション順）
-  const memberOpts = ["FW","MF","DF","GK"].flatMap(pos=>
-    members.filter(m=>m.position===pos).sort((a,b)=>Number(a.number)-Number(b.number))
-  ).concat(members.filter(m=>!["FW","MF","DF","GK"].includes(m.position)));
-  // 学年別グループ
+  const participants = members
+    .filter(m => attend[m.id] === "○")
+    .sort((a, b) => Number(a.number) - Number(b.number));
+
+  const memberOpts = ["FW", "MF", "DF", "GK"]
+    .flatMap(pos => members.filter(m => m.position === pos).sort((a, b) => Number(a.number) - Number(b.number)))
+    .concat(members.filter(m => !["FW", "MF", "DF", "GK"].includes(m.position)));
+
   const gradeGroups = {};
-  participants.forEach(m=>{
-    const g=m.grade||"その他";
-    if(!gradeGroups[g]) gradeGroups[g]=[];
+  participants.forEach(m => {
+    const g = m.grade || "その他";
+    if (!gradeGroups[g]) gradeGroups[g] = [];
     gradeGroups[g].push(m);
   });
-  const toSurname = (name) => {
-    if(!name) return name;
+
+  const toSurname = name => {
+    if (!name) return name;
     const parts = name.split(/[ 　]/);
-    return parts[0]+(parts.length>1?"さん":"");
+    return parts[0] + (parts.length > 1 ? "さん" : "");
   };
 
-  const save = async() => {
+  const save = async () => {
     setSaving(true);
-    await onSave({...form, date:schedule.date, title:schedule.title, location:schedule.location, type:schedule.type});
+    await onSave({
+      ...form,
+      date: schedule.date,
+      title: schedule.title,
+      location: schedule.location,
+      type: schedule.type,
+    });
     Object.assign(schedule, form);
-    setSaving(false); setEditing(false);
+    setSaving(false);
+    setEditing(false);
   };
 
-  // 時間入力ヘルパー（関数として呼ぶ、コンポーネントではない）
-  const timeField = (k,label) => h("div",{style:{flex:1}},
-    h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},label),
-    h("input",{type:"time",value:form[k],onChange:e=>setForm(p=>({...p,[k]:e.target.value})),
-      style:{...css.inp,width:"100%",fontSize:15}}));
+  const timeField = (k, label) => h("div", { style: { flex: 1 } },
+    h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, label),
+    h("input", {
+      type: "time",
+      value: form[k],
+      onChange: e => setForm(p => ({ ...p, [k]: e.target.value })),
+      style: { ...css.inp, width: "100%", fontSize: 15 }
+    })
+  );
 
-  // メンバーセレクトヘルパー
-  const memberField = (k,label,extra=[]) => h("div",{style:{marginBottom:12}},
-    h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},label),
-    h("select",{value:form[k],onChange:e=>setForm(p=>({...p,[k]:e.target.value})),style:{...css.inp,width:"100%"}},
-      h("option",{value:""},"-- 未設定 --"),
-      memberOpts.map(m=>h("option",{key:m.id,value:m.name},m.name.split(/[ 　]/)[0]+"さん")),
-      extra.map(v=>h("option",{key:v,value:v},v))));
+  const memberField = (k, label, extra = []) => h("div", { style: { marginBottom: 12 } },
+    h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, label),
+    h("select", {
+      value: form[k],
+      onChange: e => setForm(p => ({ ...p, [k]: e.target.value })),
+      style: { ...css.inp, width: "100%" }
+    },
+      h("option", { value: "" }, "-- 未設定 --"),
+      memberOpts.map(m => h("option", { key: m.id, value: m.name }, m.name.split(/[ 　]/)[0] + "さん")),
+      extra.map(v => h("option", { key: v, value: v }, v))
+    )
+  );
 
-  return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-    h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}},
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"📋 詳細"),
-      isAdmin&&h("button",{onClick:()=>setEditing(e=>!e),
-        style:{fontSize:11,fontWeight:700,color:"#FF6B35",background:"none",border:"1px solid #FF6B35",borderRadius:8,padding:"4px 10px",cursor:"pointer"}},
-        editing?"キャンセル":"✏️ 編集")),
+  const editContent = h(Fragment, {},
+    h("div", { style: { background: "#F8F9FA", borderRadius: 12, padding: 12, marginBottom: 14 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#bbb", marginBottom: 10 } }, "時間"),
+      h("div", { style: { display: "flex", gap: 10 } },
+        timeField("gatherTime", "集合時間"),
+        timeField("upTime", "アップ開始"),
+        timeField("matchTime", "試合開始")
+      )
+    ),
+    h("div", { style: { marginBottom: 12 } },
+      h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, "服装・持ち物"),
+      h("textarea", {
+        value: form.clothes,
+        onChange: e => setForm(p => ({ ...p, clothes: e.target.value })),
+        placeholder: "例: 練習シャツ、白パン、青ソックス...",
+        rows: 3,
+        style: { ...css.inp, width: "100%", resize: "none", marginBottom: 8 }
+      }),
+      h("textarea", {
+        value: form.belongings,
+        onChange: e => setForm(p => ({ ...p, belongings: e.target.value })),
+        placeholder: "例: ユニフォーム、レガース、スパイク...",
+        rows: 4,
+        style: { ...css.inp, width: "100%", resize: "none" }
+      })
+    ),
+    h("div", { style: { background: "#F8F9FA", borderRadius: 12, padding: 12, marginBottom: 14 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#bbb", marginBottom: 10 } }, "担当"),
+      h("div", { style: { marginBottom: 12 } },
+        h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, "当番"),
+        h("select", {
+          value: form.duty,
+          onChange: e => setForm(p => ({ ...p, duty: e.target.value })),
+          style: { ...css.inp, width: "100%" }
+        },
+          h("option", { value: "" }, "-- 未設定 --"),
+          users.map(u => h("option", { key: u.id, value: u.name.split(/[ 　]/)[0] + "さん" }, u.name.split(/[ 　]/)[0] + "さん")),
+          h("option", { value: "その他" }, "その他")
+        )
+      ),
+      h("div", { style: { marginBottom: 12 } },
+        h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, "当番メモ"),
+        h("textarea", {
+          value: form.dutyNote,
+          onChange: e => setForm(p => ({ ...p, dutyNote: e.target.value })),
+          placeholder: "例: 試合スコア、HPアップ、コーチ弁当",
+          rows: 2,
+          style: { ...css.inp, width: "100%", resize: "none" }
+        })
+      ),
+      memberField("luggagePerson", "荷物担当"),
+      memberField("firstAidPerson", "救急バッグ"),
+      h("div", { style: { marginBottom: 12 } },
+        h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, "コーチ"),
+        h("div", { style: { display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" } },
+          ["丸尾コーチ", "健太郎先生"].map(v => h("button", {
+            key: v,
+            onClick: () => setForm(p => ({ ...p, coach: v })),
+            style: {
+              padding: "5px 10px",
+              border: "2px solid " + (form.coach === v ? "#FF6B35" : "#eee"),
+              borderRadius: 8,
+              background: form.coach === v ? "#FF6B35" : "#fff",
+              color: form.coach === v ? "#fff" : "#666",
+              fontSize: 12,
+              cursor: "pointer"
+            }
+          }, v))
+        ),
+        h("input", {
+          value: form.coach,
+          onChange: e => setForm(p => ({ ...p, coach: e.target.value })),
+          placeholder: "その他の場合はここに入力",
+          style: { ...css.inp, width: "100%" }
+        })
+      )
+    ),
+    h("div", { style: { marginBottom: 16 } },
+      h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, "備考"),
+      h("textarea", {
+        value: form.note,
+        onChange: e => setForm(p => ({ ...p, note: e.target.value })),
+        rows: 3,
+        style: { ...css.inp, width: "100%", resize: "none" }
+      })
+    ),
+    h("button", {
+      onClick: save,
+      disabled: saving,
+      style: { ...css.bS, width: "100%" }
+    }, saving ? "保存中..." : "保存する")
+  );
 
-    (editing ? h(Fragment,{},
-      // 時間
-      h("div",{style:{background:"#F8F9FA",borderRadius:12,padding:12,marginBottom:14}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:10}},"時間"),
-        h("div",{style:{display:"flex",gap:10}},
-          timeField("gatherTime","集合時間"),
-          timeField("upTime","アップ開始"),
-          timeField("matchTime","試合開始"))),
-      // 服装
-      h("div",{style:{marginBottom:12}},
-        h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"服装・持ち物"),
-        h("textarea",{value:form.clothes,onChange:e=>setForm(p=>({...p,clothes:e.target.value})),
-          placeholder:"例: 練習シャツ、白パン、青ソックス...",
-          rows:3,style:{...css.inp,width:"100%",resize:"none",marginBottom:8}}),
-        h("textarea",{value:form.belongings,onChange:e=>setForm(p=>({...p,belongings:e.target.value})),
-          placeholder:"例: ユニフォーム、レガース、スパイク...",
-          rows:4,style:{...css.inp,width:"100%",resize:"none"}})),
-      // 担当
-      h("div",{style:{background:"#F8F9FA",borderRadius:12,padding:12,marginBottom:14}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:10}},"担当"),
-        h("div",{style:{marginBottom:12}},
-          h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"当番"),
-          h("select",{value:form.duty,onChange:e=>setForm(p=>({...p,duty:e.target.value})),style:{...css.inp,width:"100%"}},
-            h("option",{value:""},"-- 未設定 --"),
-            users.map(u=>h("option",{key:u.id,value:u.name.split(/[ 　]/)[0]+"さん"},u.name.split(/[ 　]/)[0]+"さん")),
-            h("option",{value:"その他"},"その他"))),
-        h("div",{style:{marginBottom:12}},
-          h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"当番メモ"),
-          h("textarea",{value:form.dutyNote,onChange:e=>setForm(p=>({...p,dutyNote:e.target.value})),
-            placeholder:"例: 試合スコア、HPアップ、コーチ弁当",
-            rows:2,style:{...css.inp,width:"100%",resize:"none"}})),
-        memberField("luggagePerson","荷物担当"),
-        memberField("firstAidPerson","救急バッグ"),
-        h("div",{style:{marginBottom:12}},
-          h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"コーチ"),
-          h("div",{style:{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}},
-            ["丸尾コーチ","健太郎先生"].map(v=>h("button",{key:v,onClick:()=>setForm(p=>({...p,coach:v})),
-              style:{padding:"5px 10px",border:"2px solid "+(form.coach===v?"#FF6B35":"#eee"),borderRadius:8,
-                background:form.coach===v?"#FF6B35":"#fff",color:form.coach===v?"#fff":"#666",fontSize:12,cursor:"pointer"}},v))),
-          h("input",{value:form.coach,onChange:e=>setForm(p=>({...p,coach:e.target.value})),
-            placeholder:"その他の場合はここに入力",style:{...css.inp,width:"100%"}})),
-      // 備考
-      h("div",{style:{marginBottom:16}},
-        h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"備考"),
-        h("textarea",{value:form.note,onChange:e=>setForm(p=>({...p,note:e.target.value})),
-          rows:3,style:{...css.inp,width:"100%",resize:"none"}})),
-      h("button",{onClick:save,disabled:saving,style:{...css.bS,width:"100%"}},saving?"保存中...":"保存する"))
+  const readContent = h(Fragment, {},
+    (form.gatherTime || form.upTime || form.matchTime) && h("div", { style: { background: "linear-gradient(135deg,#1a1a2e,#0f3460)", borderRadius: 12, padding: 14, marginBottom: 12 } },
+      [["集合", form.gatherTime], ["アップ", form.upTime], ["試合開始", form.matchTime]].filter(([, v]) => v).map(([l, v]) =>
+        h("div", { key: l, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4, color: "#fff" } },
+          h("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.5)", width: 60 } }, l),
+          h("div", { style: { fontSize: 15, fontWeight: 900 } }, v)
+        )
+      )
+    ),
+    form.clothes && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E3F2FD", borderRadius: 10 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#2196F3", marginBottom: 4 } }, "👕 服装"),
+      h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.clothes)
+    ),
+    form.belongings && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F3E5F5", borderRadius: 10 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#9C27B0", marginBottom: 4 } }, "🎒 持ち物"),
+      h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.belongings)
+    ),
+    (form.duty || form.coach || form.luggagePerson || form.firstAidPerson) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#FFF8E1", borderRadius: 10 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#F57C00", marginBottom: 8 } }, "📌 担当"),
+      form.duty && h("div", { style: { marginBottom: 4 } },
+        h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "当番"),
+        h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, toSurname(form.duty)),
+        form.dutyNote && h("div", { style: { fontSize: 12, color: "#666", marginLeft: 8, whiteSpace: "pre-wrap" } }, form.dutyNote)
+      ),
+      form.luggagePerson && h("div", { style: { marginBottom: 4 } },
+        h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "荷物"),
+        h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, toSurname(form.luggagePerson))
+      ),
+      form.firstAidPerson && h("div", { style: { marginBottom: 4 } },
+        h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "救急"),
+        h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, toSurname(form.firstAidPerson))
+      ),
+      form.coach && h("div", {},
+        h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "コーチ"),
+        h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, form.coach)
+      )
+    ),
+    form.note && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8F9FA", borderRadius: 10, fontSize: 13, color: "#666", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.note),
+    h("div", { style: { padding: "12px 14px", background: "#F8F9FA", borderRadius: 10 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 8 } }, "参加メンバー " + (attendLoading ? "" : "(" + participants.length + "人)")),
+      attendLoading
+        ? h("div", { style: { fontSize: 13, color: "#ccc" } }, "読み込み中...")
+        : participants.length === 0
+          ? h("div", { style: { fontSize: 13, color: "#ccc" } }, "参加者なし")
+          : Object.entries(gradeGroups).sort().map(([grade, ms]) =>
+              h("div", { key: grade, style: { marginBottom: 8 } },
+                h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 4 } }, grade + ": " + ms.length + "名"),
+                h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.8 } }, ms.map(m => m.name).join("、"))
+              )
+            )
+    )
+  );
 
-    : h(Fragment,{},
-      // 時間ブロック
-      (form.gatherTime||form.upTime||form.matchTime)&&h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",borderRadius:12,padding:14,marginBottom:12}},
-        [["集合",form.gatherTime],["アップ",form.upTime],["試合開始",form.matchTime]].filter(([,v])=>v).map(([l,v])=>
-          h("div",{key:l,style:{display:"flex",alignItems:"center",gap:10,marginBottom:4,color:"#fff"}},
-            h("div",{style:{fontSize:11,color:"rgba(255,255,255,0.5)",width:60}},l),
-            h("div",{style:{fontSize:15,fontWeight:900}},v)))),
-      // 服装
-      form.clothes&&h("div",{style:{marginBottom:8,padding:"10px 14px",background:"#E3F2FD",borderRadius:10}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#2196F3",marginBottom:4}},"👕 服装"),
-        h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.7,whiteSpace:"pre-wrap"}},form.clothes)),
-      // 持ち物
-      form.belongings&&h("div",{style:{marginBottom:8,padding:"10px 14px",background:"#F3E5F5",borderRadius:10}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#9C27B0",marginBottom:4}},"🎒 持ち物"),
-        h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.7,whiteSpace:"pre-wrap"}},form.belongings)),
-      // 担当
-      (form.duty||form.coach||form.luggagePerson||form.firstAidPerson)&&h("div",{style:{marginBottom:8,padding:"10px 14px",background:"#FFF8E1",borderRadius:10}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#F57C00",marginBottom:8}},"📌 担当"),
-        form.duty&&h("div",{style:{marginBottom:4}},
-          h("span",{style:{fontSize:11,color:"#aaa",marginRight:8}},"当番"),
-          h("span",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},toSurname(form.duty)),
-          form.dutyNote&&h("div",{style:{fontSize:12,color:"#666",marginLeft:8,whiteSpace:"pre-wrap"}},form.dutyNote)),
-        form.luggagePerson&&h("div",{style:{marginBottom:4}},
-          h("span",{style:{fontSize:11,color:"#aaa",marginRight:8}},"荷物"),
-          h("span",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},toSurname(form.luggagePerson))),
-        form.firstAidPerson&&h("div",{style:{marginBottom:4}},
-          h("span",{style:{fontSize:11,color:"#aaa",marginRight:8}},"救急"),
-          h("span",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},toSurname(form.firstAidPerson))),
-        form.coach&&h("div",{},
-          h("span",{style:{fontSize:11,color:"#aaa",marginRight:8}},"コーチ"),
-          h("span",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},form.coach))),
-      // 備考
-      form.note&&h("div",{style:{marginBottom:8,padding:"10px 14px",background:"#F8F9FA",borderRadius:10,fontSize:13,color:"#666",lineHeight:1.7,whiteSpace:"pre-wrap"}},form.note),
-      // 参加メンバー
-      h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:10}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#aaa",marginBottom:8}},
-          "参加メンバー "+(attendLoading?"":"("+participants.length+"人)")),
-        attendLoading
-          ? h("div",{style:{fontSize:13,color:"#ccc"}},"読み込み中...")
-          : participants.length===0
-            ? h("div",{style:{fontSize:13,color:"#ccc"}},"参加者なし")
-            : Object.entries(gradeGroups).sort().map(([grade,ms])=>
-                h("div",{key:grade,style:{marginBottom:8}},
-                  h("div",{style:{fontSize:11,fontWeight:700,color:"#aaa",marginBottom:4}},grade+": "+ms.length+"名"),
-                h("div",{style:{fontSize:13,color:"#1a1a2e",lineHeight:1.8}},ms.map(m=>m.name).join("、")))))))));
+  return h("div", { style: { background: "#fff", borderRadius: 16, padding: 18, marginTop: 14, boxShadow: "0 2px 10px rgba(0,0,0,0.07)" } },
+    h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#bbb", letterSpacing: 2 } }, "📋 詳細"),
+      isAdmin && h("button", {
+        onClick: () => setEditing(e => !e),
+        style: { fontSize: 11, fontWeight: 700, color: "#FF6B35", background: "none", border: "1px solid #FF6B35", borderRadius: 8, padding: "4px 10px", cursor: "pointer" }
+      }, editing ? "キャンセル" : "✏️ 編集")
+    ),
+    editing ? editContent : readContent
+  );
 }
-
 // ── 配車セクション ────────────────────────────────────────────
 function CarpoolSection({schedule, user, isAdmin, members}) {
   const [carpools, setCarpools] = useState([]);
@@ -2341,31 +2422,4 @@ function App() {
   ];
 
   return h(Fragment,{},
-    loading&&h(Loader,{msg:loadMsg}),
-    h("div",{className:"page"},
-      h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中...")}),
-      h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,
-        boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
-        h("div",{style:{display:"flex"}},
-          TABS.map(t=>h("button",{key:t.k,onClick:()=>setTab(t.k),
-            style:{flex:1,padding:"11px 2px 9px",border:"none",
-              background:tab===t.k?"#FF6B35":"transparent",cursor:"pointer",
-              display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
-            h("span",{style:{fontSize:17}},t.i),
-            h("span",{style:{fontSize:9,fontWeight:tab===t.k?700:400,
-              color:tab===t.k?"#fff":"#aaa"}},t.l))))),
-      h("div",{style:{padding:"0 16px"}},
-        tab==="home" &&h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch}),
-        tab==="cal"  &&h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule}),
-        tab==="match"&&h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch}),
-        tab==="dash" &&h(DashTab,{results,members,schedules,liftings,isAdmin}),
-        tab==="member"&&h(MemberTab,{members,liftings}),
-        tab==="memo" &&h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews}))));
-}
-
-
-render(h(App,{}),document.getElementById("app"));
-
-</script>
-</body>
-</html>
+    load
