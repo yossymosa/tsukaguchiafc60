@@ -2366,6 +2366,9 @@ render(h(App,{}),document.getElementById("app"));
 
 // Service Worker登録
 if("serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>r.unregister());
+  });
   navigator.serviceWorker.register("/sw.js").catch(()=>{});
 }
 
