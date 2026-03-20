@@ -3,12 +3,10 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
-  <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#FF6B35">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="塚口AFC">
-  <link rel="apple-touch-icon" href="/icon-192.png">
 <title>⚽ 塚口AFC</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;900&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/preact@10.19.3/dist/preact.umd.js"></script>
@@ -30,7 +28,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 
 
 // ================================================================
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwyUG3bCqpeqs17g389nIf7u6nN4PH_spuX00gouIsDOg4gagAA1LqPA8VSHF3HKhtZVQ/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycby0yKSv7ZGluZnsQB4LqrP-lvfLfokcWuS8K_Ygi7ZIOjS36-f1MDN0rYsOTf2hRcNS/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -2363,14 +2361,6 @@ function App() {
 
 
 render(h(App,{}),document.getElementById("app"));
-
-// Service Worker登録
-if("serviceWorker" in navigator) {
-  navigator.serviceWorker.getRegistrations().then(regs=>{
-    regs.forEach(r=>r.unregister());
-  });
-  navigator.serviceWorker.register("/sw.js").catch(()=>{});
-}
 
 </script>
 </body>
