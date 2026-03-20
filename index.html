@@ -861,6 +861,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
                 background:form.coach===v?"#FF6B35":"#fff",color:form.coach===v?"#fff":"#666",fontSize:12,cursor:"pointer"}},v))),
           h("input",{value:form.coach,onChange:e=>setForm(p=>({...p,coach:e.target.value})),
             placeholder:"その他の場合はここに入力",style:{...css.inp,width:"100%"}})),
+        ),
       // 備考
       h("div",{style:{marginBottom:16}},
         h("div",{style:{fontSize:11,fontWeight:600,color:"#666",marginBottom:4}},"備考"),
