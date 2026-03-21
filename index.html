@@ -818,8 +818,17 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
 
   const toSurname = name => {
     if (!name) return name;
-    const parts = name.split(/[ 　]/);
-    return parts[0] + (parts.length > 1 ? "さん" : "");
+    if (String(name).endsWith("さん")) return name;
+    const parts = String(name).split(/[ 　]/).filter(Boolean);
+    return (parts[0] || String(name)) + "さん";
+  };
+  const cleanTime = v => {
+    const s = String(v || "").trim();
+    if (!s) return "";
+    if (s.includes("1899-12-30")) return "";
+    if (/^00:00(:00)?$/.test(s)) return "";
+    const m = s.match(/(\d{2}:\d{2})/);
+    return m ? m[1] : s;
   };
 
   const save = async () => {
@@ -966,8 +975,8 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   );
 
   const readContent = h(Fragment, {},
-    (form.gatherTime || form.upTime || form.matchTime) && h("div", { style: { background: "linear-gradient(135deg,#FF6B35,#f7931e)", borderRadius: 12, padding: 14, marginBottom: 12 } },
-      [["集合", form.gatherTime], ["アップ", form.upTime], ["試合開始", form.matchTime]].filter(([, v]) => v).map(([l, v]) =>
+    ([cleanTime(form.gatherTime), cleanTime(form.upTime), cleanTime(form.matchTime)].some(Boolean)) && h("div", { style: { background: "linear-gradient(135deg,#FF6B35,#f7931e)", borderRadius: 12, padding: 14, marginBottom: 12 } },
+      [["集合", cleanTime(form.gatherTime)], ["アップ", cleanTime(form.upTime)], ["試合開始", cleanTime(form.matchTime)]].filter(([, v]) => v).map(([l, v]) =>
         h("div", { key: l, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4, color: "#fff" } },
           h("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.7", width: 60 } }, l),
           h("div", { style: { fontSize: 15, fontWeight: 900 } }, v)
@@ -1529,6 +1538,7 @@ function RankList({title,icon,data,unit}) {
 
 function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
   const [dashTab,setDashTab]=useState("result"); // "result" | "tournament" | "rank" | "personal"
+  const [showOtherTournaments,setShowOtherTournaments]=useState(false);
   const [typeF,setTypeF]=useState("all");
   const [periodF,setPeriodF]=useState("year"); // "year"|"month"|"lastmonth"|"custom"
   const [from,setFrom]=useState(""); const [to,setTo]=useState("");
@@ -1577,6 +1587,10 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
   const tournamentRows=tournamentFiltered
     .filter(s=>String(s.rank||"").trim())
     .sort((a,b)=>nd(b.date).localeCompare(nd(a.date)));
+  const otherTournamentRows=tournamentRows.filter(s=>{
+    const rank = String(s.rank || "").trim();
+    return !["優勝","1位","第1位","1"].includes(rank);
+  });
 
   // ランキング集計
   const scorerMap={},assistMap={},mvpMap={};
@@ -1737,16 +1751,16 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
     // ── 大会結果タブ ──
     dashTab==="tournament"&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🏆 大会結果"),
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14,textAlign:"center"}},
-        [{l:"大会数",v:tournamentFiltered.length,c:"#1a1a2e"},
-         {l:"優勝",v:championCount,c:"#FFD700"},
-         {l:"結果入力済み",v:tournamentRows.length,c:"#FF6B35"}]
-        .map(x=>h("div",{key:x.l,style:{background:"#F8F9FA",borderRadius:12,padding:"10px 6px"}},
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14,textAlign:"center"}},
+        [{l:"優勝",v:championCount,c:"#FFD700"},
+         {l:"その他",v:otherTournamentRows.length,c:"#FF6B35",toggle:true}]
+        .map(x=>h("div",{key:x.l,onClick:x.toggle?()=>setShowOtherTournaments(v=>!v):undefined,style:{background:"#F8F9FA",borderRadius:12,padding:"10px 6px",cursor:x.toggle?"pointer":"default"}},
           h("div",{style:{fontSize:20,fontWeight:900,color:x.c}},x.v),
           h("div",{style:{fontSize:10,color:"#aaa",marginTop:2}},x.l)))),
       tournamentRows.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:"18px 0"}},"大会結果はまだありません"),
-      tournamentRows.map((s,i)=>
-        h("div",{key:s.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:i<tournamentRows.length-1?8:0,padding:"10px 12px",background:"#F8F9FA",borderRadius:12}},
+      showOtherTournaments&&otherTournamentRows.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:"8px 0 18px"}},"その他の大会結果はありません"),
+      showOtherTournaments&&otherTournamentRows.map((s,i)=>
+        h("div",{key:s.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:i<otherTournamentRows.length-1?8:0,padding:"10px 12px",background:"#F8F9FA",borderRadius:12}},
           h("div",{style:{width:74,flexShrink:0,fontSize:11,color:"#aaa"}},fmt(s.date).short),
           h("div",{style:{flex:1,minWidth:0}},
             h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},s.title||"（タイトルなし）"),
