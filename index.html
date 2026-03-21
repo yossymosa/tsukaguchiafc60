@@ -249,6 +249,11 @@ function Login({onLogin}) {
     if(mode!=="signup"||!signup.email) return;
     checkApprovalStatus(signup.email);
   },[]);
+  useEffect(()=>{
+    if(mode!=="signup"||approvalStatus!=="pending"||!signup.email) return;
+    const timer=setInterval(()=>checkApprovalStatus(signup.email),5000);
+    return ()=>clearInterval(timer);
+  },[mode,approvalStatus,signup.email]);
   const generations=[...new Set(signupMembers.map(m=>String(m.generation||"").trim()).filter(Boolean))].sort((a,b)=>Number(b)-Number(a));
   const filteredChildren=signup.generation?signupMembers.filter(m=>String(m.generation||"")===String(signup.generation)):[];
   const login=async()=>{
@@ -328,10 +333,9 @@ function Login({onLogin}) {
             h("div",{style:{marginBottom:12}},
               h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"メールアドレス"),
               h("input",{value:signup.email,onChange:e=>{setSignupField("email",e.target.value);setApprovalStatus("none");setApprovalUntil("");setCodeSent(false);},type:"email",placeholder:"parent@example.com",autoComplete:"email",style:css.inp})),
-            h("div",{style:{display:"flex",gap:8,marginBottom:14}},
-              h("button",{onClick:requestApproval,type:"button",style:{flex:1,padding:"12px 14px",background:"#EEF2FF",color:"#334155",border:"1px solid #D8E1FF",borderRadius:12,fontWeight:700,cursor:"pointer"}},"承認を申請"),
-              h("button",{onClick:()=>checkApprovalStatus(),type:"button",style:{padding:"12px 14px",background:"#fff",color:"#334155",border:"1px solid #D8E1FF",borderRadius:12,fontWeight:700,cursor:"pointer"}},"確認")),
-            approvalStatus==="pending"&&h("div",{style:{fontSize:12,color:"#9A6700",marginBottom:12,background:"#FFF7E8",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},"管理者へ承認メールを送信しました。承認後に登録できます。"),
+            h("div",{style:{marginBottom:14}},
+              h("button",{onClick:requestApproval,type:"button",style:{width:"100%",padding:"12px 14px",background:"#EEF2FF",color:"#334155",border:"1px solid #D8E1FF",borderRadius:12,fontWeight:700,cursor:"pointer"}},"承認を申請")),
+            approvalStatus==="pending"&&h("div",{style:{fontSize:12,color:"#9A6700",marginBottom:12,background:"#FFF7E8",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},"管理者へ承認メールを送信しました。承認されると自動で登録フォームが開きます。"),
             approvalStatus==="approved"&&h("div",{style:{fontSize:12,color:"#166534",marginBottom:12,background:"#ECFDF3",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},"承認済みです。このまま登録を進めてください"+(approvalUntil?"（有効期限: "+approvalUntil+"）":"")),
             approvalStatus==="rejected"&&h("div",{style:{fontSize:12,color:"#B42318",marginBottom:12,background:"#FEF3F2",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},"この申請は承認されていません。管理者へ連絡してください。"),
             approvalStatus!=="approved"&&h("div",{style:{fontSize:11,color:"#777",marginTop:-2,marginBottom:12,lineHeight:1.6}},"招待リンクからメールアドレスを申請すると、管理者へ承認メールが届きます"),
