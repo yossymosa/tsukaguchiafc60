@@ -37,7 +37,7 @@ if (bootFallback) bootFallback.style.display = "none";
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyvN33uBp9ZDtAJktHRoZTVFWR13LgdLgU6aSU7YIYshIqnhFnGcH_6hatJsRStjHoKnw/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbx0FSls1VHIlXWb6sgdyoDu7AYGAx0RRH457gg2Elldi3IABYRkrDWekbd450whpQMZVw/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -226,21 +226,29 @@ function AppHeader({user,onLogout,onRefresh}) {
 
 // ── ログイン ─────────────────────────────────────────────────
 function Login({onLogin}) {
-  const [mode,setMode]=useState("login");
+  const initParams=new URLSearchParams(location.search);
+  const presetSignupEmail=(initParams.get("email")||"").trim();
+  const [mode,setMode]=useState(initParams.get("mode")==="signup"?"signup":"login");
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
   const [showPass,setShowPass]=useState(false);
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
   const [signupMembers,setSignupMembers]=useState([]);
-  const [signup,setSignup]=useState({name:"",email:"",password:"",generation:"",memberId:"",code:""});
+  const [signup,setSignup]=useState({name:"",email:presetSignupEmail,password:"",generation:"",memberId:"",code:""});
   const [codeSent,setCodeSent]=useState(false);
+  const [approvalStatus,setApprovalStatus]=useState(presetSignupEmail?"checking":"none");
+  const [approvalUntil,setApprovalUntil]=useState("");
   useEffect(()=>{
-    if(mode!=="signup") return;
+    if(mode!=="signup"||approvalStatus!=="approved") return;
     api("getSignupMembers").then(r=>{
       setSignupMembers((r.members||[]).map(normalizeMember));
     }).catch(()=>{});
-  },[mode]);
+  },[mode,approvalStatus]);
+  useEffect(()=>{
+    if(mode!=="signup"||!signup.email) return;
+    checkApprovalStatus(signup.email);
+  },[]);
   const generations=[...new Set(signupMembers.map(m=>String(m.generation||"").trim()).filter(Boolean))].sort((a,b)=>Number(b)-Number(a));
   const filteredChildren=signup.generation?signupMembers.filter(m=>String(m.generation||"")===String(signup.generation)):[];
   const login=async()=>{
@@ -248,6 +256,24 @@ function Login({onLogin}) {
     setLoading(true);setErr("");
     try{const r=await api("login",{email,password:pass});onLogin(r.user);}
     catch(e){setErr(e.message);}
+    setLoading(false);
+  };
+  const checkApprovalStatus=async(targetEmail=signup.email)=>{
+    if(!targetEmail) return;
+    try{
+      const r=await api("getSignupApprovalStatus",{email:targetEmail});
+      setApprovalStatus(r.status||"none");
+      setApprovalUntil(r.approvedUntil||"");
+    }catch(e){}
+  };
+  const requestApproval=async()=>{
+    if(!signup.email){setErr("メールアドレスを入力してください");return;}
+    setLoading(true);setErr("");
+    try{
+      const appUrl=location.origin+location.pathname+"?mode=signup&email="+encodeURIComponent(signup.email);
+      await api("requestSignupApproval",{email:signup.email,appUrl});
+      setApprovalStatus("pending");
+    }catch(e){setErr(e.message);}
     setLoading(false);
   };
   const sendCode=async()=>{
@@ -269,7 +295,7 @@ function Login({onLogin}) {
   };
   const setSignupField=(key,val)=>setSignup(s=>({...s,[key]:val}));
   return h("div",{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a1a2e,#0f3460)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}},
-    loading&&h(Loader,{msg:mode==="login"?"ログイン中...":"登録中..."}),
+    loading&&h(Loader,{msg:mode==="login"?"ログイン中...":"処理中..."}),
     h("div",{style:{background:"#fff",borderRadius:24,padding:32,width:"100%",maxWidth:360,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}},
       h("div",{style:{textAlign:"center",marginBottom:28}},
         h("div",{style:{fontSize:52}},"⚽"),
@@ -300,6 +326,17 @@ function Login({onLogin}) {
                   showPass?"🙈":"👁"))))
         : h(Fragment,null,
             h("div",{style:{marginBottom:12}},
+              h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"メールアドレス"),
+              h("input",{value:signup.email,onChange:e=>{setSignupField("email",e.target.value);setApprovalStatus("none");setApprovalUntil("");setCodeSent(false);},type:"email",placeholder:"parent@example.com",autoComplete:"email",style:css.inp})),
+            h("div",{style:{display:"flex",gap:8,marginBottom:14}},
+              h("button",{onClick:requestApproval,type:"button",style:{flex:1,padding:"12px 14px",background:"#EEF2FF",color:"#334155",border:"1px solid #D8E1FF",borderRadius:12,fontWeight:700,cursor:"pointer"}},"承認を申請"),
+              h("button",{onClick:()=>checkApprovalStatus(),type:"button",style:{padding:"12px 14px",background:"#fff",color:"#334155",border:"1px solid #D8E1FF",borderRadius:12,fontWeight:700,cursor:"pointer"}},"確認")),
+            approvalStatus==="pending"&&h("div",{style:{fontSize:12,color:"#9A6700",marginBottom:12,background:"#FFF7E8",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},"管理者へ承認メールを送信しました。承認後に登録できます。"),
+            approvalStatus==="approved"&&h("div",{style:{fontSize:12,color:"#166534",marginBottom:12,background:"#ECFDF3",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},"承認済みです。このまま登録を進めてください"+(approvalUntil?"（有効期限: "+approvalUntil+"）":"")),
+            approvalStatus==="rejected"&&h("div",{style:{fontSize:12,color:"#B42318",marginBottom:12,background:"#FEF3F2",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},"この申請は承認されていません。管理者へ連絡してください。"),
+            approvalStatus!=="approved"&&h("div",{style:{fontSize:11,color:"#777",marginTop:-2,marginBottom:12,lineHeight:1.6}},"招待リンクからメールアドレスを申請すると、管理者へ承認メールが届きます"),
+            approvalStatus==="approved"&&h(Fragment,null,
+            h("div",{style:{marginBottom:12}},
               h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"保護者名"),
               h("input",{value:signup.name,onChange:e=>setSignupField("name",e.target.value),placeholder:"山田 花子",style:css.inp})),
             h("div",{style:{marginBottom:12}},
@@ -313,9 +350,6 @@ function Login({onLogin}) {
                 h("option",{value:""},signup.generation?"選択してください":"先に期を選んでください"),
                 filteredChildren.map(m=>h("option",{key:m.id,value:m.id},m.name)))),
             h("div",{style:{marginBottom:12}},
-              h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"メールアドレス"),
-              h("input",{value:signup.email,onChange:e=>setSignupField("email",e.target.value),type:"email",placeholder:"parent@example.com",autoComplete:"email",style:css.inp})),
-            h("div",{style:{marginBottom:12}},
               h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"パスワード"),
               h("input",{value:signup.password,onChange:e=>setSignupField("password",e.target.value),type:"password",placeholder:"パスワード",autoComplete:"new-password",style:css.inp})),
             h("div",{style:{marginBottom:16}},
@@ -323,9 +357,9 @@ function Login({onLogin}) {
               h("div",{style:{display:"flex",gap:8}},
                 h("input",{value:signup.code,onChange:e=>setSignupField("code",e.target.value),placeholder:"6桁コード",style:{...css.inp,marginBottom:0,flex:1}}),
                 h("button",{onClick:sendCode,type:"button",style:{whiteSpace:"nowrap",padding:"0 14px",background:"#EEF2FF",color:"#334155",border:"1px solid #D8E1FF",borderRadius:12,fontWeight:700,cursor:"pointer"}},"コード送信")),
-              codeSent&&h("div",{style:{fontSize:12,color:"#16A34A",marginTop:8}},"メールに認証コードを送信しました"))),
+              codeSent&&h("div",{style:{fontSize:12,color:"#16A34A",marginTop:8}},"メールに認証コードを送信しました")))),
       err&&h("div",{style:{color:"#F44336",fontSize:13,marginBottom:12,background:"#FFF3EF",padding:"8px 12px",borderRadius:8}},err),
-      h("button",{onClick:mode==="login"?login:register,style:{width:"100%",padding:14,background:"#FF6B35",color:"#fff",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:"pointer"}},mode==="login"?"ログイン":"登録する"),
+      (mode==="login"||approvalStatus==="approved")&&h("button",{onClick:mode==="login"?login:register,style:{width:"100%",padding:14,background:"#FF6B35",color:"#fff",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:"pointer"}},mode==="login"?"ログイン":"登録する"),
       h("div",{style:{marginTop:14,fontSize:12,color:"#aaa",textAlign:"center",lineHeight:1.6}},
         mode==="login"?"ログインできない場合は":"認証メールが届かない場合は",
         h("span",{style:{color:"#FF6B35",fontWeight:700}},"吉本"),
