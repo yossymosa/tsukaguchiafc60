@@ -20,11 +20,16 @@ input,select,textarea,button{font-family:'Noto Sans JP',sans-serif;}
 </style>
 </head>
 <body>
+<div id="boot-fallback" style="max-width:480px;margin:16px auto;padding:16px;background:#fff3e0;border:2px solid #ffb74d;border-radius:12px;color:#7a4b00;font-family:'Noto Sans JP',sans-serif;">
+  読み込み中です。画面が切り替わらない場合は再読み込みしてください。
+</div>
 <div id="app"></div>
 <script>
 // Preact globals from UMD
 const { h, render, Fragment } = preact;
 const { useState, useEffect, useCallback, useMemo } = preactHooks;
+const bootFallback = document.getElementById("boot-fallback");
+if (bootFallback) bootFallback.style.display = "none";
 
 
 // ================================================================
@@ -1563,7 +1568,6 @@ function RankList({title,icon,data,unit}) {
 
 function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
   const [dashTab,setDashTab]=useState("result"); // "result" | "tournament" | "rank" | "personal"
-  const [showOtherTournaments,setShowOtherTournaments]=useState(false);
   const [typeF,setTypeF]=useState("all");
   const [periodF,setPeriodF]=useState("year"); // "year"|"month"|"lastmonth"|"custom"
   const [from,setFrom]=useState(""); const [to,setTo]=useState("");
@@ -1612,10 +1616,6 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
   const tournamentRows=tournamentFiltered
     .filter(s=>String(s.rank||"").trim())
     .sort((a,b)=>nd(b.date).localeCompare(nd(a.date)));
-  const otherTournamentRows=tournamentRows.filter(s=>{
-    const rank = String(s.rank || "").trim();
-    return !["優勝","1位","第1位","1"].includes(rank);
-  });
 
   // ランキング集計
   const scorerMap={},assistMap={},mvpMap={};
@@ -1776,17 +1776,15 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
     // ── 大会結果タブ ──
     dashTab==="tournament"&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🏆 大会結果"),
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14,textAlign:"center"}},
-        [{l:"優勝",v:championCount,c:"#FFD700"},
-         {l:"その他",v:otherTournamentRows.length,c:"#FF6B35",toggle:true}]
-        .map(x=>h("div",{key:x.l,onClick:x.toggle?()=>setShowOtherTournaments(v=>!v):undefined,style:{background:"#F8F9FA",borderRadius:12,padding:"10px 6px",cursor:x.toggle?"pointer":"default"}},
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr",gap:8,marginBottom:14,textAlign:"center"}},
+        [{l:"優勝回数",v:championCount,c:"#FFD700"}]
+        .map(x=>h("div",{key:x.l,style:{background:"#F8F9FA",borderRadius:12,padding:"10px 6px"}},
           h("div",{style:{fontSize:20,fontWeight:900,color:x.c}},x.v),
           h("div",{style:{fontSize:10,color:"#aaa",marginTop:2}},x.l)))),
       tournamentRows.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:"18px 0"}},"大会結果はまだありません"),
-      showOtherTournaments&&h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"詳細"),
-      showOtherTournaments&&otherTournamentRows.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:"8px 0 18px"}},"その他の大会結果はありません"),
-      showOtherTournaments&&otherTournamentRows.map((s,i)=>
-        h("div",{key:s.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:i<otherTournamentRows.length-1?8:0,padding:"10px 12px",background:"#F8F9FA",borderRadius:12}},
+      tournamentRows.length>0&&h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"大会一覧"),
+      tournamentRows.map((s,i)=>
+        h("div",{key:s.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:i<tournamentRows.length-1?8:0,padding:"10px 12px",background:"#F8F9FA",borderRadius:12}},
           h("div",{style:{width:74,flexShrink:0,fontSize:11,color:"#aaa"}},fmt(s.date).short),
           h("div",{style:{flex:1,minWidth:0}},
             h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},s.title||"（タイトルなし）"),
@@ -2638,17 +2636,10 @@ try {
   showFatalError(e);
 }
 
-// Service Worker登録
-if("serviceWorker" in navigator) {
-  navigator.serviceWorker.getRegistrations().then(regs=>{
-    regs.forEach(r=>r.unregister());
-  });
-  navigator.serviceWorker.register("/sw.js").catch(()=>{});
-}
+// Service Worker は使わない
 </script>
 </body>
 </html>
-
 
 
 
