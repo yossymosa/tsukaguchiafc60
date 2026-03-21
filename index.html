@@ -2262,8 +2262,8 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
   const totalTheir=dayR.reduce((a,r)=>a+Number(r.theirScore||0),0);
   const st=calcStats(dayR);
 
-  // MVP（公式戦・カップ戦のみ）
-  const isMvpTarget=["official","cup","公式戦","カップ戦"].includes(schedule.type);
+  // 公式戦・カップ戦のみ
+  const isTournamentTarget=["official","cup","公式戦","カップ戦"].includes(schedule.type);
   const [mvp,setMvp]=useState(schedule.mvp||"");
   const [mvpSaving,setMvpSaving]=useState(false);
   const [rank,setRank]=useState(schedule.rank||"");
@@ -2401,11 +2401,15 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
             h("div",{style:{fontSize:11,color:"#FFC107",fontWeight:700,marginTop:2}},"分")),
           h("div",{style:{textAlign:"center",padding:"10px 20px",borderRadius:12,background:"#FFEBEE"}},
             h("div",{style:{fontSize:28,fontWeight:900,color:"#F44336"}},st.losses),
-            h("div",{style:{fontSize:11,color:"#F44336",fontWeight:700,marginTop:2}},"敗")))),
+            h("div",{style:{fontSize:11,color:"#F44336",fontWeight:700,marginTop:2}},"敗"))),
+        isTournamentTarget&&h("div",{style:{marginTop:16,paddingTop:14,borderTop:"1px solid #F3F4F6"}},
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"大会結果"),
+          h("div",{style:{fontSize:15,fontWeight:800,color:schedule.rank?"#FF6B35":"#ccc",background:schedule.rank?"#FFF3E0":"#F8F9FA",borderRadius:12,padding:"10px 12px",textAlign:"center"}},schedule.rank||"未入力"))),
 
-      dayTab==="matches"&&isMvpTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}} ,
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"🏆 大会結果"),
+      dayTab==="matches"&&isTournamentTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}} ,
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"🏆 本日の大会結果"),
         schedule.rank&&h("div",{style:{fontSize:15,fontWeight:800,color:"#FF6B35",background:"#FFF3E0",borderRadius:12,padding:"10px 12px",marginBottom:isAdmin?12:0,textAlign:"center"}},schedule.rank),
+        !schedule.rank&&!isAdmin&&h("div",{style:{fontSize:13,color:"#ccc",textAlign:"center"}},"未入力"),
         isAdmin&&h(Fragment,{},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"大会結果を入力"),
           h("input",{value:rank,onChange:e=>setRank(e.target.value),placeholder:"優勝 / 準優勝 / 3位 / ベスト8",style:{...css.inp,width:"100%"}}),
@@ -2464,7 +2468,7 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
       dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin}),
 
       // MVP入力欄（公式戦・カップ戦のみ・matchesタブ）
-      dayTab==="matches"&&isMvpTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+      dayTab==="matches"&&isTournamentTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"🏅 MVP"),
         // 現在のMVP表示
         schedule.mvp&&h("div",{style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"linear-gradient(135deg,#FFF8E1,#FFF3CD)",borderRadius:12,marginBottom:12}},
@@ -2701,6 +2705,7 @@ render(h(App,{}), document.getElementById("app"));
 </script>
 </body>
 </html>
+
 
 
 
