@@ -2215,7 +2215,7 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
               background:dayTab===t.k?"#FF6B35":"transparent",
               color:dayTab===t.k?"#fff":"#aaa",fontSize:13,fontWeight:700,cursor:"pointer"}},t.l))),
       // HP用テンプレボタン（admin、試合あり）
-      dayTab==="matches"&&dayR.length>0&&isAdmin&&h("button",{onClick:openHpModal,
+      dayTab==="matches"&&dayR.length>0&&h("button",{onClick:openHpModal,
         style:{width:"100%",padding:"11px",marginBottom:10,border:"2px solid #9C27B0",borderRadius:12,
           background:"#F3E5F5",color:"#9C27B0",fontSize:13,fontWeight:700,cursor:"pointer"}},
         "📋 HP用テンプレ"),
@@ -2538,6 +2538,7 @@ if("serviceWorker" in navigator) {
 </script>
 </body>
 </html>
+
 
 
 
