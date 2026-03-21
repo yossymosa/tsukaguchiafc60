@@ -2639,4 +2639,18 @@ try {
 }
 
 // Service Worker登録
-if("se
+if("serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>r.unregister());
+  });
+  navigator.serviceWorker.register("/sw.js").catch(()=>{});
+}
+</script>
+</body>
+</html>
+
+
+
+
+
+
