@@ -814,10 +814,16 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 
 // ── ホームタブ ─────────────────────────────────────────────────
 function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
+  const [todayKey,setTodayKey]=useState(()=>nd(new Date().toISOString().slice(0,10)));
+  useEffect(()=>{
+    const updateToday=()=>setTodayKey(nd(new Date().toISOString().slice(0,10)));
+    const timer=setInterval(updateToday,60*1000);
+    return ()=>clearInterval(timer);
+  },[]);
   const recent=results.slice(0,5);
   const recentNews=news.filter(n=>n.category!=="コーチメモ").slice(0,5);
   // 次の試合を探す
-  const today=nd(new Date().toISOString().slice(0,10));
+  const today=todayKey;
   const nextSch=schedules.filter(s=>nd(s.date)>=today).sort((a,b)=>nd(a.date).localeCompare(nd(b.date)))[0];
   const daysUntil=nextSch?Math.ceil((new Date(nd(nextSch.date))-new Date(today))/(1000*60*60*24)):null;
   return h(Fragment,{},
