@@ -1051,6 +1051,15 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
   const [assignMode, setAssignMode] = useState(false);
   // 各車のピックアップ情報 {userId: {place:"", time:""}}
   const [pickupInfo, setPickupInfo] = useState({});
+  const pickupRows = userId => {
+    const raw = pickupInfo[userId];
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object") return [raw];
+    return [{place:"",time:""}];
+  };
+  const setPickupRows = (userId, rows) => {
+    setPickupInfo(p => ({...p, [userId]: rows}));
+  };
 
   useEffect(()=>{
     let cancelled=false;
@@ -1144,7 +1153,7 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
         const assigned=participants.filter(m=>assignment[m.id]===ci);
         const cap=Number(car.capacity||0);
         const isFull=assigned.length>=cap;
-        const info=pickupInfo[car.userId]||{place:"",time:""};
+        const infos=pickupRows(car.userId);
         // この車に乗る人 or adminはピックアップ編集可
         const canEdit=isAdmin||carpools.some(c=>c.userId===user.id&&c.available==="可"&&cars.findIndex(x=>x.userId===c.userId)===ci);
         return h("div",{key:car.userId,style:{marginBottom:12,padding:12,background:"#F8F9FA",borderRadius:12,border:`2px solid ${isFull?"#4CAF50":"#eee"}`}},
@@ -1152,19 +1161,34 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
             h("div",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},car.userName+" の車"),
             h("div",{style:{fontSize:12,fontWeight:700,color:isFull?"#4CAF50":"#aaa"}},assigned.length+"/"+cap+"人")),
           // ピックアップ情報
-          h("div",{style:{display:"flex",gap:8,marginBottom:8}},
-            h("div",{style:{flex:1}},
-              h("div",{style:{fontSize:10,color:"#aaa",marginBottom:2}},"集合場所"),
-              canEdit
-                ? h("input",{value:info.place,onChange:e=>setPickupInfo(p=>({...p,[car.userId]:{...info,place:e.target.value}})),
-                    placeholder:"例: 塚口公園駐車場",style:{...css.inp,fontSize:12,padding:"5px 8px",width:"100%"}})
-                : h("div",{style:{fontSize:12,color:"#1a1a2e",fontWeight:600}},info.place||"-")),
-            h("div",{style:{width:80}},
-              h("div",{style:{fontSize:10,color:"#aaa",marginBottom:2}},"出発時間"),
-              canEdit
-                ? h("input",{value:info.time,onChange:e=>setPickupInfo(p=>({...p,[car.userId]:{...info,time:e.target.value}})),
-                    placeholder:"8:20",style:{...css.inp,fontSize:12,padding:"5px 8px",width:"100%"}})
-                : h("div",{style:{fontSize:12,color:"#1a1a2e",fontWeight:600}},info.time||"-"))),
+          h("div",{style:{marginBottom:8}},
+            infos.map((info,rowIdx)=>
+              h("div",{key:car.userId+"-"+rowIdx,style:{display:"flex",gap:8,marginBottom:rowIdx<infos.length-1?8:0,alignItems:"flex-end"}},
+                h("div",{style:{flex:1}},
+                  h("div",{style:{fontSize:10,color:"#aaa",marginBottom:2}},rowIdx===0?"集合場所":"追加場所"),
+                  canEdit
+                    ? h("input",{value:info.place,onChange:e=>{
+                        const next=pickupRows(car.userId).map((x,i)=>i===rowIdx?{...x,place:e.target.value}:x);
+                        setPickupRows(car.userId,next);
+                      },placeholder:"例: 塚口公園駐車場",style:{...css.inp,fontSize:12,padding:"5px 8px",width:"100%"}})
+                    : h("div",{style:{fontSize:12,color:"#1a1a2e",fontWeight:600}},info.place||"-")),
+                h("div",{style:{width:80}},
+                  h("div",{style:{fontSize:10,color:"#aaa",marginBottom:2}},rowIdx===0?"出発時間":"時間"),
+                  canEdit
+                    ? h("input",{value:info.time,onChange:e=>{
+                        const next=pickupRows(car.userId).map((x,i)=>i===rowIdx?{...x,time:e.target.value}:x);
+                        setPickupRows(car.userId,next);
+                      },placeholder:"8:20",style:{...css.inp,fontSize:12,padding:"5px 8px",width:"100%"}})
+                    : h("div",{style:{fontSize:12,color:"#1a1a2e",fontWeight:600}},info.time||"-")),
+                canEdit&&h("div",{style:{display:"flex",gap:4,marginBottom:1}},
+                  h("button",{onClick:()=>{
+                    const next=[...pickupRows(car.userId),{place:"",time:""}];
+                    setPickupRows(car.userId,next);
+                  },style:{border:"none",background:"#E3F2FD",color:"#2196F3",borderRadius:8,padding:"6px 8px",fontSize:12,fontWeight:700,cursor:"pointer"}},"+"),
+                  infos.length>1&&h("button",{onClick:()=>{
+                    const next=pickupRows(car.userId).filter((_,i)=>i!==rowIdx);
+                    setPickupRows(car.userId,next.length?next:[{place:"",time:""}]);
+                  },style:{border:"none",background:"#FFEBEE",color:"#F44336",borderRadius:8,padding:"6px 8px",fontSize:12,fontWeight:700,cursor:"pointer"}},"-")))),
           h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,minHeight:32}},
             assigned.map(m=>{
               const pc=PC[m.position]||{bg:"#999"};
@@ -2520,40 +2544,4 @@ function App() {
     loading&&h(Loader,{msg:loadMsg}),
     h("div",{className:"page"},
       h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中...")}),
-      h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,
-        boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
-        h("div",{style:{display:"flex"}},
-          TABS.map(t=>h("button",{key:t.k,onClick:()=>setTab(t.k),
-            style:{flex:1,padding:"11px 2px 9px",border:"none",
-              background:tab===t.k?"#FF6B35":"transparent",cursor:"pointer",
-              display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
-            h("span",{style:{fontSize:17}},t.i),
-            h("span",{style:{fontSize:9,fontWeight:tab===t.k?700:400,
-              color:tab===t.k?"#fff":"#aaa"}},t.l))))),
-      h("div",{style:{padding:"0 16px"}},
-        tab==="home" &&h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch}),
-        tab==="cal"  &&h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule}),
-        tab==="match"&&h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch}),
-        tab==="dash" &&h(DashTab,{results,members,schedules,liftings,isAdmin}),
-        tab==="member"&&h(MemberTab,{members,liftings}),
-        tab==="memo" &&h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews}))));
-}
-
-
-render(h(App,{}), document.getElementById("app"));
-
-// Service Worker登録
-if("serviceWorker" in navigator) {
-  navigator.serviceWorker.getRegistrations().then(regs=>{
-    regs.forEach(r=>r.unregister());
-  });
-  navigator.serviceWorker.register("/sw.js").catch(()=>{});
-}
-</script>
-</body>
-</html>
-
-
-
-
-
+      h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,ma
