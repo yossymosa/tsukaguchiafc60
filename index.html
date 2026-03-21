@@ -853,6 +853,9 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
     const m = s.match(/(\d{2}:\d{2})/);
     return m ? m[1] : s;
   };
+  const mapUrl = schedule.location
+    ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(schedule.location)
+    : "";
 
   const save = async () => {
     setSaving(true);
@@ -998,6 +1001,27 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   );
 
   const readContent = h(Fragment, {},
+    schedule.location && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E8F5E9", borderRadius: 10 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4CAF50", marginBottom: 4 } }, "📍 場所"),
+      h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 } },
+        h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, flex: 1 } }, schedule.location),
+        h("a", {
+          href: mapUrl,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          style: {
+            flexShrink: 0,
+            textDecoration: "none",
+            fontSize: 12,
+            fontWeight: 700,
+            color: "#fff",
+            background: "#4CAF50",
+            borderRadius: 999,
+            padding: "6px 10px"
+          }
+        }, "地図")
+      )
+    ),
     ([cleanTime(form.gatherTime), cleanTime(form.upTime), cleanTime(form.matchTime)].some(Boolean)) && h("div", { style: { background: "linear-gradient(135deg,#FF6B35,#f7931e)", borderRadius: 12, padding: 14, marginBottom: 12 } },
       [["集合", cleanTime(form.gatherTime)], ["アップ", cleanTime(form.upTime)], ["試合開始", cleanTime(form.matchTime)]].filter(([, v]) => v).map(([l, v]) =>
         h("div", { key: l, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4, color: "#fff" } },
