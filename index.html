@@ -2404,7 +2404,12 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
             h("div",{style:{fontSize:11,color:"#F44336",fontWeight:700,marginTop:2}},"敗"))),
         isTournamentTarget&&h("div",{style:{marginTop:16,paddingTop:14,borderTop:"1px solid #F3F4F6"}},
           h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"大会結果"),
-          h("div",{style:{fontSize:15,fontWeight:800,color:schedule.rank?"#FF6B35":"#ccc",background:schedule.rank?"#FFF3E0":"#F8F9FA",borderRadius:12,padding:"10px 12px",textAlign:"center"}},schedule.rank||"未入力"))),
+          h("div",{style:{fontSize:15,fontWeight:800,color:schedule.rank?"#FF6B35":"#ccc",background:schedule.rank?"#FFF3E0":"#F8F9FA",borderRadius:12,padding:"10px 12px",textAlign:"center"}},schedule.rank||"未入力"),
+          isAdmin&&h(Fragment,{},
+            h("div",{style:{fontSize:12,fontWeight:600,color:"#666",margin:"10px 0 8px"}},"大会結果を入力"),
+            h("input",{value:rank,onChange:e=>setRank(e.target.value),placeholder:"優勝 / 準優勝 / 3位 / ベスト8",style:{...css.inp,width:"100%",marginBottom:0}}),
+            h("button",{onClick:saveRank,disabled:rankSaving,style:{...css.bS,width:"100%",marginTop:10,padding:12,fontSize:13,background:rankSaving?"#ccc":"#FF6B35",cursor:rankSaving?"not-allowed":"pointer"}},
+              rankSaving?"保存中...":"💾 大会結果を保存")))),
 
       // 試合リスト (matches タブ)
       dayTab==="matches"&&h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10,marginTop:14}},"試合一覧"),
