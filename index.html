@@ -37,7 +37,7 @@ if (bootFallback) bootFallback.style.display = "none";
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzFqfqqxvix6kOYCUbrJcAnZoxw-Op5zVWu6Ix92DdKCwtcBsPihzUNZx8QTKpjOFmC/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzEtGT01nUAYR0jwl-wi6fsMOy8zOT7K88P68AGBwvgevPjGfBW1jQf3W2Vs4yQLXaFJg/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -106,6 +106,24 @@ function fmt(v) {
   const dt=new Date(s+"T00:00:00");
   const dw=["日","月","火","水","木","金","土"][dt.getDay()];
   return {y:s.slice(0,4),m:s.slice(5,7),d:s.slice(8,10),dw,short:s.slice(5,7)+"/"+s.slice(8,10),full:s.slice(0,4)+"年"+s.slice(5,7)+"月"+s.slice(8,10)+"日("+dw+")"};
+}
+function getCurrentThirdGeneration() {
+  const now = new Date();
+  const fiscalYear = now.getMonth() + 1 >= 4 ? now.getFullYear() : now.getFullYear() - 1;
+  return fiscalYear - 1965;
+}
+function resolveGrade(member) {
+  const gen = Number(String(member?.generation || "").replace(/[^\d]/g,""));
+  if (!gen) return member?.grade || "";
+  const gradeNum = getCurrentThirdGeneration() - gen + 3;
+  if (gradeNum >= 1 && gradeNum <= 3) return gradeNum + "年";
+  if (gradeNum === 0) return "年長";
+  if (gradeNum === -1) return "年中";
+  if (gradeNum > 3) return "卒業";
+  return member?.grade || "";
+}
+function normalizeMember(member) {
+  return {...member, grade: resolveGrade(member)};
 }
 function calcStats(rs) {
   if(!rs.length) return {games:0,wins:0,draws:0,losses:0,gf:0,ga:0,pct:"-"};
@@ -2418,7 +2436,7 @@ function App() {
     setLoadMsg(msg);setLoading(true);
     try{
       const d=await api("getAll");
-      setMembers(d.members||[]);
+      setMembers((d.members||[]).map(normalizeMember));
       setSchedules(d.schedules||[]);
       setResults(d.results||[]);
       setNews(d.news||[]); setLiftings(d.liftings||[]);
@@ -2640,6 +2658,8 @@ try {
 </script>
 </body>
 </html>
+
+
 
 
 
