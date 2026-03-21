@@ -2630,12 +2630,13 @@ try {
       "html=" + htmlLen,
       "text=" + (text ? text.slice(0, 40) : "(empty)")
     ].join(" | "));
+    if (!htmlLen) {
+      showFatalError("render は実行されましたが、画面要素が空です。boot:rendered html=0");
+    }
   }, 300);
 } catch (e) {
   showFatalError(e);
 }
 
 // Service Worker登録
-if("serviceWorker" in navigator) {
-  navigator.serviceWorker.getRegistrations().then(regs=>{
-    regs.fo
+if("se
