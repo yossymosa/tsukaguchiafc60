@@ -99,6 +99,10 @@ function nd(v) {
   if(!isNaN(d.getTime())) return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
   return s;
 }
+function todayLocal() {
+  const d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
 function fmt(v) {
   const s=nd(v);
   if(!s||s.length<10) return {y:"",m:"",d:"",dw:"",short:"",full:""};
@@ -814,9 +818,9 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 
 // ── ホームタブ ─────────────────────────────────────────────────
 function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
-  const [todayKey,setTodayKey]=useState(()=>nd(new Date().toISOString().slice(0,10)));
+  const [todayKey,setTodayKey]=useState(()=>todayLocal());
   useEffect(()=>{
-    const updateToday=()=>setTodayKey(nd(new Date().toISOString().slice(0,10)));
+    const updateToday=()=>setTodayKey(todayLocal());
     const timer=setInterval(updateToday,60*1000);
     return ()=>clearInterval(timer);
   },[]);
@@ -825,7 +829,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
   // 次の試合を探す
   const today=todayKey;
   const nextSch=schedules.filter(s=>nd(s.date)>=today).sort((a,b)=>nd(a.date).localeCompare(nd(b.date)))[0];
-  const daysUntil=nextSch?Math.ceil((new Date(nd(nextSch.date))-new Date(today))/(1000*60*60*24)):null;
+  const daysUntil=nextSch?Math.ceil((new Date(nd(nextSch.date)+"T00:00:00")-new Date(today+"T00:00:00"))/(1000*60*60*24)):null;
   return h(Fragment,{},
     // ① 次の試合カード
     nextSch&&h("div",{style:{background:"linear-gradient(135deg,#FF6B35,#f7931e)",borderRadius:18,padding:18,marginBottom:16,boxShadow:"0 4px 16px rgba(255,107,53,0.3)"}},
