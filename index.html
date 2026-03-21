@@ -1188,7 +1188,8 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
                   infos.length>1&&h("button",{onClick:()=>{
                     const next=pickupRows(car.userId).filter((_,i)=>i!==rowIdx);
                     setPickupRows(car.userId,next.length?next:[{place:"",time:""}]);
-                  },style:{border:"none",background:"#FFEBEE",color:"#F44336",borderRadius:8,padding:"6px 8px",fontSize:12,fontWeight:700,cursor:"pointer"}},"-")))),
+                  },style:{border:"none",background:"#FFEBEE",color:"#F44336",borderRadius:8,padding:"6px 8px",fontSize:12,fontWeight:700,cursor:"pointer"}},"-"))))
+            ),
           h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,minHeight:32}},
             assigned.map(m=>{
               const pc=PC[m.position]||{bg:"#999"};
@@ -2544,4 +2545,4 @@ function App() {
     loading&&h(Loader,{msg:loadMsg}),
     h("div",{className:"page"},
       h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中...")}),
-      h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,ma
+      h("div",{style:{background:"#fff",margin:"0 16px",bord
