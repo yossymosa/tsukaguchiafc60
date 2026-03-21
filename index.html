@@ -20,16 +20,11 @@ input,select,textarea,button{font-family:'Noto Sans JP',sans-serif;}
 </style>
 </head>
 <body>
-<div id="boot-fallback" style="max-width:480px;margin:16px auto;padding:16px;background:#fff3e0;border:2px solid #ffb74d;border-radius:12px;color:#7a4b00;font-family:'Noto Sans JP',sans-serif;">
-  読み込み中です。画面が切り替わらない場合は再読み込みしてください。
-</div>
 <div id="app"></div>
 <script>
 // Preact globals from UMD
 const { h, render, Fragment } = preact;
 const { useState, useEffect, useCallback, useMemo } = preactHooks;
-const bootFallback = document.getElementById("boot-fallback");
-if (bootFallback) bootFallback.style.display = "none";
 
 
 // ================================================================
@@ -2704,78 +2699,7 @@ function App() {
         tab==="memo" &&h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews}))));
 }
 
-function showFatalError(err) {
-  const root = document.getElementById("app") || document.body;
-  const box = document.createElement("div");
-  box.style.padding = "16px";
-  box.style.margin = "16px";
-  box.style.background = "#fff3f0";
-  box.style.border = "2px solid #f44336";
-  box.style.borderRadius = "12px";
-  box.style.color = "#8b1e1e";
-  box.style.fontFamily = "'Noto Sans JP',sans-serif";
-  box.style.whiteSpace = "pre-wrap";
-  box.textContent = "画面の初期化でエラーが発生しました。\n\n" + (err && err.stack ? err.stack : String(err));
-  root.innerHTML = "";
-  root.appendChild(box);
-}
-
-function showBootStatus(msg) {
-  let box = document.getElementById("__boot_status__");
-  if (!box) {
-    box = document.createElement("div");
-    box.id = "__boot_status__";
-    box.style.position = "fixed";
-    box.style.top = "8px";
-    box.style.right = "8px";
-    box.style.zIndex = "99999";
-    box.style.maxWidth = "320px";
-    box.style.padding = "10px 12px";
-    box.style.background = "rgba(26,26,46,0.92)";
-    box.style.color = "#fff";
-    box.style.borderRadius = "10px";
-    box.style.fontSize = "12px";
-    box.style.lineHeight = "1.5";
-    box.style.fontFamily = "'Noto Sans JP',sans-serif";
-    document.body.appendChild(box);
-  }
-  box.textContent = msg;
-}
-
-window.addEventListener("error", e => {
-  showFatalError(e.error || e.message || "Unknown error");
-});
-
-window.addEventListener("unhandledrejection", e => {
-  showFatalError(e.reason || "Unhandled promise rejection");
-});
-
-try {
-  const root = document.getElementById("app");
-  showBootStatus([
-    "boot:start",
-    "root=" + !!root,
-    "preact=" + !!window.preact,
-    "hooks=" + !!window.preactHooks,
-    "savedUser=" + !!localStorage.getItem("afc_user")
-  ].join(" | "));
-  render(h(App,{}), root);
-  setTimeout(() => {
-    const app = document.getElementById("app");
-    const text = app ? (app.innerText || "").trim() : "";
-    const htmlLen = app ? app.innerHTML.length : 0;
-    showBootStatus([
-      "boot:rendered",
-      "html=" + htmlLen,
-      "text=" + (text ? text.slice(0, 40) : "(empty)")
-    ].join(" | "));
-    if (!htmlLen) {
-      showFatalError("render は実行されましたが、画面要素が空です。boot:rendered html=0");
-    }
-  }, 300);
-} catch (e) {
-  showFatalError(e);
-}
+render(h(App,{}), document.getElementById("app"));
 
 // Service Worker は使わない
 </script>
