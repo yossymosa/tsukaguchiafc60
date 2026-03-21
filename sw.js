@@ -1,4 +1,4 @@
-const CACHE_NAME = "tsukaguchi-afc-v2";
+const CACHE_NAME = "tsukaguchi-afc-v3";
 const APP_SHELL = ["/", "/index.html", "/manifest.json", "/icon-512.png"];
 
 self.addEventListener("install", event => {
@@ -17,6 +17,26 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  const isHtmlRequest =
+    event.request.mode === "navigate" ||
+    (event.request.headers.get("accept") || "").includes("text/html");
+
+  if (isHtmlRequest) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const copy = response.clone();
+          if (url.origin === self.location.origin) {
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then(cached => cached || caches.match("/index.html")))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
