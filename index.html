@@ -32,7 +32,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbx0FSls1VHIlXWb6sgdyoDu7AYGAx0RRH457gg2Elldi3IABYRkrDWekbd450whpQMZVw/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzEawkL7WWOVqNNOOucZVWtXycXNBx0Y_A-WYOMzL1glUHynygTUUlbqwMyxXfu01pPNg/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -1756,9 +1756,10 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
   filtered.forEach(r=>{
     (r.goals||[]).forEach(g=>{
       const scId = g.scorerId || (g.scorerName && members.find(m=>m.name===g.scorerName)?.id) || "";
-      if(scId) scorerMap[scId]=(scorerMap[scId]||0)+1;
+      const isOwnGoal = g.goalType==="オウンゴール";
+      if(scId && !isOwnGoal) scorerMap[scId]=(scorerMap[scId]||0)+1;
       const asId = g.assistId || (g.assistName && members.find(m=>m.name===g.assistName)?.id) || "";
-      if(asId) assistMap[asId]=(assistMap[asId]||0)+1;
+      if(asId && !isOwnGoal) assistMap[asId]=(assistMap[asId]||0)+1;
       // PK: goalType==="PK" かつ自チームの得点
       if(g.goalType==="PK" && scId) {
         pkScoreMap[scId]=(pkScoreMap[scId]||0)+1;
@@ -1790,8 +1791,9 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
       (r.goals||[]).forEach(g=>{
         const scId=g.scorerId||(g.scorerName&&members.find(x=>x.name===g.scorerName)?.id)||"";
         const asId=g.assistId||(g.assistName&&members.find(x=>x.name===g.assistName)?.id)||"";
-        if(scId===m.id) goals++;
-        if(asId===m.id) assists++;
+        const isOwnGoal = g.goalType==="オウンゴール";
+        if(scId===m.id && !isOwnGoal) goals++;
+        if(asId===m.id && !isOwnGoal) assists++;
       });
       // pkKickers（キッカー方式）からPK成功率を集計
       try{
