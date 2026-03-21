@@ -1783,6 +1783,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
           h("div",{style:{fontSize:20,fontWeight:900,color:x.c}},x.v),
           h("div",{style:{fontSize:10,color:"#aaa",marginTop:2}},x.l)))),
       tournamentRows.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:"18px 0"}},"大会結果はまだありません"),
+      showOtherTournaments&&h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"詳細"),
       showOtherTournaments&&otherTournamentRows.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:"8px 0 18px"}},"その他の大会結果はありません"),
       showOtherTournaments&&otherTournamentRows.map((s,i)=>
         h("div",{key:s.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:i<otherTournamentRows.length-1?8:0,padding:"10px 12px",background:"#F8F9FA",borderRadius:12}},
@@ -2637,15 +2638,4 @@ try {
 // Service Worker登録
 if("serviceWorker" in navigator) {
   navigator.serviceWorker.getRegistrations().then(regs=>{
-    regs.forEach(r=>r.unregister());
-  });
-  navigator.serviceWorker.register("/sw.js").catch(()=>{});
-}
-</script>
-</body>
-</html>
-
-
-
-
-
+    regs.fo
