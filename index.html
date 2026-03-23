@@ -2155,6 +2155,13 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
   const [month,setMonth]=useState(today.getMonth());
   const [modal,setModal]=useState(false);
   const [fs,setFs]=useState({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official"});
+  const [fc2Modal,setFc2Modal]=useState(false);
+  const [fc2Url,setFc2Url]=useState("http://afcjr.web.fc2.com/");
+  const [fc2Items,setFc2Items]=useState([]);
+  const [fc2Title,setFc2Title]=useState("");
+  const [fc2FetchedUrl,setFc2FetchedUrl]=useState("");
+  const [fc2Loading,setFc2Loading]=useState(false);
+  const [fc2Error,setFc2Error]=useState("");
   const todayStr=today.toISOString().slice(0,10);
 
   // 過去の場所一覧（重複除去）
@@ -2167,6 +2174,20 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
     training:["練習試合","トレーニングマッチ","その他"],
     practice:[],
     event:["スポーツ交流","親子イベント","その他"],
+  };
+
+  const loadFc2Preview=async()=>{
+    setFc2Loading(true);
+    setFc2Error("");
+    try{
+      const r=await api("previewFc2Schedule",{url:fc2Url,year,month:month+1});
+      setFc2Items(r.items||[]);
+      setFc2Title(r.sourceTitle||"");
+      setFc2FetchedUrl(r.fetchedUrl||fc2Url);
+    }catch(e){
+      setFc2Error(e.message||"取得できませんでした");
+    }
+    setFc2Loading(false);
   };
 
   const saveSchedule=async()=>{
@@ -2246,7 +2267,9 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
         )
       )
     ),
-    isAdmin&&h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"7px 14px",fontSize:12}},"+ 日程追加")
+    isAdmin&&h("div",{style:{display:"flex",gap:8}},
+      h("button",{onClick:()=>{setFc2Modal(true);if(!fc2Items.length&&!fc2Loading)loadFc2Preview();},style:{...css.bG,padding:"7px 12px",fontSize:12,whiteSpace:"nowrap"}},"FC2プレビュー"),
+      h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"7px 14px",fontSize:12,whiteSpace:"nowrap"}},"+ 日程追加"))
   )
 ),
     // ── 今月の予定リスト
@@ -2338,7 +2361,35 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
           placeholder:"市営グラウンド",style:css.inp})),
       h("div",{style:{display:"flex",gap:10}},
         h("button",{onClick:()=>setModal(false),style:css.bG},"キャンセル"),
-        h("button",{onClick:saveSchedule,style:css.bS},"追加する"))));
+        h("button",{onClick:saveSchedule,style:css.bS},"追加する"))),
+
+    fc2Modal&&h(Modal,{title:"FC2 3年予定プレビュー",onClose:()=>setFc2Modal(false)},
+      h("div",{style:{fontSize:12,color:"#666",lineHeight:1.7,marginBottom:12}},
+        "FC2の表から3年に関係する予定候補だけを抽出して表示します。まだ保存はしません。"),
+      h("div",{style:{marginBottom:12}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"取得URL"),
+        h("input",{value:fc2Url,onChange:e=>setFc2Url(e.target.value),placeholder:"http://afcjr.web.fc2.com/",style:{...css.inp,width:"100%",marginBottom:0}})),
+      h("div",{style:{display:"flex",gap:10,marginBottom:12}},
+        h("button",{onClick:loadFc2Preview,disabled:fc2Loading||!fc2Url,style:{...css.bS,flex:1,opacity:fc2Loading?0.6:1}},fc2Loading?"取得中...":"プレビュー取得"),
+        h("button",{onClick:()=>{setFc2Items([]);setFc2Error("");setFc2Title("");setFc2FetchedUrl("");},style:{...css.bG,flexShrink:0}},"クリア")),
+      fc2Title&&h("div",{style:{fontSize:12,color:"#555",marginBottom:6,fontWeight:700}},fc2Title),
+      fc2FetchedUrl&&h("div",{style:{fontSize:11,color:"#888",marginBottom:10,wordBreak:"break-all"}},fc2FetchedUrl),
+      fc2Error&&h("div",{style:{fontSize:12,color:"#F44336",background:"#FFEBEE",padding:"10px 12px",borderRadius:10,marginBottom:12}},fc2Error),
+      !fc2Error&&fc2Items.length===0&&!fc2Loading&&h("div",{style:{fontSize:12,color:"#999",background:"#F8F9FA",padding:"12px",borderRadius:10}},"まだ候補はありません"),
+      fc2Items.length>0&&h("div",{style:{display:"flex",flexDirection:"column",gap:10,maxHeight:"60vh",overflowY:"auto"}},
+        fc2Items.map((item,idx)=>{
+          const tc=getTC(item.type);
+          const dt=fmt(item.date);
+          return h("div",{key:(item.date||"")+idx,style:{background:"#F8F9FA",borderRadius:12,padding:"12px 14px"}},
+            h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6}},
+              h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e"}},(dt.short||item.date)+(item.weekday?"("+item.weekday+")":"")),
+              h(Bdg,{label:tc.lb,color:tc.bg,small:true})),
+            h("div",{style:{fontSize:14,fontWeight:700,color:"#333",marginBottom:4}},item.title||"（タイトルなし）"),
+            item.location&&h("div",{style:{fontSize:12,color:"#666",marginBottom:4}},"📍 "+item.location),
+            item.grade&&h("div",{style:{fontSize:11,color:"#888",marginBottom:4}},"学年: "+item.grade),
+            item.note&&h("div",{style:{fontSize:11,color:"#888",marginBottom:4}},"備考: "+item.note),
+            item.content&&item.content!==item.title&&h("div",{style:{fontSize:11,color:"#666",whiteSpace:"pre-wrap",lineHeight:1.5}},item.content));
+        }))));
 }
 
 
