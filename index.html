@@ -56,6 +56,8 @@ function getTC(type) {
     practice:{bg:"#4CAF50",lb:"練習"},
     official:{bg:"#FF6B35",lb:"公式戦"},
     training:{bg:"#2196F3",lb:"トレマ"},
+    "練習試合":{bg:"#2196F3",lb:"トレマ"},
+    "トレーニングマッチ":{bg:"#2196F3",lb:"トレマ"},
     cup:     {bg:"#9C27B0",lb:"カップ戦"},
     "練習":  {bg:"#4CAF50",lb:"練習"},
     "公式戦":{bg:"#FF6B35",lb:"公式戦"},
@@ -65,6 +67,15 @@ function getTC(type) {
     "イベント":{bg:"#009688",lb:"イベント"},
   };
   return m[type]||{bg:"#999",lb:type||"その他"};
+}
+function normalizeType(type) {
+  const label = getTC(type).lb;
+  if (label === "公式戦") return "official";
+  if (label === "カップ戦") return "cup";
+  if (label === "トレマ") return "training";
+  if (label === "練習") return "practice";
+  if (label === "イベント") return "event";
+  return String(type || "");
 }
 const TC={
   practice:{bg:"#4CAF50",lb:"練習"},
@@ -179,6 +190,24 @@ function maybeNotifyDeadlines(schedules) {
     if (localStorage.getItem(key)) return;
     new Notification("出欠締切が近づいています", {
       body: `${s.title || "予定"} の締切は ${s.deadline} です`,
+    });
+    localStorage.setItem(key, "1");
+  });
+}
+
+function maybeNotifyUpcomingEvents(schedules) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const today = new Date();
+  const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  schedules.forEach(s => {
+    if (!s.date) return;
+    const eventDate = new Date(s.date + "T00:00:00");
+    const days = Math.round((eventDate.getTime() - base.getTime()) / (1000 * 60 * 60 * 24));
+    if (days !== 1) return;
+    const key = `afc_event_notice_${s.id}_${s.date}`;
+    if (localStorage.getItem(key)) return;
+    new Notification("明日の予定があります", {
+      body: `${s.date} ${s.title || "予定"}${s.location ? " / " + s.location : ""}`,
     });
     localStorage.setItem(key, "1");
   });
@@ -471,8 +500,10 @@ function copyToClipboard(text) {
 
 // ── ゴール記録ページ ─────────────────────────────────────────
 function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
-  const [goals,setGoals]=useState((match.goals||[]).map(g=>({...g})));
-  const [theirG,setTheirG]=useState((match.theirGoals||[]).map(g=>({...g})));
+  const normalizeHalfValue=h=>/^(1st|前半|first|1)$/i.test(String(h||"").trim())?"1st":/^(2nd|後半|second|2)$/i.test(String(h||"").trim())?"2nd":"1st";
+  const normalizeGoalItem=g=>({...g,half:normalizeHalfValue(g.half)});
+  const [goals,setGoals]=useState((match.goals||[]).map(normalizeGoalItem));
+  const [theirG,setTheirG]=useState((match.theirGoals||[]).map(normalizeGoalItem));
   const [modal,setModal]=useState(null);
   const [loading,setLoading]=useState(false);
   const [ng,setNg]=useState({scorerId:"",assistId:"",half:"1st",minute:"",second:"",goalType:"通常"});
@@ -507,12 +538,15 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
   const pkTheirStr=pkTheirSeq.map(s=>s?"○":"×").join("");
   const tc=getTC(match.type);
   const dt=fmt(match.date||schedule?.date);
-  const isFirst=h=>/^(1st|前半|first|1)$/i.test(String(h).trim());
-  const isSecond=h=>/^(2nd|後半|second|2)$/i.test(String(h).trim());
+  const isFirst=h=>normalizeHalfValue(h)==="1st";
+  const isSecond=h=>normalizeHalfValue(h)==="2nd";
   const normHalf=h=>isFirst(h)?"1st":isSecond(h)?"2nd":h;
   const our1=goals.filter(g=>isFirst(g.half)).length, our2=goals.filter(g=>isSecond(g.half)).length;
   const th1=theirG.filter(g=>isFirst(g.half)).length, th2=theirG.filter(g=>isSecond(g.half)).length;
-  const all=[...goals.map(g=>({...g,team:"us"})),...theirG.map(g=>({...g,team:"them"}))]
+  const all=[
+    ...goals.map((g,idx)=>({...g,team:"us",sourceIdx:idx})),
+    ...theirG.map((g,idx)=>({...g,team:"them",sourceIdx:idx}))
+  ]
     .sort((a,b)=>(normHalf(a.half)==="1st"?0:1)-(normHalf(b.half)==="1st"?0:1)||Number(a.minute)-Number(b.minute)||Number(a.second)-Number(b.second));
 
   const addOur=()=>{if(!ng.scorerId)return alert("得点者を選んでください");if(ng.minute==="")return alert("時間を入力してください");setGoals(p=>[...p,{...ng,minute:+ng.minute,second:+(ng.second||0)}]);setNg(p=>({...p,scorerId:"",assistId:"",minute:"",second:""}));setModal(null);};
@@ -591,14 +625,14 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
                   isUs&&(as||g.assistName)&&h("div",{style:{fontSize:11,color:"#aaa",marginTop:2}},"🅰 "+(as?.name||g.assistName))),
                 isAdmin&&h("div",{style:{display:"flex",flexDirection:"column",gap:3}},
                   h("button",{onClick:()=>{
-                      const baseG={...g,minute:String(g.minute),second:String(g.second||0)};
-                      setEditGoal({type:isUs?"our":"their",idx:isUs?goals.indexOf(g):theirG.indexOf(g)});
+                      const baseG={...normalizeGoalItem(g),minute:String(g.minute),second:String(g.second||0)};
+                      setEditGoal({type:isUs?"our":"their",idx:g.sourceIdx});
                       setEditNg(baseG);
                       setModal("editGoal");
                     },style:{background:"none",border:"1px solid #ddd",borderRadius:6,color:"#aaa",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"編集"),
                   h("button",{onClick:()=>{
-                      if(isUs)setGoals(p=>p.filter((_,j)=>j!==goals.indexOf(g)));
-                      else setTheirG(p=>p.filter((_,j)=>j!==theirG.indexOf(g)));
+                      if(isUs)setGoals(p=>p.filter((_,j)=>j!==g.sourceIdx));
+                      else setTheirG(p=>p.filter((_,j)=>j!==g.sourceIdx));
                     },style:{background:"none",border:"1px solid #ffcccc",borderRadius:6,color:"#F44336",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"削除")));
             }));
         })),      // PK戦セクション（折りたたみ）
@@ -809,7 +843,7 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
       h("div",{style:{display:"flex",gap:10}},
         h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),
         h("button",{onClick:()=>{
-          const updated={...editNg,minute:+editNg.minute,second:+(editNg.second||0)};
+          const updated={...editNg,half:normalizeHalfValue(editNg.half),minute:+editNg.minute,second:+(editNg.second||0)};
           if(editGoal.type==="our") setGoals(p=>p.map((g,j)=>j===editGoal.idx?updated:g));
           else setTheirG(p=>p.map((g,j)=>j===editGoal.idx?updated:g));
           setModal(null);setEditGoal(null);setEditNg(null);
@@ -1708,8 +1742,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
   const [oppFilter,setOppFilter]=useState("all"); // "all" or opponent name
   function typeMatch(r,typeF){
     if(typeF==="all") return true;
-    if(r.type===typeF) return true;
-    const tc=getTC(r.type); return tc.lb===getTC(typeF).lb;
+    return normalizeType(r.type)===normalizeType(typeF);
   }
   const periodRange=useMemo(()=>{
     const now=new Date();
@@ -1784,7 +1817,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
   const toRank=(map,mbrs)=>Object.entries(map).map(([id,cnt])=>{
     const m=mbrs.find(x=>x.id===id)||mbrs.find(x=>x.name===id);
     return {m,cnt,label:id};
-  }).filter(x=>x.m).sort((a,b)=>b.cnt-a.cnt).slice(0,10);
+  }).filter(x=>x.m).sort((a,b)=>b.cnt-a.cnt||Number(a.m.number||999)-Number(b.m.number||999)||String(a.m.name||"").localeCompare(String(b.m.name||""))).slice(0,10);
 
   // 個人成績: メンバー別集計
   const personalStats = useMemo(()=>members.map(m=>{
@@ -1857,7 +1890,12 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
           o.gf+=our; o.ga+=their;
           if(our>their)o.w++; else if(our===their)o.d++; else o.l++;
         });
-        const opps=Object.entries(oppMap).sort((a,b)=>(b[1].w-a[1].w));
+        const opps=Object.entries(oppMap).sort((a,b)=>
+          (b[1].w-a[1].w)||
+          ((b[1].gf-b[1].ga)-(a[1].gf-a[1].ga))||
+          (b[1].gf-a[1].gf)||
+          a[0].localeCompare(b[0])
+        );
         return h(Fragment,{},
           // 集計カード
           h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}},
@@ -2566,11 +2604,15 @@ function App() {
     if(!user || schedules.length===0 || !("Notification" in window)) return;
     if(Notification.permission==="default"){
       Notification.requestPermission().then(p=>{
-        if(p==="granted") maybeNotifyDeadlines(schedules);
+        if(p==="granted") {
+          maybeNotifyDeadlines(schedules);
+          maybeNotifyUpcomingEvents(schedules);
+        }
       }).catch(()=>{});
       return;
     }
     maybeNotifyDeadlines(schedules);
+    maybeNotifyUpcomingEvents(schedules);
   },[user,schedules]);
 
   // ── ハンドラ（全てここで定義）─────────────────────────────────
