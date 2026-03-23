@@ -36,7 +36,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxRCXPvOmrZC0qpwAUdBa_J5UJyc-tGkzUYt04y0csQh8OK0o8YGGyhY81BuHqse-sx0A/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbydw8ng3Uwmu5_SPD34FpoBkAdZmJcR0MeWZd5KUCx9cKdlaZb993EBgcyJ1BLO-cwC/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -1398,7 +1398,10 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
 
 // ── 出欠セクション（DayPage内で使用） ────────────────────────
 function AttendSection({schedule, members, user, isAdmin}) {
+  const isEventSchedule = normalizeType(schedule.type) === "event";
   const [attend, setAttend] = useState({});   // {memberId: status}
+  const [eventAttend, setEventAttend] = useState([]);
+  const [eventForm, setEventForm] = useState({adultCount:"0", childCount:"0", preschoolCount:"0"});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
   const [accompanying, setAccompanying] = useState([]); // 帯同メンバーIDリスト
@@ -1410,15 +1413,28 @@ function AttendSection({schedule, members, user, isAdmin}) {
   // スケジュールの出欠を読み込み
   useEffect(() => {
     let cancelled = false;
-    api("getAttend", {scheduleId: schedule.id}).then(r => {
+    api(isEventSchedule ? "getEventAttend" : "getAttend", {scheduleId: schedule.id}).then(r => {
       if (cancelled) return;
-      const map = {};
-      (r.attend||[]).forEach(a => { map[a.memberId] = a.status; });
-      setAttend(map);
+      if (isEventSchedule) {
+        const rows = r.attend || [];
+        setEventAttend(rows);
+        const mine = rows.find(a => String(a.userId) === String(user.id));
+        if (mine) {
+          setEventForm({
+            adultCount: String(mine.adultCount || 0),
+            childCount: String(mine.childCount || 0),
+            preschoolCount: String(mine.preschoolCount || 0),
+          });
+        }
+      } else {
+        const map = {};
+        (r.attend||[]).forEach(a => { map[a.memberId] = a.status; });
+        setAttend(map);
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
     return () => { cancelled = true; };
-  }, [schedule.id]);
+  }, [schedule.id, isEventSchedule, user.id]);
 
   const save = async (memberId, status) => {
     setSaving(memberId);
@@ -1426,6 +1442,22 @@ function AttendSection({schedule, members, user, isAdmin}) {
     setAttend(next);
     try { await api("saveAttend", {scheduleId: schedule.id, memberId, status}); }
     catch(e) { alert("保存エラー: " + e.message); }
+    setSaving("");
+  };
+  const saveEventAttend = async () => {
+    setSaving("event");
+    const payload = {
+      scheduleId: schedule.id,
+      userId: user.id,
+      userName: user.name,
+      adultCount: Number(eventForm.adultCount || 0),
+      childCount: Number(eventForm.childCount || 0),
+      preschoolCount: Number(eventForm.preschoolCount || 0),
+    };
+    try {
+      await api("saveEventAttend", payload);
+      setEventAttend(prev => [...prev.filter(a => String(a.userId) !== String(user.id)), payload]);
+    } catch(e) { alert("保存エラー: " + e.message); }
     setSaving("");
   };
 
@@ -1446,6 +1478,48 @@ function AttendSection({schedule, members, user, isAdmin}) {
   const deadline = schedule.deadline || "";
   const today = new Date().toISOString().slice(0,10);
   const isPast = deadline && deadline < today;
+  if (isEventSchedule) {
+    const totals = eventAttend.reduce((acc, row) => ({
+      adult: acc.adult + Number(row.adultCount || 0),
+      child: acc.child + Number(row.childCount || 0),
+      preschool: acc.preschool + Number(row.preschoolCount || 0),
+    }), {adult:0, child:0, preschool:0});
+
+    return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}} ,
+      h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"📋 出欠"),
+        deadline&&h("div",{style:{fontSize:11,fontWeight:700,color:isPast?"#F44336":"#FF9800",background:isPast?"#FFEBEE":"#FFF3E0",borderRadius:8,padding:"3px 8px"}},
+          isPast?"⚠ 締め切り済":"⏰ 締切 "+fmt(deadline).short)),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}},
+        [
+          {label:"大人", value:totals.adult, color:"#FF6B35", bg:"#FFF3E0"},
+          {label:"小学生", value:totals.child, color:"#4CAF50", bg:"#E8F5E9"},
+          {label:"未就学児", value:totals.preschool, color:"#2196F3", bg:"#E3F2FD"},
+        ].map(item=>
+          h("div",{key:item.label,style:{textAlign:"center",padding:"12px 8px",borderRadius:12,background:item.bg}},
+            h("div",{style:{fontSize:22,fontWeight:900,color:item.color}},item.value),
+            h("div",{style:{fontSize:11,color:item.color,fontWeight:700,marginTop:4}},item.label)))),
+      h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:12,marginBottom:12}},
+        h("div",{style:{fontSize:12,fontWeight:700,color:"#666",marginBottom:10}},isAdmin?"参加人数を入力":"参加予定人数"),
+        [
+          {key:"adultCount",label:"大人"},
+          {key:"childCount",label:"小学生"},
+          {key:"preschoolCount",label:"未就学児"},
+        ].map(item=>
+          h("div",{key:item.key,style:{display:"flex",alignItems:"center",gap:10,marginBottom:item.key==="preschoolCount"?0:10}},
+            h("div",{style:{width:74,fontSize:13,fontWeight:700,color:"#555"}},item.label),
+            h("input",{type:"number",min:"0",value:eventForm[item.key],onChange:e=>setEventForm(p=>({...p,[item.key]:e.target.value})),disabled:isPast,style:{...css.inp,flex:1,marginBottom:0}}))),
+        h("button",{onClick:saveEventAttend,disabled:saving==="event"||isPast,style:{...css.bS,width:"100%",marginTop:12,opacity:(saving==="event"||isPast)?0.6:1,cursor:isPast?"not-allowed":"pointer"}},saving==="event"?"保存中...":"💾 参加人数を保存")),
+      isAdmin&&h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:12}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"回答一覧"),
+        eventAttend.length===0
+          ? h("div",{style:{fontSize:12,color:"#aaa"}},"まだ回答がありません")
+          : eventAttend.slice().sort((a,b)=>String(a.userName||"").localeCompare(String(b.userName||""),"ja")).map(row=>
+              h("div",{key:row.userId,style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"10px 0",borderTop:"1px solid #eee"}},
+                h("div",{style:{fontSize:13,fontWeight:700,color:"#333"}},row.userName||"名前未設定"),
+                h("div",{style:{fontSize:12,color:"#666",textAlign:"right"}},`大人 ${Number(row.adultCount||0)} / 小学生 ${Number(row.childCount||0)} / 未就学児 ${Number(row.preschoolCount||0)}`))))
+    );
+  }
 
   return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}},
@@ -2296,8 +2370,9 @@ function MemoTab({news,isAdmin,user,onAdd,onDelete}) {
 }
 
 // ── その日の試合まとめページ ─────────────────────────────────────
-function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onAdd,onEdit,onDelete,onBack,onHome,onSaveMvp}) {
-  const [dayTab,setDayTab]=useState("matches"); // "matches"|"attend"
+function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onAdd,onEdit,onDelete,onDeleteSchedule,onBack,onHome,onSaveMvp}) {
+  const isEventDay = normalizeType(schedule.type) === "event";
+  const [dayTab,setDayTab]=useState(isEventDay ? "detail" : "matches"); // "matches"|"attend"
   const tc=getTC(schedule.type);
   const dt=fmt(schedule.date);
   const dayR=results
@@ -2322,6 +2397,9 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
   const [aiPrompt,setAiPrompt]=useState("以下のポイントを考慮して、ホームページに載せる文章を作成して、試合結果の下に付け足して");
   const [aiLoading,setAiLoading]=useState(false);
   const [hpCopied,setHpCopied]=useState(false);
+  useEffect(()=>{
+    setDayTab(isEventDay ? "detail" : "matches");
+  },[schedule.id,isEventDay]);
   const saveEditSch=async()=>{
     await api("updateSchedule",{schedule:{...schForm,id:schedule.id,mvp:schedule.mvp||"",deadline:schForm.deadline||""}});
     // ローカルでscheduleを更新（再ロードせず）
@@ -2411,7 +2489,9 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
         h("input",{type:"date",value:schForm.deadline||"",onChange:e=>setSchForm(p=>({...p,deadline:e.target.value})),style:{...css.inp,width:"100%"}})),
       h("div",{style:{display:"flex",gap:10}},
         h("button",{onClick:()=>setEditSch(false),style:css.bG},"キャンセル"),
-        h("button",{onClick:saveEditSch,style:css.bS},"保存する"))),
+        h("button",{onClick:saveEditSch,style:css.bS},"保存する")),
+      isAdmin&&h("button",{onClick:()=>{setEditSch(false);onDeleteSchedule&&onDeleteSchedule(schedule);},
+        style:{width:"100%",marginTop:12,padding:12,background:"#FFEBEE",color:"#F44336",border:"none",borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer"}},"🗑 日程を削除")),
     // ヘッダー
     h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"20px 20px 40px"}},
       h("div",{style:{display:"flex",gap:8,marginBottom:16}},
@@ -2426,7 +2506,10 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
     h("div",{style:{padding:"0 16px",marginTop:-20}},
       // 内部タブ（試合一覧 / 出欠）
       h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
-        [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"carpool",l:"🚗 配車"},{k:"attend",l:"✅ 出欠"}].map(t=>
+        (isEventDay
+          ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"}]
+          : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"carpool",l:"🚗 配車"},{k:"attend",l:"✅ 出欠"}]
+        ).map(t=>
           h("button",{key:t.k,onClick:()=>setDayTab(t.k),
             style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
               background:dayTab===t.k?"#FF6B35":"transparent",
@@ -2655,6 +2738,16 @@ function App() {
     catch(e){alert("削除エラー: "+e.message);}
     setLoading(false);
   };
+  const handleDeleteSchedule=async(s)=>{
+    if(!confirm("「"+(s.title||"この日程")+"」を削除しますか？"))return;
+    setLoading(true);setLoadMsg("削除中...");
+    try{
+      await api("deleteSchedule",{id:s.id});
+      await load("更新中...");
+      setPage(null);
+    }catch(e){alert("削除エラー: "+e.message);}
+    setLoading(false);
+  };
   const [editResult,setEditResult]=useState(null);
   const handleAddNews=async n=>{
     setLoading(true);setLoadMsg("投稿中...");
@@ -2707,6 +2800,7 @@ function App() {
       onAdd:s=>setPage({type:"addMatch",schedule:s}),
       onEdit:r=>setEditResult(r),
       onDelete:handleDeleteResult,
+      onDeleteSchedule:handleDeleteSchedule,
       onBack:goBack,
       onHome:goBack,
       onSaveMvp:handleSaveMvp,
@@ -2755,6 +2849,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
