@@ -130,10 +130,10 @@ function resolveGrade(member) {
   const gen = Number(String(member?.generation || "").replace(/[^\d]/g,""));
   if (!gen) return member?.grade || "";
   const gradeNum = getCurrentThirdGeneration() - gen + 3;
-  if (gradeNum >= 1 && gradeNum <= 3) return gradeNum + "年";
+  if (gradeNum >= 1 && gradeNum <= 6) return gradeNum + "年";
   if (gradeNum === 0) return "年長";
   if (gradeNum === -1) return "年中";
-  if (gradeNum > 3) return "卒業";
+  if (gradeNum > 6) return "卒業";
   return member?.grade || "";
 }
 function normalizeMember(member) {
@@ -914,13 +914,16 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
 
 // ── 詳細セクション ────────────────────────────────────────────
 function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
+  const DEFAULT_CLOTHES = "練習シャツ、白パン、青ソックス、トレシュー、長袖インナー\n・防寒具\n・ジャージなどの上着";
+  const DEFAULT_BELONGINGS = "ユニフォーム（白・青）、レガース、キャップ、タオル、スパイク\n・氷柱1本（ペットボトル、ジップロックなど）\n・コロコロ氷（水筒orジップロック）\n・水筒\n・着替え\n・軽食（ゼリー系）\n・昼食\n・お湯（当番・荷物担当）\n・着替え（必須）";
+  const COACH_OPTIONS = ["丸尾コーチ", "健太郎先生"];
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     gatherTime: schedule.gatherTime || "",
     upTime: schedule.upTime || "",
     matchTime: schedule.matchTime || "",
-    clothes: schedule.clothes || "",
-    belongings: schedule.belongings || "",
+    clothes: schedule.clothes || DEFAULT_CLOTHES,
+    belongings: schedule.belongings || DEFAULT_BELONGINGS,
     duty: schedule.duty || "",
     dutyNote: schedule.dutyNote || "",
     luggagePerson: schedule.luggagePerson || "",
@@ -1020,19 +1023,6 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
     )
   );
 
-  const userField = (k, label, extra = []) => h("div", { style: { marginBottom: 12 } },
-    h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, label),
-    h("select", {
-      value: form[k],
-      onChange: e => setForm(p => ({ ...p, [k]: e.target.value })),
-      style: { ...css.inp, width: "100%" }
-    },
-      h("option", { value: "" }, "-- 未設定 --"),
-      users.map(u => h("option", { key: u.id, value: u.name }, u.name)),
-      extra.map(v => h("option", { key: v, value: v }, v))
-    )
-  );
-
   const editContent = h(Fragment, {},
     h("div", { style: { background: "#F8F9FA", borderRadius: 12, padding: 12, marginBottom: 14 } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#bbb", marginBottom: 10 } }, "時間"),
@@ -1069,7 +1059,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
           style: { ...css.inp, width: "100%" }
         },
           h("option", { value: "" }, "-- 未設定 --"),
-          users.map(u => h("option", { key: u.id, value: u.name.split(/[ 　]/)[0] + "さん" }, u.name.split(/[ 　]/)[0] + "さん")),
+          memberOpts.map(m => h("option", { key: m.id, value: m.name.split(/[ 　]/)[0] + "さん" }, m.name.split(/[ 　]/)[0] + "さん")),
           h("option", { value: "その他" }, "その他")
         )
       ),
@@ -1083,29 +1073,22 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
           style: { ...css.inp, width: "100%", resize: "none" }
         })
       ),
-      userField("luggagePerson", "荷物担当"),
-      userField("firstAidPerson", "救急バッグ"),
+      memberField("luggagePerson", "荷物担当"),
+      memberField("firstAidPerson", "救急バッグ"),
       h("div", { style: { marginBottom: 12 } },
         h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, "コーチ"),
-        h("div", { style: { display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" } },
-          ["丸尾コーチ", "健太郎先生"].map(v => h("button", {
-            key: v,
-            onClick: () => setForm(p => ({ ...p, coach: v })),
-            style: {
-              padding: "5px 10px",
-              border: "2px solid " + (form.coach === v ? "#FF6B35" : "#eee"),
-              borderRadius: 8,
-              background: form.coach === v ? "#FF6B35" : "#fff",
-              color: form.coach === v ? "#fff" : "#666",
-              fontSize: 12,
-              cursor: "pointer"
-            }
-          }, v))
+        h("select", {
+          value: COACH_OPTIONS.includes(form.coach) ? form.coach : "その他",
+          onChange: e => setForm(p => ({ ...p, coach: e.target.value === "その他" ? "" : e.target.value })),
+          style: { ...css.inp, width: "100%", marginBottom: COACH_OPTIONS.includes(form.coach) ? 0 : 8 }
+        },
+          COACH_OPTIONS.map(v => h("option", { key: v, value: v }, v)),
+          h("option", { value: "その他" }, "その他")
         ),
-        h("input", {
+        !COACH_OPTIONS.includes(form.coach) && h("input", {
           value: form.coach,
           onChange: e => setForm(p => ({ ...p, coach: e.target.value })),
-          placeholder: "その他の場合はここに入力",
+          placeholder: "その他のコーチ名を入力",
           style: { ...css.inp, width: "100%" }
         })
       )
