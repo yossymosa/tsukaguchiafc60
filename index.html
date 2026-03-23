@@ -213,6 +213,18 @@ function maybeNotifyUpcomingEvents(schedules) {
   });
 }
 
+async function enableNotifications() {
+  if (!("Notification" in window)) {
+    alert("この端末では通知に対応していません");
+    return "unsupported";
+  }
+  try {
+    return await Notification.requestPermission();
+  } catch (e) {
+    return "denied";
+  }
+}
+
 // ── 共通コンポーネント ────────────────────────────────────────
 function Loader({msg="処理中..."}) {
   return h("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center"}},
@@ -242,7 +254,8 @@ function ScoreLine({our,their,size=18}) {
   const c=Number(our)>Number(their)?"#4CAF50":Number(our)===Number(their)?"#FFC107":"#F44336";
   return h("span",{style:{fontSize:size,fontWeight:900,color:c,whiteSpace:"nowrap"}},Number(our),h("span",{style:{color:"#ddd",fontSize:size*0.7,margin:"0 3px"}},"-"),Number(their));
 }
-function AppHeader({user,onLogout,onRefresh}) {
+function AppHeader({user,onLogout,onRefresh,notificationPermission,onEnableNotifications}) {
+  const noticeLabel = notificationPermission === "granted" ? "通知ON" : "通知";
   return h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",padding:"20px 20px 52px",position:"relative",overflow:"hidden"}},
     h("div",{style:{position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,107,53,0.18)"}}),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"relative"}},
@@ -252,6 +265,7 @@ function AppHeader({user,onLogout,onRefresh}) {
       h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}},
         h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.85)",fontWeight:600}},user.name),
         h("div",{style:{display:"flex",gap:6}},
+          h("button",{onClick:onEnableNotifications,style:{background:notificationPermission==="granted"?"rgba(76,175,80,0.22)":"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid "+(notificationPermission==="granted"?"rgba(76,175,80,0.45)":"rgba(255,255,255,0.25)"),borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},noticeLabel),
           h("button",{onClick:onRefresh,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"🔄"),
           h("button",{onClick:onLogout,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"ログアウト")))));
 }
@@ -917,6 +931,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   const DEFAULT_CLOTHES = "練習シャツ、白パン、青ソックス、トレシュー、長袖インナー\n・防寒具\n・ジャージなどの上着";
   const DEFAULT_BELONGINGS = "ユニフォーム（白・青）、レガース、キャップ、タオル、スパイク\n・氷柱1本（ペットボトル、ジップロックなど）\n・コロコロ氷（水筒orジップロック）\n・水筒\n・着替え\n・軽食（ゼリー系）\n・昼食\n・お湯（当番・荷物担当）\n・着替え（必須）";
   const COACH_OPTIONS = ["丸尾コーチ", "健太郎先生"];
+  const isEventSchedule = normalizeType(schedule.type) === "event";
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     gatherTime: schedule.gatherTime || "",
@@ -1032,7 +1047,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         timeField("matchTime", "試合開始")
       )
     ),
-    h("div", { style: { marginBottom: 12 } },
+    !isEventSchedule && h("div", { style: { marginBottom: 12 } },
       h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, "服装・持ち物"),
       h("textarea", {
         value: form.clothes,
@@ -1049,7 +1064,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         style: { ...css.inp, width: "100%", resize: "none" }
       })
     ),
-    h("div", { style: { background: "#F8F9FA", borderRadius: 12, padding: 12, marginBottom: 14 } },
+    !isEventSchedule && h("div", { style: { background: "#F8F9FA", borderRadius: 12, padding: 12, marginBottom: 14 } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#bbb", marginBottom: 10 } }, "担当"),
       h("div", { style: { marginBottom: 12 } },
         h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, "当番"),
@@ -1139,15 +1154,15 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         )
       )
     ),
-    form.clothes && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E3F2FD", borderRadius: 10 } },
+    !isEventSchedule && form.clothes && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E3F2FD", borderRadius: 10 } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#2196F3", marginBottom: 4 } }, "👕 服装"),
       h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.clothes)
     ),
-    form.belongings && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F3E5F5", borderRadius: 10 } },
+    !isEventSchedule && form.belongings && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F3E5F5", borderRadius: 10 } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#9C27B0", marginBottom: 4 } }, "🎒 持ち物"),
       h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.belongings)
     ),
-    (form.duty || form.coach || form.luggagePerson || form.firstAidPerson) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
+    !isEventSchedule && (form.duty || form.coach || form.luggagePerson || form.firstAidPerson) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4A5568", marginBottom: 8 } }, "📌 担当"),
       form.duty && h("div", { style: { marginBottom: 4 } },
         h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "当番"),
@@ -2712,6 +2727,7 @@ function App() {
   const [news,setNews]=useState([]);
   const [liftings,setLiftings]=useState([]);
   const [users,setUsers]=useState([]);
+  const [notificationPermission,setNotificationPermission]=useState(()=>("Notification" in window ? Notification.permission : "unsupported"));
   const isAdmin=user?.role==="admin";
 
   const load=useCallback(async(msg="読み込み中...")=>{
@@ -2729,18 +2745,22 @@ function App() {
   useEffect(()=>{if(user)load();},[user]);
   useEffect(()=>{
     if(!user || schedules.length===0 || !("Notification" in window)) return;
-    if(Notification.permission==="default"){
-      Notification.requestPermission().then(p=>{
-        if(p==="granted") {
-          maybeNotifyDeadlines(schedules);
-          maybeNotifyUpcomingEvents(schedules);
-        }
-      }).catch(()=>{});
-      return;
-    }
+    setNotificationPermission(Notification.permission);
+    if(Notification.permission!=="granted") return;
     maybeNotifyDeadlines(schedules);
     maybeNotifyUpcomingEvents(schedules);
   },[user,schedules]);
+  const handleEnableNotifications=async()=>{
+    const p=await enableNotifications();
+    setNotificationPermission(p);
+    if(p==="granted"){
+      maybeNotifyDeadlines(schedules);
+      maybeNotifyUpcomingEvents(schedules);
+      alert("通知をONにしました");
+    }else if(p==="denied"){
+      alert("ブラウザで通知がブロックされています");
+    }
+  };
 
   // ── ハンドラ（全てここで定義）─────────────────────────────────
   const goToMatch=(r,s)=>setPage({type:"matchDetail",match:r,schedule:s});
@@ -2858,7 +2878,7 @@ function App() {
   return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
     h("div",{className:"page"},
-      h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中...")}),
+      h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationPermission,onEnableNotifications:handleEnableNotifications}),
       h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,
         boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
         h("div",{style:{display:"flex"}},
