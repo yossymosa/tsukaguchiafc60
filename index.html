@@ -1740,9 +1740,14 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
   const [periodF,setPeriodF]=useState("year"); // "year"|"month"|"lastmonth"|"custom"
   const [from,setFrom]=useState(""); const [to,setTo]=useState("");
   const [oppFilter,setOppFilter]=useState("all"); // "all" or opponent name
+  const getResultType=row=>{
+    const linked=row.scheduleId?schedules.find(s=>s.id===row.scheduleId):schedules.find(s=>nd(s.date)===nd(row.date));
+    return normalizeType(row.type || linked?.type || "");
+  };
   function typeMatch(r,typeF){
     if(typeF==="all") return true;
-    return normalizeType(r.type)===normalizeType(typeF);
+    const baseType = r && Object.prototype.hasOwnProperty.call(r,"opponent") ? getResultType(r) : normalizeType(r.type);
+    return baseType===normalizeType(typeF);
   }
   const periodRange=useMemo(()=>{
     const now=new Date();
