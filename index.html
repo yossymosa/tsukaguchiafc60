@@ -1805,7 +1805,7 @@ function RankList({title,icon,data,unit}) {
     sortedData.length===0&&h("div",{style:{color:"#ccc",fontSize:13,textAlign:"center",padding:"10px 0"}},"データがありません"),
     sortedData.map((x,i)=>{
       const pc=PC[x.m.position]||{bg:"#999"};
-      return h("div",{key:x.m.id,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<sortedData.length-1?10:0}},
+      return h("div",{key:`${x.m.id}-${x.cnt}-${i}`,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<sortedData.length-1?10:0}},
         h("div",{style:{width:24,fontSize:i===0?18:14,fontWeight:900,color:i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":"#ccc",textAlign:"center"}},i+1),
         h("div",{style:{width:34,height:34,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},x.m.number),
         h("div",{style:{flex:1}},h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},x.m.name),h("div",{style:{fontSize:11,color:"#aaa"}},x.m.grade+" · "+x.m.position)),
