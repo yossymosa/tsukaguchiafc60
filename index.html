@@ -1795,12 +1795,17 @@ function AddMatchModal({schedule,results,onSave,onClose}) {
 
 // ── 成績タブ ───────────────────────────────────────────────────
 function RankList({title,icon,data,unit}) {
+  const sortedData=[...(data||[])].sort((a,b)=>
+    Number(b?.cnt||0)-Number(a?.cnt||0)||
+    Number(a?.m?.number||999)-Number(b?.m?.number||999)||
+    String(a?.m?.name||"").localeCompare(String(b?.m?.name||""))
+  );
   return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
     h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},icon+" "+title),
-    data.length===0&&h("div",{style:{color:"#ccc",fontSize:13,textAlign:"center",padding:"10px 0"}},"データがありません"),
-    data.map((x,i)=>{
+    sortedData.length===0&&h("div",{style:{color:"#ccc",fontSize:13,textAlign:"center",padding:"10px 0"}},"データがありません"),
+    sortedData.map((x,i)=>{
       const pc=PC[x.m.position]||{bg:"#999"};
-      return h("div",{key:x.m.id,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<data.length-1?10:0}},
+      return h("div",{key:x.m.id,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<sortedData.length-1?10:0}},
         h("div",{style:{width:24,fontSize:i===0?18:14,fontWeight:900,color:i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":"#ccc",textAlign:"center"}},i+1),
         h("div",{style:{width:34,height:34,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},x.m.number),
         h("div",{style:{flex:1}},h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},x.m.name),h("div",{style:{fontSize:11,color:"#aaa"}},x.m.grade+" · "+x.m.position)),
@@ -1895,8 +1900,8 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
   // toRank: IDで引けなければ名前で表示
   const toRank=(map,mbrs)=>Object.entries(map).map(([id,cnt])=>{
     const m=mbrs.find(x=>x.id===id)||mbrs.find(x=>x.name===id);
-    return {m,cnt,label:id};
-  }).filter(x=>x.m).sort((a,b)=>b.cnt-a.cnt||Number(a.m.number||999)-Number(b.m.number||999)||String(a.m.name||"").localeCompare(String(b.m.name||""))).slice(0,10);
+    return {m,cnt:Number(cnt||0),label:id};
+  }).filter(x=>x.m).sort((a,b)=>Number(b.cnt||0)-Number(a.cnt||0)||Number(a.m.number||999)-Number(b.m.number||999)||String(a.m.name||"").localeCompare(String(b.m.name||""))).slice(0,10);
 
   // 個人成績: メンバー別集計
   const personalStats = useMemo(()=>members.map(m=>{
