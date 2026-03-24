@@ -1231,22 +1231,25 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
             h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 8 } }, "参加人数"),
             attendLoading
               ? h("div", { style: { fontSize: 13, color: "#ccc" } }, "読み込み中...")
-              : h(Fragment,{},
-                  h("div", { style: { display:"flex", gap:8, marginBottom:10 } },
+              : [
+                  h("div", { key: "event-totals", style: { display:"flex", gap:8, marginBottom:10 } },
                     [
                       {label:"大人", value:eventTotals.adult, color:"#1D4ED8", bg:"#DBEAFE"},
                       {label:"小学生", value:eventTotals.child, color:"#2563EB", bg:"#EFF6FF"},
                       {label:"未就学児", value:eventTotals.preschool, color:"#0F172A", bg:"#E2E8F0"},
-                    ].map(item=>
+                    ].map(item =>
                       h("div",{key:item.label,style:{flex:1,textAlign:"center",padding:"10px 6px",borderRadius:10,background:item.bg}},
                         h("div",{style:{fontSize:20,fontWeight:900,color:item.color}},item.value),
-                        h("div",{style:{fontSize:10,fontWeight:700,color:item.color,marginTop:2}},item.label)))),
-                  eventAttend.length===0
-                    ? h("div", { style: { fontSize: 13, color: "#ccc" } }, "回答なし")
-                    : eventAttend.slice().sort((a,b)=>String(a.userName||"").localeCompare(String(b.userName||""),"ja")).map(row=>
+                        h("div",{style:{fontSize:10,fontWeight:700,color:item.color,marginTop:2}},item.label)))
+                  ),
+                  ...(eventAttend.length===0
+                    ? [h("div", { key: "event-empty", style: { fontSize: 13, color: "#ccc" } }, "回答なし")]
+                    : eventAttend.slice().sort((a,b)=>String(a.userName||"").localeCompare(String(b.userName||""),"ja")).map(row =>
                         h("div",{key:row.userId,style:{marginBottom:8}},
                           h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:2}},row.userName||"名前未設定"),
-                          h("div",{style:{fontSize:12,color:"#666"}},`大人 ${Number(row.adultCount||0)} / 小学生 ${Number(row.childCount||0)} / 未就学児 ${Number(row.preschoolCount||0)}`)))))
+                          h("div",{style:{fontSize:12,color:"#666"}},`大人 ${Number(row.adultCount||0)} / 小学生 ${Number(row.childCount||0)} / 未就学児 ${Number(row.preschoolCount||0)}`))
+                      ))
+                ]
           )
         : h(Fragment,{},
             h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 8 } }, "参加メンバー " + (attendLoading ? "" : "(" + participants.length + "人)")),
