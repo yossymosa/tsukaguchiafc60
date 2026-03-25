@@ -112,7 +112,15 @@ async function subscribeWebPush(user) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     throw new Error("この端末ではWeb Pushに対応していません");
   }
-  const reg = await navigator.serviceWorker.ready;
+  const reg =
+    (await navigator.serviceWorker.getRegistration()) ||
+    (await navigator.serviceWorker.register("/sw.js"));
+  await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("通知の初期化がタイムアウトしました")), 8000)
+    ),
+  ]);
   const keyRes = await fetch("/api/push-public-key");
   if (!keyRes.ok) throw new Error("公開鍵の取得に失敗しました");
   const { publicKey } = await keyRes.json();
@@ -2822,20 +2830,28 @@ function App() {
     maybeNotifyUpcomingEvents(schedules);
   },[user,schedules]);
   const handleEnableNotifications=async()=>{
-    const p=await enableNotifications();
-    setNotificationPermission(p);
-    if(p==="granted"){
-      try{
-        await subscribeWebPush(user);
-      }catch(e){
-        alert("通知購読エラー: "+e.message);
-        return;
+    try{
+      const p=await enableNotifications();
+      setNotificationPermission(p);
+      if(p==="granted"){
+        try{
+          await subscribeWebPush(user);
+        }catch(e){
+          alert("通知購読エラー: "+(e&&e.message?e.message:"不明なエラー"));
+          return;
+        }
+        maybeNotifyDeadlines(schedules);
+        maybeNotifyUpcomingEvents(schedules);
+        alert("通知をONにしました");
+      }else if(p==="denied"){
+        alert("ブラウザで通知がブロックされています");
+      }else if(p==="default"){
+        alert("通知の許可が完了しませんでした");
+      }else{
+        alert("この端末では通知に対応していません");
       }
-      maybeNotifyDeadlines(schedules);
-      maybeNotifyUpcomingEvents(schedules);
-      alert("通知をONにしました");
-    }else if(p==="denied"){
-      alert("ブラウザで通知がブロックされています");
+    }catch(e){
+      alert("通知ボタン処理エラー: "+(e&&e.message?e.message:"不明なエラー"));
     }
   };
 
@@ -2985,6 +3001,8 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
+
 
 
 
