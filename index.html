@@ -217,40 +217,56 @@ const css={
   bS: {flex:1,padding:14,border:"none",borderRadius:12,background:"#1D4ED8",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"},
 };
 
-function maybeNotifyDeadlines(schedules) {
+async function showLocalNotification(title, options={}) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const today = todayLocal();
-  schedules.forEach(s => {
-    if (!s.deadline) return;
-    const d = nd(s.deadline);
-    if (!d) return;
-    const days = Math.round((new Date(d + "T00:00:00") - new Date(today + "T00:00:00")) / (1000 * 60 * 60 * 24));
-    if (days !== 1) return;
-    const key = `afc_deadline_notice_${s.id}_${s.deadline}`;
-    if (localStorage.getItem(key)) return;
-    new Notification("出欠締切が近づいています", {
-      body: `${s.title || "予定"} の締切は明日です（${d}）`,
-    });
-    localStorage.setItem(key, "1");
-  });
+  if ("serviceWorker" in navigator) {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg && reg.showNotification) {
+      await reg.showNotification(title, options);
+      return;
+    }
+  }
+  new Notification(title, options);
 }
 
-function maybeNotifyUpcomingEvents(schedules) {
+async function maybeNotifyDeadlines(schedules) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const today = todayLocal();
+  for (const s of schedules) {
+    if (!s.deadline) continue;
+    const d = nd(s.deadline);
+    if (!d) continue;
+    const days = Math.round((new Date(d + "T00:00:00") - new Date(today + "T00:00:00")) / (1000 * 60 * 60 * 24));
+    if (days !== 1) continue;
+    const key = `afc_deadline_notice_${s.id}_${s.deadline}`;
+    if (localStorage.getItem(key)) continue;
+    await showLocalNotification("出欠締切が近づいています", {
+      body: `${s.title || "予定"} の締切は明日です（${d}）`,
+      icon: "/icon-512.png",
+      badge: "/icon-512.png",
+    });
+    localStorage.setItem(key, "1");
+  }
+}
+
+async function maybeNotifyUpcomingEvents(schedules) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const today = new Date();
   const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  schedules.forEach(s => {
-    if (!s.date) return;
+  for (const s of schedules) {
+    if (!s.date) continue;
     const eventDate = new Date(s.date + "T00:00:00");
     const days = Math.round((eventDate.getTime() - base.getTime()) / (1000 * 60 * 60 * 24));
-    if (days !== 1) return;
+    if (days !== 1) continue;
     const key = `afc_event_notice_${s.id}_${s.date}`;
-    if (localStorage.getItem(key)) return;
-    new Notification("明日の予定があります", {
+    if (localStorage.getItem(key)) continue;
+    await showLocalNotification("明日の予定があります", {
       body: `${s.date} ${s.title || "予定"}${s.location ? " / " + s.location : ""}`,
+      icon: "/icon-512.png",
+      badge: "/icon-512.png",
     });
     localStorage.setItem(key, "1");
-  });
+  }
 }
 
 async function enableNotifications() {
@@ -2827,8 +2843,8 @@ function App() {
     if(!user || schedules.length===0 || !("Notification" in window)) return;
     setNotificationPermission(Notification.permission);
     if(Notification.permission!=="granted") return;
-    maybeNotifyDeadlines(schedules);
-    maybeNotifyUpcomingEvents(schedules);
+    maybeNotifyDeadlines(schedules).catch(()=>{});
+    maybeNotifyUpcomingEvents(schedules).catch(()=>{});
   },[user,schedules]);
   const handleEnableNotifications=async()=>{
     try{
@@ -2841,8 +2857,8 @@ function App() {
           alert("通知購読エラー: "+(e&&e.message?e.message:"不明なエラー"));
           return;
         }
-        maybeNotifyDeadlines(schedules);
-        maybeNotifyUpcomingEvents(schedules);
+        await maybeNotifyDeadlines(schedules);
+        await maybeNotifyUpcomingEvents(schedules);
         alert("通知をONにしました");
       }else if(p==="denied"){
         alert("ブラウザで通知がブロックされています");
