@@ -141,6 +141,24 @@ async function subscribeWebPush(user) {
   return sub;
 }
 
+async function getCurrentPushSubscription() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg || !reg.pushManager) return null;
+  return await reg.pushManager.getSubscription();
+}
+
+async function unsubscribeWebPush() {
+  const sub = await getCurrentPushSubscription();
+  if (!sub) return false;
+  const endpoint = sub.endpoint;
+  await sub.unsubscribe().catch(() => false);
+  if (endpoint) {
+    await api("deletePushSubscription", { endpoint }).catch(() => {});
+  }
+  return true;
+}
+
 // ── ユーティリティ ────────────────────────────────────────────
 function nd(v) {
   if(!v) return "";
@@ -310,8 +328,8 @@ function ScoreLine({our,their,size=18}) {
   const c=Number(our)>Number(their)?"#4CAF50":Number(our)===Number(their)?"#FFC107":"#F44336";
   return h("span",{style:{fontSize:size,fontWeight:900,color:c,whiteSpace:"nowrap"}},Number(our),h("span",{style:{color:"#ddd",fontSize:size*0.7,margin:"0 3px"}},"-"),Number(their));
 }
-function AppHeader({user,onLogout,onRefresh,notificationPermission,onEnableNotifications}) {
-  const noticeLabel = notificationPermission === "granted" ? "通知ON" : "通知";
+function AppHeader({user,onLogout,onRefresh,notificationEnabled,onEnableNotifications}) {
+  const noticeLabel = notificationEnabled ? "通知OFF" : "通知ON";
   return h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",padding:"20px 20px 52px",position:"relative",overflow:"hidden"}},
     h("div",{style:{position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(255,107,53,0.18)"}}),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"relative"}},
@@ -321,7 +339,7 @@ function AppHeader({user,onLogout,onRefresh,notificationPermission,onEnableNotif
       h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}},
         h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.85)",fontWeight:600}},user.name),
         h("div",{style:{display:"flex",gap:6}},
-          h("button",{onClick:onEnableNotifications,style:{background:notificationPermission==="granted"?"rgba(76,175,80,0.22)":"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid "+(notificationPermission==="granted"?"rgba(76,175,80,0.45)":"rgba(255,255,255,0.25)"),borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},noticeLabel),
+          h("button",{onClick:onEnableNotifications,style:{background:notificationEnabled?"rgba(76,175,80,0.22)":"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid "+(notificationEnabled?"rgba(76,175,80,0.45)":"rgba(255,255,255,0.25)"),borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},noticeLabel),
           h("button",{onClick:onRefresh,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"🔄"),
           h("button",{onClick:onLogout,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"ログアウト")))));
 }
@@ -2824,6 +2842,7 @@ function App() {
   const [liftings,setLiftings]=useState([]);
   const [users,setUsers]=useState([]);
   const [notificationPermission,setNotificationPermission]=useState(()=>("Notification" in window ? Notification.permission : "unsupported"));
+  const [notificationEnabled,setNotificationEnabled]=useState(false);
   const isAdmin=user?.role==="admin";
 
   const load=useCallback(async(msg="読み込み中...")=>{
@@ -2840,6 +2859,15 @@ function App() {
   },[]);
   useEffect(()=>{if(user)load();},[user]);
   useEffect(()=>{
+    if(!user || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setNotificationEnabled(false);
+      return;
+    }
+    getCurrentPushSubscription()
+      .then(sub=>setNotificationEnabled(!!sub && Notification.permission==="granted"))
+      .catch(()=>setNotificationEnabled(false));
+  },[user,notificationPermission]);
+  useEffect(()=>{
     if(!user || schedules.length===0 || !("Notification" in window)) return;
     setNotificationPermission(Notification.permission);
     if(Notification.permission!=="granted") return;
@@ -2848,6 +2876,12 @@ function App() {
   },[user,schedules]);
   const handleEnableNotifications=async()=>{
     try{
+      if(notificationEnabled){
+        await unsubscribeWebPush();
+        setNotificationEnabled(false);
+        alert("通知をOFFにしました");
+        return;
+      }
       const p=await enableNotifications();
       setNotificationPermission(p);
       if(p==="granted"){
@@ -2857,6 +2891,7 @@ function App() {
           alert("通知購読エラー: "+(e&&e.message?e.message:"不明なエラー"));
           return;
         }
+        setNotificationEnabled(true);
         await maybeNotifyDeadlines(schedules);
         await maybeNotifyUpcomingEvents(schedules);
         alert("通知をONにしました");
@@ -2988,7 +3023,7 @@ function App() {
   return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
     h("div",{className:"page"},
-      h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationPermission,onEnableNotifications:handleEnableNotifications}),
+      h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationEnabled,onEnableNotifications:handleEnableNotifications}),
       h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,
         boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
         h("div",{style:{display:"flex"}},
