@@ -36,7 +36,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwuhxlpPUWk9R7uiZZGeXHKPz7jy_WSgZ_9jOgG1mUVpdvxw0tittb6bdgacDWyNlYjGA/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwnJ7GqaR1Ffziam77FxUrbwph2ll7MMSQaT0twUENchJdyQcnc2xFbwkO7HQMZKNKQ5w/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -941,6 +941,10 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 // ── ホームタブ ─────────────────────────────────────────────────
 function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
   const [todayKey,setTodayKey]=useState(()=>todayLocal());
+  const getResultType = r => {
+    const linked = schedules.find(s => s.id === r.scheduleId) || schedules.find(s => nd(s.date) === nd(r.date));
+    return linked?.type || r.type || "";
+  };
   useEffect(()=>{
     const updateToday=()=>setTodayKey(todayLocal());
     const timer=setInterval(updateToday,60*1000);
@@ -984,7 +988,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"最近の試合結果"),
       recent.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"試合記録がありません"),
       recent.map(r=>{
-        const tc=getTC(r.type);
+        const tc=getTC(getResultType(r));
         const s=schedules.find(s=>s.id===r.scheduleId||nd(s.date)===nd(r.date));
         const dt=fmt(r.date);
         return h("div",{key:r.id,onClick:()=>onGoToMatch(r,s),style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",cursor:"pointer"}},
@@ -1785,6 +1789,10 @@ function EditResultModal({result, members, onSave, onClose}) {
 
 // ── 試合一覧：月別タブコンポーネント ─────────────────────────
 function MatchListByMonth({results,schedules,onGoToMatch}) {
+  const getResultType = r => {
+    const linked = schedules.find(s => s.id === r.scheduleId) || schedules.find(s => nd(s.date) === nd(r.date));
+    return linked?.type || r.type || "";
+  };
   // 月別グループ作成（降順）
   const groups = useMemo(() => {
     const map = {};
@@ -1851,7 +1859,7 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
 
     // 試合リスト
     cur&&cur.rs.map(r=>{
-      const tc=getTC(r.type);
+      const tc=getTC(getResultType(r));
       const s=schedules.find(s=>s.id===r.scheduleId||nd(s.date)===nd(r.date));
       const dt=fmt(r.date);
       return h("div",{key:r.id,onClick:()=>onGoToMatch(r,s),
@@ -2825,6 +2833,88 @@ function MemberTab({members,liftings=[]}) {
     }));
 }
 
+function SettingsTab({user,members,notificationEnabled,onToggleNotifications,onUpdateProfile}) {
+  const child = members.find(m => String(m.id || "") === String(user.memberId || ""));
+  const [editing,setEditing] = useState(false);
+  const [name,setName] = useState(user.name || "");
+  const [memberId,setMemberId] = useState(user.memberId || "");
+  const [saving,setSaving] = useState(false);
+
+  useEffect(()=>{
+    setName(user.name || "");
+    setMemberId(user.memberId || "");
+  },[user.id,user.name,user.memberId]);
+
+  const generations = [...new Set(members.map(m=>String(m.generation||"").trim()).filter(Boolean))].sort((a,b)=>Number(b)-Number(a));
+  const memberOptions = generations.flatMap(gen => {
+    const grouped = members
+      .filter(m => String(m.generation || "").trim() === gen)
+      .sort((a,b)=>Number(a.number||999)-Number(b.number||999));
+    if (!grouped.length) return [];
+    return [h("optgroup",{key:gen,label:`${gen}期生`},
+      grouped.map(m=>h("option",{key:m.id,value:m.id},`${m.name} #${m.number||"-"} (${m.grade||""})`))
+    )];
+  });
+
+  const save = async() => {
+    setSaving(true);
+    try{
+      await onUpdateProfile({name, memberId});
+      setEditing(false);
+      alert("設定を保存しました");
+    }catch(e){
+      alert("設定保存エラー: " + e.message);
+    }
+    setSaving(false);
+  };
+
+  return h(Fragment,{},
+    h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"👤 アカウント"),
+      editing ? h(Fragment,{},
+        h("div",{style:{marginBottom:12}},
+          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"表示名"),
+          h("input",{value:name,onChange:e=>setName(e.target.value),style:css.inp,placeholder:"保護者名"})),
+        h("div",{style:{marginBottom:16}},
+          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"子ども"),
+          h("select",{value:memberId,onChange:e=>setMemberId(e.target.value),style:css.inp},
+            h("option",{value:""},"選んでください"),
+            memberOptions)),
+        h("div",{style:{display:"flex",gap:10}},
+          h("button",{onClick:()=>{setEditing(false);setName(user.name||"");setMemberId(user.memberId||"");},style:css.bG},"キャンセル"),
+          h("button",{onClick:save,disabled:saving||!name||!memberId,style:{...css.bS,opacity:(!name||!memberId)?0.5:1}},saving?"保存中...":"保存する")))
+      : h(Fragment,{},
+        h("div",{style:{fontSize:12,color:"#888",marginBottom:8}},"メールアドレス"),
+        h("div",{style:{fontSize:15,fontWeight:700,color:"#1a1a2e",marginBottom:12}},user.email||"-"),
+        h("div",{style:{fontSize:12,color:"#888",marginBottom:8}},"表示名"),
+        h("div",{style:{fontSize:15,fontWeight:700,color:"#1a1a2e",marginBottom:12}},user.name||"-"),
+        h("div",{style:{fontSize:12,color:"#888",marginBottom:8}},"権限"),
+        h("div",{style:{fontSize:15,fontWeight:700,color:"#1a1a2e"}},user.role==="admin"?"admin":"member"),
+        h("button",{onClick:()=>setEditing(true),style:{...css.bS,width:"100%",marginTop:16}},"プロフィールを編集"))),
+    h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🧒 子ども情報"),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
+        h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:"12px 14px"}},
+          h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:4}},"名前"),
+          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.name||"-")),
+        h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:"12px 14px"}},
+          h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:4}},"期生"),
+          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.generation?`${child.generation}期生`:"-")),
+        h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:"12px 14px"}},
+          h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:4}},"学年"),
+          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.grade||"-")),
+        h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:"12px 14px"}},
+          h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:4}},"背番号"),
+          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.number||"-")))),
+    h("div",{style:{background:"#fff",borderRadius:16,padding:18,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🔔 通知設定"),
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}},
+        h("div",{},
+          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},notificationEnabled?"通知はONです":"通知はOFFです"),
+          h("div",{style:{fontSize:12,color:"#888",marginTop:4}},"締切通知・新規予定・YouTube更新で使います")),
+        h("button",{onClick:onToggleNotifications,style:{...css.bS,flexShrink:0,padding:"10px 16px",background:notificationEnabled?"#0F172A":"#1D4ED8"}},notificationEnabled?"通知OFF":"通知ON"))));
+}
+
 // ── メインアプリ ───────────────────────────────────────────────
 function App() {
   const [user,setUser]=useState(()=>{
@@ -2966,6 +3056,11 @@ function App() {
     catch(e){alert("エラー: "+e.message);}
     setLoading(false);
   };
+  const handleUpdateProfile=async({name,memberId})=>{
+    const r=await api("updateUserProfile",{userId:user.id,name,memberId});
+    saveUser({...user,...r.user});
+    await load("更新中...");
+  };
 
   // ── ページルーティング ────────────────────────────────────────
   if(!user) return h(Login,{onLogin:saveUser});
@@ -3018,6 +3113,7 @@ function App() {
     {k:"dash",   i:"📊",l:"成績"},
     {k:"member", i:"👥",l:"選手"},
     {k:"memo",   i:"📝",l:"メモ"},
+    ...(isAdmin?[{k:"settings",i:"⚙️",l:"設定"}]:[]),
   ];
 
   return h(Fragment,{},
@@ -3040,7 +3136,8 @@ function App() {
         tab==="match"&&h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch}),
         tab==="dash" &&h(DashTab,{results,members,schedules,liftings,isAdmin}),
         tab==="member"&&h(MemberTab,{members,liftings}),
-        tab==="memo" &&h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews}))));
+        tab==="memo" &&h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews}),
+        tab==="settings"&&h(SettingsTab,{user,members,notificationEnabled,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile}))));
 }
 
 render(h(App,{}), document.getElementById("app"));
