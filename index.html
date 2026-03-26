@@ -1055,6 +1055,8 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   const [attend, setAttend] = useState({});
   const [eventAttend, setEventAttend] = useState([]);
   const [attendLoading, setAttendLoading] = useState(true);
+  const [showClothes, setShowClothes] = useState(false);
+  const [showBelongings, setShowBelongings] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1313,12 +1315,24 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
       )
     ),
     !isEventSchedule && !isPracticeSchedule && form.clothes && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E3F2FD", borderRadius: 10 } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#2196F3", marginBottom: 4 } }, "👕 服装"),
-      h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.clothes)
+      h("button", {
+        onClick: () => setShowClothes(v => !v),
+        style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "transparent", border: "none", padding: 0, cursor: "pointer" }
+      },
+        h("div", { style: { fontSize: 11, fontWeight: 700, color: "#2196F3" } }, "👕 服装"),
+        h("div", { style: { fontSize: 20, fontWeight: 900, color: "#2196F3", lineHeight: 1 } }, showClothes ? "△" : "▽")
+      ),
+      showClothes && h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap", marginTop: 8 } }, form.clothes)
     ),
     !isEventSchedule && !isPracticeSchedule && form.belongings && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E2E8F0", borderRadius: 10 } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#0F172A", marginBottom: 4 } }, "🎒 持ち物"),
-      h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.belongings)
+      h("button", {
+        onClick: () => setShowBelongings(v => !v),
+        style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "transparent", border: "none", padding: 0, cursor: "pointer" }
+      },
+        h("div", { style: { fontSize: 11, fontWeight: 700, color: "#0F172A" } }, "🎒 持ち物"),
+        h("div", { style: { fontSize: 20, fontWeight: 900, color: "#0F172A", lineHeight: 1 } }, showBelongings ? "△" : "▽")
+      ),
+      showBelongings && h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap", marginTop: 8 } }, form.belongings)
     ),
     !isEventSchedule && !isPracticeSchedule && (form.duty || form.coach || form.luggagePerson || form.firstAidPerson) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4A5568", marginBottom: 8 } }, "📌 担当"),
