@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwnR-210gVGZWhNym9KUWIHuGmwUJxGHnamvhq8wKsmSsBr_S5AUeJFLpgQJGmHCdTE/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw7kogqb8Rj667Q_Z0xJOi7Tmsq0rh22zyh4ayTdDxywGcs4loxBl2USbGcwyXhEeUV/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -1047,8 +1047,11 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
     firstAidPerson: schedule.firstAidPerson || "",
     coach: schedule.coach || "丸尾コーチ",
     note: schedule.note || "",
+    pdfUrl: schedule.pdfUrl || "",
+    pdfName: schedule.pdfName || "",
   });
   const [saving, setSaving] = useState(false);
+  const [pdfUploading, setPdfUploading] = useState(false);
   const [attend, setAttend] = useState({});
   const [eventAttend, setEventAttend] = useState([]);
   const [attendLoading, setAttendLoading] = useState(true);
@@ -1112,6 +1115,33 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   const mapUrl = schedule.location
     ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(schedule.location)
     : "";
+  const pdfPreviewUrl = form.pdfUrl ? String(form.pdfUrl).replace("/view?usp=sharing", "/preview").replace("/view", "/preview") : "";
+  const uploadPdf = async(file) => {
+    if (!file) return;
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name || "")) {
+      alert("PDFファイルを選んでください");
+      return;
+    }
+    setPdfUploading(true);
+    try{
+      const dataUrl = await readFileAsDataUrl(file);
+      const base64 = dataUrl.split(",")[1] || "";
+      const r = await api("uploadSchedulePdf", {
+        scheduleId: schedule.id,
+        fileName: file.name,
+        mimeType: file.type || "application/pdf",
+        base64,
+      });
+      setForm(p => ({ ...p, pdfUrl: r.pdfUrl || "", pdfName: r.pdfName || file.name }));
+      schedule.pdfUrl = r.pdfUrl || "";
+      schedule.pdfName = r.pdfName || file.name;
+      alert("PDFを添付しました");
+    }catch(e){
+      alert("PDFアップロードエラー: " + (e.message || e));
+    }finally{
+      setPdfUploading(false);
+    }
+  };
   const save = async () => {
     setSaving(true);
     await onSave({
@@ -1228,6 +1258,23 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         style: { ...css.inp, width: "100%", resize: "none" }
       })
     ),
+    h("div", { style: { marginBottom: 16 } },
+      h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 6 } }, "PDF添付"),
+      form.pdfUrl && h("a", {
+        href: form.pdfUrl,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        style: { display: "inline-block", marginBottom: 8, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none" }
+      }, "📎 " + (form.pdfName || "添付PDFを開く")),
+      isAdmin && h("input", {
+        type: "file",
+        accept: "application/pdf,.pdf",
+        disabled: pdfUploading,
+        onChange: e => uploadPdf((e.target.files || [])[0]),
+        style: { ...css.inp, width: "100%", padding: 10, marginBottom: 0, opacity: pdfUploading ? 0.7 : 1 }
+      }),
+      isAdmin && pdfUploading && h("div", { style: { fontSize: 12, color: "#666", marginTop: 6 } }, "PDFアップロード中...")
+    ),
     h("button", {
       onClick: save,
       disabled: saving,
@@ -1292,6 +1339,20 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "コーチ"),
         h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, form.coach)
       )
+    ),
+    form.pdfUrl && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#DBEAFE", borderRadius: 10 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", marginBottom: 6 } }, "📎 添付PDF"),
+      h("a", {
+        href: form.pdfUrl,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        style: { display: "inline-block", marginBottom: 10, fontSize: 13, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all" }
+      }, form.pdfName || "PDFを開く"),
+      pdfPreviewUrl && h("iframe", {
+        src: pdfPreviewUrl,
+        title: form.pdfName || "添付PDF",
+        style: { width: "100%", height: 360, border: "none", borderRadius: 10, background: "#fff" }
+      })
     ),
     form.note && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8F9FA", borderRadius: 10, fontSize: 13, color: "#666", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.note),
     h("div", { style: { padding: "12px 14px", background: "#F8F9FA", borderRadius: 10 } },
@@ -2662,8 +2723,7 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
     h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"20px 20px 40px"}},
       h("div",{style:{display:"flex",gap:8,marginBottom:16}},
         h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
-        h("button",{onClick:onHome,style:{background:"rgba(29,78,216,0.75)",border:"1px solid rgba(29,78,216,0.45)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"🏠 ホーム"),
-        h("button",{onClick:()=>window.print(),style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"📄 PDF")),
+        h("button",{onClick:onHome,style:{background:"rgba(29,78,216,0.75)",border:"1px solid rgba(29,78,216,0.45)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"🏠 ホーム")),
       h("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}},
         h(Bdg,{label:tc.lb,color:tc.bg}),
         isAdmin&&h("button",{onClick:()=>setEditSch(true),style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"5px 12px",color:"#fff",fontSize:12,cursor:"pointer",flexShrink:0}},"✏️ 編集")),
@@ -3163,6 +3223,10 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
+
+
+
 
 
 
