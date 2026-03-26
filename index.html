@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
@@ -972,7 +972,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
   const daysUntil=nextSch?Math.ceil((new Date(nd(nextSch.date)+"T00:00:00")-new Date(today+"T00:00:00"))/(1000*60*60*24)):null;
   return h(Fragment,{},
     // ① 次の試合カード
-    nextSch&&h("div",{onClick:()=>onGoToDay&&onGoToDay(nextSch),style:{background:"linear-gradient(135deg,#1D4ED8,#0F172A)",borderRadius:18,padding:18,marginBottom:16,boxShadow:"0 4px 16px rgba(15,23,42,0.28)",cursor:"pointer"}},
+    nextSch&&h("div",{onClick:()=>onGoToDay&&onGoToDay(nextSch),style:{background:"linear-gradient(135deg,#1D4ED8,#0F172A)",borderRadius:18,padding:18,marginTop:8,marginBottom:16,boxShadow:"0 4px 16px rgba(15,23,42,0.28)",cursor:"pointer"}},
       h("div",{style:{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)",letterSpacing:2,marginBottom:8}},"NEXT EVENT"),
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
         h("div",{},
