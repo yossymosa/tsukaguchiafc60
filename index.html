@@ -3236,7 +3236,7 @@ function App() {
             h("span",{style:{fontSize:17}},t.i),
             h("span",{style:{fontSize:9,fontWeight:tab===t.k?700:400,
               color:tab===t.k?"#fff":"#aaa"}},t.l))))),
-      h("div",{style:{padding:"0 16px"}},
+      h("div",{style:{padding:"12px 16px 0"}},
         tab==="home" &&h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab}),
         tab==="cal"  &&h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule}),
         tab==="match"&&h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch}),
@@ -3256,11 +3256,6 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
-
-
-
-
-
 
 
 
