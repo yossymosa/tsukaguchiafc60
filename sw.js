@@ -1,4 +1,4 @@
-const CACHE_NAME = "tsukaguchi-afc-v5";
+const CACHE_NAME = "tsukaguchi-afc-v7";
 const APP_SHELL = ["/", "/index.html", "/manifest.json", "/icon-512.png", "/icon.svg", "/badge-icon.svg"];
 
 self.addEventListener("install", event => {

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
@@ -981,13 +981,6 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
         h("div",{style:{textAlign:"center",background:"rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 16px",flexShrink:0,marginLeft:12}},
           h("div",{style:{fontSize:28,fontWeight:900,color:"#fff"}},daysUntil===0?"今日":daysUntil),
           h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.8)",fontWeight:700}},daysUntil===0?"":"日後")))),
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}},
-      h("button",{onClick:()=>onOpenDashTab&&onOpenDashTab("result"),style:{background:"#fff",border:"none",borderRadius:14,padding:"16px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.06)",textAlign:"left",cursor:"pointer"}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",letterSpacing:1,marginBottom:6}},"成績"),
-        h("div",{style:{fontSize:15,fontWeight:800,color:"#1a1a2e"}},"対戦成績")),
-      h("button",{onClick:()=>onOpenDashTab&&onOpenDashTab("tournament"),style:{background:"#fff",border:"none",borderRadius:14,padding:"16px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.06)",textAlign:"left",cursor:"pointer"}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",letterSpacing:1,marginBottom:6}},"成績"),
-        h("div",{style:{fontSize:15,fontWeight:800,color:"#1a1a2e"}},"大会結果"))),
     // ② LINKS（一番上）
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"LINKS"),
