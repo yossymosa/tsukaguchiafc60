@@ -1330,21 +1330,6 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, form.coach)
       )
     ),
-    form.pdfUrl && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#DBEAFE", borderRadius: 10 } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", marginBottom: 4 } }, "📎 添付PDF"),
-      h("a", {
-        href: form.pdfUrl,
-        target: "_blank",
-        rel: "noopener noreferrer",
-        style: { fontSize: 13, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all" }
-      }, form.pdfName || "PDFを開く"),
-      h("div", { style: { marginTop: 10, background: "#fff", borderRadius: 10, overflow: "hidden", border: "1px solid rgba(29,78,216,0.16)" } },
-        h("iframe", {
-          src: form.pdfUrl,
-          title: form.pdfName || "添付PDF",
-          style: { width: "100%", height: 420, border: "none", background: "#fff" }
-        }))
-    ),
     form.note && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8F9FA", borderRadius: 10, fontSize: 13, color: "#666", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.note),
     h("div", { style: { padding: "12px 14px", background: "#F8F9FA", borderRadius: 10 } },
       isEventSchedule
