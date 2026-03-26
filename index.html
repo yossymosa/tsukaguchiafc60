@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzVnTUvfvW8ieuiAIrCS9L5bqrI1G-vPRzyCE4zjz-zQYUXgAdX2A6JtazW_BqctiFk/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwR11mo7Nyn0lFnUlY4mVapKHOKVvhwBk0hGAksbECiDqGBFDQLyk_IeL7I2rZ6U7Ep/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -972,9 +972,39 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
     return ()=>clearInterval(timer);
   },[]);
   const recent=results.slice(0,5);
-  const recentNews=news.filter(n=>n.category!=="コーチメモ").slice(0,5);
+  const openNotice = n => {
+    if (n.targetType === "schedule" && onGoToDay) {
+      const target = schedules.find(s => s.id === n.targetId) || schedules.find(s => nd(s.date) === nd(n.date) && s.title === n.title);
+      if (target) return onGoToDay(target);
+    }
+    if (n.targetUrl) {
+      window.open(n.targetUrl, "_blank", "noopener");
+    }
+  };
   // 次の試合を探す
   const today=todayKey;
+  const deadlineNews = schedules
+    .filter(s => s.deadline && nd(s.deadline) >= today)
+    .sort((a,b) => nd(a.deadline).localeCompare(nd(b.deadline)))
+    .slice(0,3)
+    .map(s => ({
+      id: `deadline-${s.id}`,
+      date: s.deadline,
+      title: "出欠締切のお知らせ",
+      content: `${fmt(s.deadline).full} が「${s.title || "予定"}」の出欠締切です`,
+      targetType: "schedule",
+      targetId: s.id,
+      isDeadline: true,
+    }));
+  const recentNews = [
+    ...deadlineNews,
+    ...news
+      .filter(n=>n.category!=="コーチメモ")
+      .slice()
+      .reverse()
+  ]
+    .filter((n,idx,arr)=>arr.findIndex(x=>x.id===n.id)===idx)
+    .slice(0,5);
   const nextSch=schedules.filter(s=>nd(s.date)>=today).sort((a,b)=>nd(a.date).localeCompare(nd(b.date)))[0];
   const daysUntil=nextSch?Math.ceil((new Date(nd(nextSch.date)+"T00:00:00")-new Date(today+"T00:00:00"))/(1000*60*60*24)):null;
   return h(Fragment,{},
@@ -999,11 +1029,12 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"お知らせ"),
       recentNews.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"お知らせはありません"),
-      recentNews.map(n=>h("div",{key:n.id,style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}},
+      recentNews.map(n=>h("div",{key:n.id,onClick:()=>openNotice(n),style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",cursor:(n.targetType||n.targetUrl)?"pointer":"default"}},
         h("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:4}},
           h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e",flex:1,paddingRight:8}},n.title),
           h("div",{style:{fontSize:11,color:"#bbb"}},fmt(n.date).short)),
-        h("div",{style:{fontSize:12,color:"#666",lineHeight:1.6}},n.content)))),
+        h("div",{style:{fontSize:12,color:"#666",lineHeight:1.6}},n.content),
+        (n.targetType||n.targetUrl)&&h("div",{style:{marginTop:6,fontSize:11,fontWeight:700,color:"#1D4ED8"}},n.isDeadline?"日程を開く":"詳細を見る")))),
     // ③ 最近の試合結果
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"最近の試合結果"),
