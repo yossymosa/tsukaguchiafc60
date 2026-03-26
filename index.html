@@ -42,7 +42,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycby1omRxF_2oKDM_k-EvFIbgLp5DFzBL54AQOq0rc-ratw1jnNYhDR3eKYGyV2Zn_X0lMQ/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxPX-wTOK5EcND41sXYNhcPKm4W4U_jS5pmeMJNrhqZ9hNIjb4CV_PZjLANW_Y-hCWb/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -840,7 +840,7 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
         // YouTubeリンクボタン（URLは非表示）
         (match.youtubeUrl||match.youtubeUrl1st||match.youtubeUrl2nd)&&h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}},
           [
-            match.youtubeUrl    &&{label:"▶ 1st",url:match.youtubeUrl},
+            match.youtubeUrl    &&{label:"▶ 通し",url:match.youtubeUrl},
             match.youtubeUrl1st &&{label:"▶ 前半",url:match.youtubeUrl1st},
             match.youtubeUrl2nd &&{label:"▶ 後半",url:match.youtubeUrl2nd},
           ].filter(Boolean).map(x=>h("a",{key:x.label,href:x.url,target:"_blank",rel:"noopener",
@@ -2003,7 +2003,7 @@ function RankList({title,icon,data,unit}) {
     }));
 }
 
-function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDashTab="result"}) {
+function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDashTab="result",onGoToMatch}) {
   const [dashTab,setDashTab]=useState(initialDashTab); // "result" | "tournament" | "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
   const [periodF,setPeriodF]=useState("year"); // "year"|"month"|"lastmonth"|"custom"
@@ -2208,12 +2208,13 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
             oppFiltered.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:16}},"試合がありません"),
             oppFiltered.map((r,i)=>{
               const tc=getTC(r.type);
+              const linkedSchedule = schedules.find(s => s.id === r.scheduleId) || schedules.find(s => nd(s.date) === nd(r.date));
               const dt=fmt(r.date);
               const our=Number(r.ourScore||0),their=Number(r.theirScore||0);
               const rw=our>their?"勝":our===their?"分":"負";
               const rwc=our>their?"#4CAF50":our===their?"#FFC107":"#F44336";
-              return h("div",{key:r.id,style:{display:"flex",alignItems:"center",gap:10,
-                marginBottom:i<oppFiltered.length-1?8:0,padding:"8px 10px",background:"#F8F9FA",borderRadius:10}},
+              return h("div",{key:r.id,onClick:()=>linkedSchedule&&onGoToMatch&&onGoToMatch(r,linkedSchedule),style:{display:"flex",alignItems:"center",gap:10,
+                marginBottom:i<oppFiltered.length-1?8:0,padding:"8px 10px",background:"#F8F9FA",borderRadius:10,cursor:linkedSchedule?"pointer":"default"}},
                 h("div",{style:{fontSize:11,color:"#aaa",flexShrink:0,width:36,textAlign:"center"}},dt.short),
                 h("div",{style:{width:3,height:32,background:tc.bg,borderRadius:2,flexShrink:0}}),
                 h("div",{style:{flex:1,fontSize:13,fontWeight:600,color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},"vs "+r.opponent),
@@ -3240,7 +3241,7 @@ function App() {
         tab==="home" &&h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab}),
         tab==="cal"  &&h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule}),
         tab==="match"&&h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch}),
-        tab==="dash" &&h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab}),
+        tab==="dash" &&h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch}),
         tab==="member"&&h(MemberTab,{members,liftings}),
         tab==="memo" &&h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews}),
         tab==="settings"&&h(SettingsTab,{user,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile}))));
@@ -3256,6 +3257,11 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
+
+
+
+
 
 
 
