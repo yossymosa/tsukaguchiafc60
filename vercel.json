@@ -21,6 +21,10 @@
       "destination": "/icon.svg"
     },
     {
+      "source": "/badge-icon.svg",
+      "destination": "/badge-icon.svg"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
