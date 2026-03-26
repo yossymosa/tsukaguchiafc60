@@ -3189,7 +3189,31 @@ function App() {
         tab==="settings"&&h(SettingsTab,{user,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile}))));
 }
 
-render(h(App,{}), document.getElementById("app"));
+function showBootError(message){
+  const app = document.getElementById("app") || document.body;
+  if(!app) return;
+  app.innerHTML = "";
+  const box = document.createElement("div");
+  box.style.cssText = "margin:24px;padding:16px;border-radius:14px;background:#7F1D1D;color:#fff;font:14px/1.6 'Noto Sans JP',sans-serif;white-space:pre-wrap;box-shadow:0 8px 24px rgba(0,0,0,0.18)";
+  box.textContent = "表示エラー\n" + message;
+  app.appendChild(box);
+}
+
+window.addEventListener("error", e => {
+  showBootError((e && e.message ? e.message : "不明なエラー") + (e && e.filename ? "\n" + e.filename + ":" + e.lineno : ""));
+});
+
+window.addEventListener("unhandledrejection", e => {
+  const reason = e && e.reason;
+  const message = reason && reason.message ? reason.message : String(reason || "Promiseエラー");
+  showBootError(message);
+});
+
+try{
+  render(h(App,{}), document.getElementById("app"));
+}catch(e){
+  showBootError(e && e.message ? e.message : "起動に失敗しました");
+}
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
