@@ -1038,11 +1038,8 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
     firstAidPerson: schedule.firstAidPerson || "",
     coach: schedule.coach || "丸尾コーチ",
     note: schedule.note || "",
-    pdfUrl: schedule.pdfUrl || "",
-    pdfName: schedule.pdfName || "",
   });
   const [saving, setSaving] = useState(false);
-  const [pdfUploading, setPdfUploading] = useState(false);
   const [attend, setAttend] = useState({});
   const [eventAttend, setEventAttend] = useState([]);
   const [attendLoading, setAttendLoading] = useState(true);
@@ -1106,32 +1103,6 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   const mapUrl = schedule.location
     ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(schedule.location)
     : "";
-  const uploadPdf = async(file) => {
-    if (!file) return;
-    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name || "")) {
-      alert("PDFファイルを選んでください");
-      return;
-    }
-    setPdfUploading(true);
-    try{
-      const dataUrl = await readFileAsDataUrl(file);
-      const base64 = dataUrl.split(",")[1] || "";
-      const r = await api("uploadSchedulePdf", {
-        scheduleId: schedule.id,
-        fileName: file.name,
-        mimeType: file.type || "application/pdf",
-        base64,
-      });
-      setForm(p => ({ ...p, pdfUrl: r.pdfUrl || "", pdfName: r.pdfName || file.name }));
-      schedule.pdfUrl = r.pdfUrl || "";
-      schedule.pdfName = r.pdfName || file.name;
-      alert("PDFを添付しました");
-    }catch(e){
-      alert("PDFアップロードエラー: " + e.message);
-    }
-    setPdfUploading(false);
-  };
-
   const save = async () => {
     setSaving(true);
     await onSave({
@@ -1247,23 +1218,6 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         rows: 3,
         style: { ...css.inp, width: "100%", resize: "none" }
       })
-    ),
-    h("div", { style: { marginBottom: 16 } },
-      h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 6 } }, "PDF添付"),
-      form.pdfUrl && h("a", {
-        href: form.pdfUrl,
-        target: "_blank",
-        rel: "noopener noreferrer",
-        style: { display: "inline-block", marginBottom: 8, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none" }
-      }, "📎 " + (form.pdfName || "添付PDFを開く")),
-      isAdmin && h("input", {
-        type: "file",
-        accept: "application/pdf,.pdf",
-        disabled: pdfUploading,
-        onChange: e => uploadPdf((e.target.files || [])[0]),
-        style: { ...css.inp, width: "100%", padding: 10, marginBottom: 0, opacity: pdfUploading ? 0.7 : 1 }
-      }),
-      isAdmin && pdfUploading && h("div", { style: { fontSize: 12, color: "#666", marginTop: 6 } }, "PDFアップロード中...")
     ),
     h("button", {
       onClick: save,
@@ -3190,32 +3144,7 @@ function App() {
     )
   );
 }
-
-function showBootError(message){
-  const app = document.getElementById("app") || document.body;
-  if(!app) return;
-  app.innerHTML = "";
-  const box = document.createElement("div");
-  box.style.cssText = "margin:24px;padding:16px;border-radius:14px;background:#7F1D1D;color:#fff;font:14px/1.6 'Noto Sans JP',sans-serif;white-space:pre-wrap;box-shadow:0 8px 24px rgba(0,0,0,0.18)";
-  box.textContent = "表示エラー\n" + message;
-  app.appendChild(box);
-}
-
-window.addEventListener("error", e => {
-  showBootError((e && e.message ? e.message : "不明なエラー") + (e && e.filename ? "\n" + e.filename + ":" + e.lineno : ""));
-});
-
-window.addEventListener("unhandledrejection", e => {
-  const reason = e && e.reason;
-  const message = reason && reason.message ? reason.message : String(reason || "Promiseエラー");
-  showBootError(message);
-});
-
-try{
-  render(h(App,{}), document.getElementById("app"));
-}catch(e){
-  showBootError(e && e.message ? e.message : "起動に失敗しました");
-}
+render(h(App,{}), document.getElementById("app"));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
