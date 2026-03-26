@@ -1,5 +1,5 @@
-const CACHE_NAME = "tsukaguchi-afc-v4";
-const APP_SHELL = ["/", "/index.html", "/manifest.json", "/icon-512.png"];
+const CACHE_NAME = "tsukaguchi-afc-v5";
+const APP_SHELL = ["/", "/index.html", "/manifest.json", "/icon-512.png", "/icon.svg", "/badge-icon.svg"];
 
 self.addEventListener("install", event => {
   event.waitUntil(
@@ -47,6 +47,39 @@ self.addEventListener("fetch", event => {
         }
         return response;
       });
+    })
+  );
+});
+
+self.addEventListener("push", event => {
+  const data = (() => {
+    try {
+      return event.data ? event.data.json() : {};
+    } catch (e) {
+      return {};
+    }
+  })();
+  const title = data.title || "塚口AFC Jr";
+  const options = {
+    body: data.body || "",
+    icon: "/icon-512.png",
+    badge: "/badge-icon.svg",
+    data: {
+      url: data.url || "/",
+    },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+      for (const client of list) {
+        if ("focus" in client) return client.focus();
+      }
+      if (clients.openWindow) return clients.openWindow(targetUrl);
     })
   );
 });
