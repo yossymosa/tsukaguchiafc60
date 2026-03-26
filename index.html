@@ -939,7 +939,7 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 }
 
 // ── ホームタブ ─────────────────────────────────────────────────
-function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
+function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,onOpenDashTab}) {
   const [todayKey,setTodayKey]=useState(()=>todayLocal());
   const getResultType = r => {
     const linked = schedules.find(s => s.id === r.scheduleId) || schedules.find(s => nd(s.date) === nd(r.date));
@@ -958,7 +958,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
   const daysUntil=nextSch?Math.ceil((new Date(nd(nextSch.date)+"T00:00:00")-new Date(today+"T00:00:00"))/(1000*60*60*24)):null;
   return h(Fragment,{},
     // ① 次の試合カード
-    nextSch&&h("div",{style:{background:"linear-gradient(135deg,#1D4ED8,#0F172A)",borderRadius:18,padding:18,marginBottom:16,boxShadow:"0 4px 16px rgba(15,23,42,0.28)"}},
+    nextSch&&h("div",{onClick:()=>onGoToDay&&onGoToDay(nextSch),style:{background:"linear-gradient(135deg,#1D4ED8,#0F172A)",borderRadius:18,padding:18,marginBottom:16,boxShadow:"0 4px 16px rgba(15,23,42,0.28)",cursor:"pointer"}},
       h("div",{style:{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)",letterSpacing:2,marginBottom:8}},"NEXT EVENT"),
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
         h("div",{},
@@ -967,6 +967,13 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch}) {
         h("div",{style:{textAlign:"center",background:"rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 16px",flexShrink:0,marginLeft:12}},
           h("div",{style:{fontSize:28,fontWeight:900,color:"#fff"}},daysUntil===0?"今日":daysUntil),
           h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.8)",fontWeight:700}},daysUntil===0?"":"日後")))),
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}},
+      h("button",{onClick:()=>onOpenDashTab&&onOpenDashTab("result"),style:{background:"#fff",border:"none",borderRadius:14,padding:"16px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.06)",textAlign:"left",cursor:"pointer"}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",letterSpacing:1,marginBottom:6}},"成績"),
+        h("div",{style:{fontSize:15,fontWeight:800,color:"#1a1a2e"}},"対戦成績")),
+      h("button",{onClick:()=>onOpenDashTab&&onOpenDashTab("tournament"),style:{background:"#fff",border:"none",borderRadius:14,padding:"16px 14px",boxShadow:"0 2px 8px rgba(0,0,0,0.06)",textAlign:"left",cursor:"pointer"}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",letterSpacing:1,marginBottom:6}},"成績"),
+        h("div",{style:{fontSize:15,fontWeight:800,color:"#1a1a2e"}},"大会結果"))),
     // ② LINKS（一番上）
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"LINKS"),
@@ -1513,6 +1520,10 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
 // ── 出欠セクション（DayPage内で使用） ────────────────────────
 function AttendSection({schedule, members, user, isAdmin}) {
   const isEventSchedule = normalizeType(schedule.type) === "event";
+  const isGrade2OrBelow = (grade) => {
+    const g = String(grade || "").trim();
+    return ["2年","２年","1年","１年","年長","年中","年少"].includes(g);
+  };
   const [attend, setAttend] = useState({});   // {memberId: status}
   const [eventAttend, setEventAttend] = useState([]);
   const [eventForm, setEventForm] = useState({adultCount:"0", childCount:"0", preschoolCount:"0"});
@@ -1522,7 +1533,7 @@ function AttendSection({schedule, members, user, isAdmin}) {
   // 3年生メンバー
   const grade3 = members.filter(m=>m.grade==="3年"||m.grade==="３年");
   // 2年以下メンバー
-  const under2 = members.filter(m=>!["3年","３年"].includes(m.grade||""));
+  const under2 = members.filter(m=>isGrade2OrBelow(m.grade));
 
   // スケジュールの出欠を読み込み
   useEffect(() => {
@@ -1722,7 +1733,7 @@ function AttendSection({schedule, members, user, isAdmin}) {
       })(),
       // 帯同選択（2年生以下）
       (()=>{
-        const under2 = members.filter(m=>!["3年","３年"].includes(m.grade||"")).sort((a,b)=>Number(a.number)-Number(b.number));
+        const under2 = members.filter(m=>isGrade2OrBelow(m.grade)).sort((a,b)=>Number(a.number)-Number(b.number));
         if(!under2.length) return null;
         return h("div",{style:{marginTop:12,padding:"12px 14px",background:"#E3F2FD",borderRadius:12}},
           h("div",{style:{fontSize:11,fontWeight:700,color:"#2196F3",marginBottom:10}},"帯同メンバー（2年生以下）"),
@@ -1931,12 +1942,13 @@ function RankList({title,icon,data,unit}) {
     }));
 }
 
-function DashTab({results,members,schedules,liftings=[],isAdmin=false}) {
-  const [dashTab,setDashTab]=useState("result"); // "result" | "tournament" | "rank" | "personal"
+function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDashTab="result"}) {
+  const [dashTab,setDashTab]=useState(initialDashTab); // "result" | "tournament" | "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
   const [periodF,setPeriodF]=useState("year"); // "year"|"month"|"lastmonth"|"custom"
   const [from,setFrom]=useState(""); const [to,setTo]=useState("");
   const [oppFilter,setOppFilter]=useState("all"); // "all" or opponent name
+  useEffect(()=>{ if(initialDashTab) setDashTab(initialDashTab); },[initialDashTab]);
   const getResultType=row=>{
     const linked=row.scheduleId?schedules.find(s=>s.id===row.scheduleId):schedules.find(s=>nd(s.date)===nd(row.date));
     return normalizeType(row.type || linked?.type || "");
@@ -2567,6 +2579,7 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
   const [rank,setRank]=useState(schedule.rank||"");
   const [rankSaving,setRankSaving]=useState(false);
   const [editSch,setEditSch]=useState(false);
+  const [editSchSaving,setEditSchSaving]=useState(false);
   const [schForm,setSchForm]=useState({date:schedule.date||"",title:schedule.title||"",location:schedule.location||"",type:schedule.type||"practice",deadline:schedule.deadline||""});
   const [hpModal,setHpModal]=useState(false);
   const [hpText,setHpText]=useState("");
@@ -2577,11 +2590,20 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
     setDayTab(isSimpleDay ? "detail" : "matches");
   },[schedule.id,isSimpleDay]);
   const saveEditSch=async()=>{
-    await api("updateSchedule",{schedule:{...schForm,id:schedule.id,mvp:schedule.mvp||"",deadline:schForm.deadline||""}});
-    // ローカルでscheduleを更新（再ロードせず）
-    schedule.date=schForm.date; schedule.title=schForm.title;
-    schedule.location=schForm.location; schedule.type=schForm.type;
-    setEditSch(false);
+    setEditSchSaving(true);
+    try{
+      const nextType = normalizeType(schForm.type) || schForm.type;
+      await api("updateSchedule",{schedule:{...schForm,id:schedule.id,type:nextType,mvp:schedule.mvp||"",deadline:schForm.deadline||""}});
+      schedule.date = schForm.date;
+      schedule.title = schForm.title;
+      schedule.location = schForm.location;
+      schedule.type = nextType;
+      schedule.deadline = schForm.deadline || "";
+      setEditSch(false);
+    }catch(e){
+      alert("日程更新エラー: " + e.message);
+    }
+    setEditSchSaving(false);
   };
   const saveMvp=async()=>{
     setMvpSaving(true);
@@ -2616,6 +2638,7 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
   };
 
   return h("div",{className:"page"},
+    editSchSaving&&h(Loader,{msg:"更新中..."}),
     // HP用テンプレモーダル
     hpModal&&h(Modal,{title:"📋 HP用テンプレ",onClose:()=>setHpModal(false)},
       h("div",{style:{marginBottom:12}},
@@ -2645,7 +2668,7 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
           background:"#FF9800",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}},
         "📧 メールで送る"))),
     // 日程編集モーダル
-    editSch&&h(Modal,{title:"📅 日程を編集",onClose:()=>setEditSch(false)},
+    editSch&&h(Modal,{title:"📅 日程を編集",onClose:()=>!editSchSaving&&setEditSch(false)},
       h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"種類"),
         h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
@@ -2664,8 +2687,8 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"出欠締め切り日（任意）"),
         h("input",{type:"date",value:schForm.deadline||"",onChange:e=>setSchForm(p=>({...p,deadline:e.target.value})),style:{...css.inp,width:"100%"}})),
       h("div",{style:{display:"flex",gap:10}},
-        h("button",{onClick:()=>setEditSch(false),style:css.bG},"キャンセル"),
-        h("button",{onClick:saveEditSch,style:css.bS},"保存する")),
+        h("button",{onClick:()=>setEditSch(false),disabled:editSchSaving,style:{...css.bG,opacity:editSchSaving?0.5:1}},"キャンセル"),
+        h("button",{onClick:saveEditSch,disabled:editSchSaving,style:{...css.bS,opacity:editSchSaving?0.7:1}},editSchSaving?"保存中...":"保存する")),
       isAdmin&&h("button",{onClick:()=>{setEditSch(false);onDeleteSchedule&&onDeleteSchedule(schedule);},
         style:{width:"100%",marginTop:12,padding:12,background:"#FFEBEE",color:"#F44336",border:"none",borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer"}},"🗑 日程を削除")),
     // ヘッダー
@@ -2797,8 +2820,13 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
 function MemberTab({members,liftings=[]}) {
   const [pos,setPos]=useState("all");
   const [gradeF,setGradeF]=useState("3年");
-  const grades=["3年",...[...new Set(members.map(m=>m.grade||"").filter(g=>g&&g!=="3年"))].sort(),"全員"];
-  const gradeFiltered=gradeF==="全員"?members:members.filter(m=>(m.grade||"")===(gradeF==="3年"?"3年":gradeF)||(m.grade||"")===(gradeF==="3年"?"３年":gradeF));
+  const allowedGrades = ["3年","３年","2年","２年","1年","１年"];
+  const gradeOrder = {"3年":0,"３年":0,"2年":1,"２年":1,"1年":2,"１年":2};
+  const grades=["3年",...[...new Set(members.map(m=>m.grade||"").filter(g=>g&&g!=="3年"&&g!=="３年"&&allowedGrades.includes(g)))].sort((a,b)=>(gradeOrder[a]??99)-(gradeOrder[b]??99)),"全員"];
+  const baseMembers = members.filter(m=>allowedGrades.includes(m.grade||""));
+  const gradeFiltered=gradeF==="全員"
+    ? baseMembers
+    : baseMembers.filter(m=>(m.grade||"")===(gradeF==="3年"?"3年":gradeF)||(m.grade||"")===(gradeF==="3年"?"３年":gradeF));
   const filtered=pos==="all"?gradeFiltered:gradeFiltered.filter(m=>m.position===pos);
   const sorted=[...filtered].sort((a,b)=>Number(a.number||99)-Number(b.number||99));
   return h(Fragment,{},
@@ -2910,9 +2938,15 @@ function SettingsTab({user,members,notificationEnabled,onToggleNotifications,onU
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🔔 通知設定"),
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}},
         h("div",{},
-          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},notificationEnabled?"通知はONです":"通知はOFFです"),
+          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},notificationEnabled?"ON":"OFF"),
           h("div",{style:{fontSize:12,color:"#888",marginTop:4}},"締切通知・新規予定・YouTube更新で使います")),
-        h("button",{onClick:onToggleNotifications,style:{...css.bS,flexShrink:0,padding:"10px 16px",background:notificationEnabled?"#0F172A":"#1D4ED8"}},notificationEnabled?"通知OFF":"通知ON"))));
+        h("button",{onClick:onToggleNotifications,ariaLabel:"通知切り替え",
+          style:{width:58,height:32,flexShrink:0,border:"none",borderRadius:999,
+            background:notificationEnabled?"#1D4ED8":"#CBD5E1",padding:3,cursor:"pointer",
+            display:"flex",alignItems:"center",justifyContent:notificationEnabled?"flex-end":"flex-start",
+            transition:"all .2s ease"}},
+          h("span",{style:{width:26,height:26,borderRadius:"50%",background:"#fff",
+            boxShadow:"0 2px 6px rgba(0,0,0,0.18)",display:"block"}})))));
 }
 
 // ── メインアプリ ───────────────────────────────────────────────
@@ -2924,6 +2958,7 @@ function App() {
   const [loading,setLoading]=useState(false);
   const [loadMsg,setLoadMsg]=useState("読み込み中...");
   const [tab,setTab]=useState("home");
+  const [dashInitialTab,setDashInitialTab]=useState("result");
   const [page,setPage]=useState(null); // null | {type,schedule?,match?}
   const [members,setMembers]=useState([]);
   const [schedules,setSchedules]=useState([]);
@@ -3000,6 +3035,10 @@ function App() {
   // ── ハンドラ（全てここで定義）─────────────────────────────────
   const goToMatch=(r,s)=>setPage({type:"matchDetail",match:r,schedule:s});
   const goToDay  =(s)  =>setPage({type:"dayDetail",schedule:s});
+  const openDashTab = (nextTab) => {
+    setDashInitialTab(nextTab || "result");
+    setTab("dash");
+  };
   const goBack   =()   =>setPage(null);
 
   const handleAddResult=async fr=>{
@@ -3131,10 +3170,10 @@ function App() {
             h("span",{style:{fontSize:9,fontWeight:tab===t.k?700:400,
               color:tab===t.k?"#fff":"#aaa"}},t.l))))),
       h("div",{style:{padding:"0 16px"}},
-        tab==="home" &&h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch}),
+        tab==="home" &&h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab}),
         tab==="cal"  &&h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule}),
         tab==="match"&&h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch}),
-        tab==="dash" &&h(DashTab,{results,members,schedules,liftings,isAdmin}),
+        tab==="dash" &&h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab}),
         tab==="member"&&h(MemberTab,{members,liftings}),
         tab==="memo" &&h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews}),
         tab==="settings"&&h(SettingsTab,{user,members,notificationEnabled,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile}))));
