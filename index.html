@@ -32,6 +32,15 @@ input,select,textarea,button{font-family:'Noto Sans JP',sans-serif;}
 <body>
 <div id="app"></div>
 <script>
+const __bootRoot = document.getElementById("app");
+function __bootMessage(text){
+  if(!__bootRoot) return;
+  __bootRoot.innerHTML = '<div style="max-width:480px;margin:24px auto;padding:16px;border-radius:14px;background:#7F1D1D;color:#fff;font:14px/1.6 Noto Sans JP,sans-serif;white-space:pre-wrap;">'+text+'</div>';
+}
+if(!window.preact || !window.preactHooks){
+  __bootMessage("画面の読み込みに失敗しました\nライブラリの取得に失敗しています");
+  throw new Error("preact_failed");
+}
 // Preact globals from UMD
 const { h, render, Fragment } = preact;
 const { useState, useEffect, useCallback, useMemo } = preactHooks;
