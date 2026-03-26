@@ -1,7 +1,7 @@
-﻿{
-  "name": "蝪壼哨AFC Jr",
-  "short_name": "蝪壼哨AFC",
-  "description": "蝪壼哨AFC Jr 邂｡逅・い繝励Μ",
+{
+  "name": "塚口AFC Jr",
+  "short_name": "塚口AFC",
+  "description": "塚口AFC Jr 記録アプリ",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
