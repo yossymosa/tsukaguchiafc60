@@ -92,6 +92,16 @@ function normalizeType(type) {
   if (label === "イベント") return "event";
   return String(type || "");
 }
+function findScheduleForResult(result, schedules) {
+  if (!result) return null;
+  return schedules.find(s => s.id === result.scheduleId)
+    || schedules.find(s => nd(s.date) === nd(result.date) && normalizeType(s.type) === normalizeType(result.type || result.formatLabel || ""))
+    || schedules.find(s => nd(s.date) === nd(result.date));
+}
+function getResultDisplayType(result, schedules) {
+  const linked = findScheduleForResult(result, schedules);
+  return linked?.type || result.type || result.formatLabel || "";
+}
 const TC={
   practice:{bg:"#4CAF50",lb:"練習"},
   official:{bg:"#1D4ED8",lb:"公式戦"},
@@ -987,10 +997,6 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 // ── ホームタブ ─────────────────────────────────────────────────
 function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,onOpenDashTab}) {
   const [todayKey,setTodayKey]=useState(()=>todayLocal());
-  const getResultType = r => {
-    const linked = schedules.find(s => s.id === r.scheduleId) || schedules.find(s => nd(s.date) === nd(r.date));
-    return linked?.type || r.type || "";
-  };
   useEffect(()=>{
     const updateToday=()=>setTodayKey(todayLocal());
     const timer=setInterval(updateToday,60*1000);
@@ -1064,8 +1070,8 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"最近の試合結果"),
       recent.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"試合記録がありません"),
       recent.map(r=>{
-        const tc=getTC(getResultType(r));
-        const s=schedules.find(s=>s.id===r.scheduleId||nd(s.date)===nd(r.date));
+        const tc=getTC(getResultDisplayType(r,schedules));
+        const s=findScheduleForResult(r,schedules);
         const dt=fmt(r.date);
         return h("div",{key:r.id,onClick:()=>onGoToMatch(r,s),style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",cursor:"pointer"}},
           h("div",{style:{textAlign:"center",flexShrink:0,width:36}},h("div",{style:{fontSize:11,color:"#aaa"}},dt.short),h("div",{style:{fontSize:10,color:"#ccc"}},dt.dw)),
@@ -1140,6 +1146,9 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   const memberOpts = ["FW", "MF", "DF", "GK"]
     .flatMap(pos => members.filter(m => m.position === pos).sort((a, b) => Number(a.number) - Number(b.number)))
     .concat(members.filter(m => !["FW", "MF", "DF", "GK"].includes(m.position)));
+  const userOpts = [...users]
+    .filter(u => u && u.name)
+    .sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"ja"));
 
   const gradeGroups = {};
   participants.forEach(m => {
@@ -1252,7 +1261,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
       style: { ...css.inp, width: "100%" }
     },
       h("option", { value: "" }, "-- 未設定 --"),
-      memberOpts.map(m => h("option", { key: m.id, value: m.name }, m.name.split(/[ 　]/)[0] + "さん")),
+      userOpts.map(u => h("option", { key: u.id, value: toSurname(u.name) }, toSurname(u.name))),
       extra.map(v => h("option", { key: v, value: v }, v))
     )
   );
@@ -1293,7 +1302,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
           style: { ...css.inp, width: "100%" }
         },
           h("option", { value: "" }, "-- 未設定 --"),
-          memberOpts.map(m => h("option", { key: m.id, value: m.name.split(/[ 　]/)[0] + "さん" }, m.name.split(/[ 　]/)[0] + "さん")),
+          userOpts.map(u => h("option", { key: u.id, value: toSurname(u.name) }, toSurname(u.name))),
           h("option", { value: "その他" }, "その他")
         )
       ),
@@ -2146,7 +2155,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   };
   function typeMatch(r,typeF){
     if(typeF==="all") return true;
-    const baseType = r && Object.prototype.hasOwnProperty.call(r,"opponent") ? getResultType(r) : normalizeType(r.type);
+    const baseType = r && Object.prototype.hasOwnProperty.call(r,"opponent") ? getResultDisplayType(r,schedules) : normalizeType(r.type);
     return baseType===normalizeType(typeF);
   }
   const periodRange=useMemo(()=>{
@@ -3252,15 +3261,20 @@ function App() {
   // ── ページルーティング ────────────────────────────────────────
   if(!user) return h(Login,{onLogin:saveUser});
 
+  const resolvedMatchSchedule = page?.type==="matchDetail"
+    ? (findScheduleForResult(page.match, schedules) || page.schedule || null)
+    : null;
+
   if(page?.type==="matchDetail") return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
     h(GoalPage,{
-      match:page.match,schedule:page.schedule,members,isAdmin,
+      match:page.match,schedule:resolvedMatchSchedule,members,isAdmin,
       onHome:goBack,
-      onBack:()=>setPage({type:"dayDetail",schedule:page.schedule}),
+      onBack:()=>resolvedMatchSchedule ? setPage({type:"dayDetail",schedule:resolvedMatchSchedule}) : setPage(null),
       onSaved:async()=>{
         await load("更新中...");
-        setPage({type:"dayDetail",schedule:page.schedule});
+        if (resolvedMatchSchedule) setPage({type:"dayDetail",schedule:resolvedMatchSchedule});
+        else setPage(null);
       }
     }));
 
