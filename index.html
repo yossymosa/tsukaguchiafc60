@@ -103,14 +103,12 @@ function normalizeType(type) {
 }
 function findScheduleForResult(result, schedules) {
   if (!result) return null;
-  const resultType = normalizeType(result.type || result.formatLabel || "");
+  const resultType = normalizeType(result.type || "");
   const sameDay = schedules.filter(s => nd(s.date) === nd(result.date));
   return schedules.find(s => String(s.id || "") === String(result.scheduleId || ""))
     || sameDay.find(s => normalizeType(s.type) === resultType && resultType)
-    || sameDay.find(s => String(s.title || "").trim() === String(result.formatLabel || "").trim() && String(result.formatLabel || "").trim())
-    || sameDay.find(s => normalizeType(s.type) === normalizeType(result.formatLabel || "") && String(result.formatLabel || "").trim())
-    || sameDay[0]
-    || null;
+    || sameDay.find(s => String(s.title || "").trim() === String(result.memo || "").trim() && String(result.memo || "").trim())
+    || (sameDay.length === 1 ? sameDay[0] : null);
 }
 function getResultDisplayType(result, schedules) {
   const linked = findScheduleForResult(result, schedules);
@@ -118,7 +116,6 @@ function getResultDisplayType(result, schedules) {
     linked?.type,
     linked?.title,
     result.type,
-    result.formatLabel,
     result.memo,
   ].filter(Boolean);
   for (const value of candidates) {
