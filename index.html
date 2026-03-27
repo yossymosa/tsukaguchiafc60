@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwR11mo7Nyn0lFnUlY4mVapKHOKVvhwBk0hGAksbECiDqGBFDQLyk_IeL7I2rZ6U7Ep/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxBVmhoYeLaFQmA0HQgEi9qwUgP8Lq_jTY1-DdvEL0vXftmof06Vvy0sDjStKAY4Oc/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -1146,7 +1146,30 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   const mapUrl = schedule.location
     ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(schedule.location)
     : "";
-  const pdfPreviewUrl = form.pdfUrl ? String(form.pdfUrl).replace("/view?usp=sharing", "/preview").replace("/view", "/preview") : "";
+  const parsePdfItems = (urlRaw, nameRaw) => {
+    const normalize = value => String(value || "").trim();
+    const urlsText = normalize(urlRaw);
+    const namesText = normalize(nameRaw);
+    if (!urlsText) return [];
+    try {
+      const parsedUrls = JSON.parse(urlsText);
+      if (Array.isArray(parsedUrls)) {
+        if (parsedUrls.length && typeof parsedUrls[0] === "object") {
+          return parsedUrls
+            .map(item => ({ url: normalize(item.url), name: normalize(item.name) }))
+            .filter(item => item.url);
+        }
+        let parsedNames = [];
+        try { parsedNames = JSON.parse(namesText || "[]"); } catch (e) {}
+        return parsedUrls
+          .map((url, idx) => ({ url: normalize(url), name: normalize(parsedNames[idx]) }))
+          .filter(item => item.url);
+      }
+    } catch (e) {}
+    return [{ url: urlsText, name: namesText }];
+  };
+  const pdfItems = parsePdfItems(form.pdfUrl, form.pdfName);
+  const pdfPreviewUrl = url => String(url || "").replace("/view?usp=sharing", "/preview").replace("/view", "/preview");
   const uploadPdf = async(file) => {
     if (!file) return;
     if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name || "")) {
@@ -1163,9 +1186,9 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         mimeType: file.type || "application/pdf",
         base64,
       });
-      setForm(p => ({ ...p, pdfUrl: r.pdfUrl || "", pdfName: r.pdfName || file.name }));
+      setForm(p => ({ ...p, pdfUrl: r.pdfUrl || "", pdfName: r.pdfName || "" }));
       schedule.pdfUrl = r.pdfUrl || "";
-      schedule.pdfName = r.pdfName || file.name;
+      schedule.pdfName = r.pdfName || "";
       alert("PDFを添付しました");
     }catch(e){
       alert("PDFアップロードエラー: " + (e.message || e));
@@ -1291,12 +1314,15 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
     ),
     h("div", { style: { marginBottom: 16 } },
       h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 6 } }, "PDF添付"),
-      form.pdfUrl && h("a", {
-        href: form.pdfUrl,
-        target: "_blank",
-        rel: "noopener noreferrer",
-        style: { display: "inline-block", marginBottom: 8, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none" }
-      }, "📎 " + (form.pdfName || "添付PDFを開く")),
+      pdfItems.length > 0 && h("div", { style: { marginBottom: 8 } },
+        pdfItems.map((item, idx) => h("a", {
+          key: item.url + idx,
+          href: item.url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          style: { display: "block", marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none" }
+        }, "📎 " + (item.name || `添付PDF ${idx + 1}`)))
+      ),
       isAdmin && h("input", {
         type: "file",
         accept: "application/pdf,.pdf",
@@ -1383,19 +1409,21 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, form.coach)
       )
     ),
-    form.pdfUrl && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#DBEAFE", borderRadius: 10 } },
+    pdfItems.length > 0 && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#DBEAFE", borderRadius: 10 } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", marginBottom: 6 } }, "📎 添付PDF"),
-      h("a", {
-        href: form.pdfUrl,
-        target: "_blank",
-        rel: "noopener noreferrer",
-        style: { display: "inline-block", marginBottom: 10, fontSize: 13, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all" }
-      }, form.pdfName || "PDFを開く"),
-      pdfPreviewUrl && h("iframe", {
-        src: pdfPreviewUrl,
-        title: form.pdfName || "添付PDF",
-        style: { width: "100%", height: 360, border: "none", borderRadius: 10, background: "#fff" }
-      })
+      pdfItems.map((item, idx) => h("div", { key: item.url + "-preview-" + idx, style: { marginBottom: idx < pdfItems.length - 1 ? 16 : 0 } },
+        h("a", {
+          href: item.url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          style: { display: "inline-block", marginBottom: 10, fontSize: 13, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all" }
+        }, item.name || `PDFを開く ${idx + 1}`),
+        pdfPreviewUrl(item.url) && h("iframe", {
+          src: pdfPreviewUrl(item.url),
+          title: item.name || `添付PDF ${idx + 1}`,
+          style: { width: "100%", height: 360, border: "none", borderRadius: 10, background: "#fff" }
+        })
+      ))
     ),
     form.note && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8F9FA", borderRadius: 10, fontSize: 13, color: "#666", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.note),
     h("div", { style: { padding: "12px 14px", background: "#F8F9FA", borderRadius: 10 } },
