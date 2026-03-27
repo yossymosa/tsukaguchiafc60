@@ -101,16 +101,21 @@ function normalizeType(type) {
   if (label === "イベント") return "event";
   return lower;
 }
+function candidateSchedulesForResult(result, schedules) {
+  const sameDayAll = schedules.filter(s => nd(s.date) === nd(result?.date));
+  const titled = sameDayAll.filter(s => String(s.title || "").trim() && String(s.title || "").trim() !== "(タイトルなし)");
+  return titled.length ? titled : sameDayAll;
+}
 function findScheduleForResult(result, schedules) {
   if (!result) return null;
   const resultType = normalizeType(result.type || "");
-  const sameDay = schedules.filter(s => nd(s.date) === nd(result.date));
+  const sameDay = candidateSchedulesForResult(result, schedules);
   const byId = schedules.find(s => String(s.id || "") === String(result.scheduleId || ""));
   if (byId) return byId;
   if (resultType) {
     const typed = sameDay.filter(s => normalizeType(s.type) === resultType);
     if (typed.length === 1) return typed[0];
-    const typedTitled = typed.find(s => String(s.title || "").trim());
+    const typedTitled = typed.find(s => String(s.title || "").trim() && String(s.title || "").trim() !== "(タイトルなし)");
     if (typedTitled) return typedTitled;
   }
   const memoText = String(result.memo || "").trim();
@@ -118,24 +123,31 @@ function findScheduleForResult(result, schedules) {
     const memoMatched = sameDay.find(s => String(s.title || "").trim() === memoText);
     if (memoMatched) return memoMatched;
   }
+  const uniqueTypes = [...new Set(sameDay.map(s => normalizeType(s.type)).filter(Boolean))];
+  if (!resultType && uniqueTypes.length === 1) {
+    const matched = sameDay.filter(s => normalizeType(s.type) === uniqueTypes[0]);
+    if (matched.length === 1) return matched[0];
+    const titledMatch = matched.find(s => String(s.title || "").trim() && String(s.title || "").trim() !== "(タイトルなし)");
+    if (titledMatch) return titledMatch;
+  }
   if (sameDay.length === 1) return sameDay[0];
-  const titledSameDay = sameDay.filter(s => String(s.title || "").trim());
-  if (titledSameDay.length === 1) return titledSameDay[0];
   return null;
 }
 function getResultDisplayType(result, schedules) {
   const linked = findScheduleForResult(result, schedules);
   const candidates = [
     linked?.type,
-    linked?.title,
     result.type,
+    linked?.title,
     result.memo,
   ].filter(Boolean);
   for (const value of candidates) {
     const normalized = normalizeType(value);
     if (normalized) return normalized;
   }
-  return "";
+  const sameDay = candidateSchedulesForResult(result, schedules);
+  const uniqueTypes = [...new Set(sameDay.map(s => normalizeType(s.type)).filter(Boolean))];
+  return uniqueTypes.length === 1 ? uniqueTypes[0] : "";
 }
 const TC={
   practice:{bg:"#4CAF50",lb:"練習"},
