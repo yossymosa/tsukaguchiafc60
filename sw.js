@@ -1,5 +1,5 @@
 const CACHE_NAME = "tsukaguchi-afc-v7";
-const APP_SHELL = ["/", "/index.html", "/manifest.json", "/icon-512.png", "/icon.svg", "/badge-icon.svg"];
+const APP_SHELL = ["/", "/index.html", "/manifest.json", "/icon-512.png"];
 
 self.addEventListener("install", event => {
   event.waitUntil(
@@ -63,7 +63,7 @@ self.addEventListener("push", event => {
   const options = {
     body: data.body || "",
     icon: "/icon-512.png",
-    badge: "/badge-icon.svg",
+    badge: "/icon-512.png",
     data: {
       url: data.url || "/",
     },
