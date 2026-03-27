@@ -105,10 +105,23 @@ function findScheduleForResult(result, schedules) {
   if (!result) return null;
   const resultType = normalizeType(result.type || "");
   const sameDay = schedules.filter(s => nd(s.date) === nd(result.date));
-  return schedules.find(s => String(s.id || "") === String(result.scheduleId || ""))
-    || sameDay.find(s => normalizeType(s.type) === resultType && resultType)
-    || sameDay.find(s => String(s.title || "").trim() === String(result.memo || "").trim() && String(result.memo || "").trim())
-    || (sameDay.length === 1 ? sameDay[0] : null);
+  const byId = schedules.find(s => String(s.id || "") === String(result.scheduleId || ""));
+  if (byId) return byId;
+  if (resultType) {
+    const typed = sameDay.filter(s => normalizeType(s.type) === resultType);
+    if (typed.length === 1) return typed[0];
+    const typedTitled = typed.find(s => String(s.title || "").trim());
+    if (typedTitled) return typedTitled;
+  }
+  const memoText = String(result.memo || "").trim();
+  if (memoText) {
+    const memoMatched = sameDay.find(s => String(s.title || "").trim() === memoText);
+    if (memoMatched) return memoMatched;
+  }
+  if (sameDay.length === 1) return sameDay[0];
+  const titledSameDay = sameDay.filter(s => String(s.title || "").trim());
+  if (titledSameDay.length === 1) return titledSameDay[0];
+  return null;
 }
 function getResultDisplayType(result, schedules) {
   const linked = findScheduleForResult(result, schedules);
@@ -2731,7 +2744,7 @@ function MemoTab({news,isAdmin,user,onAdd,onDelete}) {
 }
 
 // ── その日の試合まとめページ ─────────────────────────────────────
-function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onAdd,onEdit,onDelete,onDeleteSchedule,onBack,onHome,onSaveMvp}) {
+function DayPage({schedule,results,schedules,members,isAdmin,user,users=[],onGoToMatch,onAdd,onEdit,onDelete,onDeleteSchedule,onBack,onHome,onSaveMvp}) {
   const isEventDay = normalizeType(schedule.type) === "event";
   const isPracticeDay = normalizeType(schedule.type) === "practice";
   const isSimpleDay = isEventDay || isPracticeDay;
@@ -2739,7 +2752,9 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
   const tc=getTC(schedule.type);
   const dt=fmt(schedule.date);
   const dayR=results
-    .filter(r=>r.scheduleId===schedule.id||nd(r.date)===nd(schedule.date))
+    .filter(r=> schedule.id
+      ? (String(r.scheduleId||"")===String(schedule.id) || (!r.scheduleId && findScheduleForResult(r, schedules)?.id===schedule.id))
+      : nd(r.date)===nd(schedule.date))
     .sort((a,b)=>Number(a.gameNumber||1)-Number(b.gameNumber||1));
 
   // 合計スコア集計
@@ -3213,7 +3228,7 @@ function App() {
   };
 
   // ── ハンドラ（全てここで定義）─────────────────────────────────
-  const goToMatch=(r,s)=>setPage({type:"matchDetail",match:r,schedule:s});
+  const goToMatch=(r,s)=>setPage({type:"matchDetail",match:r,schedule:(s&&s.id)?s:null});
   const goToDay  =(s)  =>setPage({type:"dayDetail",schedule:s});
   const openDashTab = (nextTab) => {
     setDashInitialTab(nextTab || "result");
@@ -3285,7 +3300,7 @@ function App() {
   if(!user) return h(Login,{onLogin:saveUser});
 
   const resolvedMatchSchedule = page?.type==="matchDetail"
-    ? (findScheduleForResult(page.match, schedules) || page.schedule || null)
+    ? (findScheduleForResult(page.match, schedules) || ((page.schedule && page.schedule.id) ? page.schedule : null))
     : null;
 
   if(page?.type==="matchDetail") return h(Fragment,{},
@@ -3318,8 +3333,8 @@ function App() {
       setLoading(false);setEditResult(null);
     },onClose:()=>setEditResult(null)}),
     h(DayPage,{
-      schedule:page.schedule,results,members,isAdmin,user,users,
-      onGoToMatch:(r,s)=>setPage({type:"matchDetail",match:r,schedule:s}),
+      schedule:page.schedule,results,schedules,members,isAdmin,user,users,
+      onGoToMatch:(r,s)=>setPage({type:"matchDetail",match:r,schedule:(s&&s.id)?s:null}),
       onAdd:s=>setPage({type:"addMatch",schedule:s}),
       onEdit:r=>setEditResult(r),
       onDelete:handleDeleteResult,
