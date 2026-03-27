@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxBVmhoYeLaFQmA0HQgEi9qwUgP8Lq_jTY1-DdvEL0vXftmof06Vvy0sDjStKAY4Oc/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyuGBvFWkD0yG6ULuiaKtTC36IDzx-LDmXSFzgR8eUBw05_MSqS4jFiKqyyPQxjYVd4/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -201,6 +201,26 @@ function fmt(v) {
   const dt=new Date(s+"T00:00:00");
   const dw=["日","月","火","水","木","金","土"][dt.getDay()];
   return {y:s.slice(0,4),m:s.slice(5,7),d:s.slice(8,10),dw,short:s.slice(5,7)+"/"+s.slice(8,10),full:s.slice(0,4)+"年"+s.slice(5,7)+"月"+s.slice(8,10)+"日("+dw+")"};
+}
+function fmtDateTime(v) {
+  if(!v) return {date:"",time:"",label:""};
+  const raw=String(v).trim();
+  const dt=/^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(raw+"T00:00:00") : new Date(raw);
+  if(isNaN(dt.getTime())) {
+    const f=fmt(raw);
+    return {date:f.short,time:"",label:f.short};
+  }
+  const dw=["日","月","火","水","木","金","土"][dt.getDay()];
+  const date=`${String(dt.getMonth()+1).padStart(2,"0")}/${String(dt.getDate()).padStart(2,"0")}(${dw})`;
+  const time=`${String(dt.getHours()).padStart(2,"0")}:${String(dt.getMinutes()).padStart(2,"0")}`;
+  return {date,time,label:time==="00:00"?date:`${date} ${time}`};
+}
+function isRecentNews(v) {
+  if(!v) return false;
+  const raw=String(v).trim();
+  const dt=/^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(raw+"T00:00:00") : new Date(raw);
+  if(isNaN(dt.getTime())) return false;
+  return (Date.now()-dt.getTime()) < 2*24*60*60*1000;
 }
 function getCurrentThirdGeneration() {
   const now = new Date();
@@ -1027,13 +1047,18 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"お知らせ"),
       recentNews.length===0&&h("div",{style:{background:"#fff",borderRadius:12,padding:16,textAlign:"center",color:"#ccc",fontSize:12}},"お知らせはありません"),
-      recentNews.map(n=>h("div",{key:n.id,onClick:()=>openNotice(n),style:{background:"#fff",borderRadius:12,padding:"9px 12px",marginBottom:6,boxShadow:"0 2px 8px rgba(0,0,0,0.04)",cursor:(n.targetType||n.targetUrl)?"pointer":"default"}},
-        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}},
-          h("div",{style:{display:"flex",alignItems:"center",gap:6,minWidth:0}},
-            h("span",{style:{display:"inline-block",fontSize:9,fontWeight:800,color:"#fff",background:"#1D4ED8",borderRadius:999,padding:"2px 6px"}},"NEW"),
-            h("div",{style:{fontSize:10,color:"#94A3B8"}},fmt(n.date).short)),
-          (n.targetType||n.targetUrl)&&h("div",{style:{fontSize:10,fontWeight:700,color:"#1D4ED8"}},"→")),
-        h("div",{style:{fontSize:12,color:"#334155",lineHeight:1.5,fontWeight:600}},(n.content||n.title||"").replace(/^新しい予定が追加されました\s*/,""))))),
+      recentNews.map(n=>{
+        const meta=fmtDateTime(n.date);
+        const summary=(n.content||n.title||"").replace(/^新しい予定が追加されました\s*/,"");
+        const showNew=isRecentNews(n.date);
+        return h("div",{key:n.id,onClick:()=>openNotice(n),style:{background:"#fff",borderRadius:12,padding:"10px 12px",marginBottom:6,boxShadow:"0 2px 8px rgba(0,0,0,0.04)",cursor:(n.targetType||n.targetUrl)?"pointer":"default"}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}},
+            h("div",{style:{display:"flex",alignItems:"center",gap:8,minWidth:0,flexWrap:"wrap"}},
+              showNew&&h("span",{style:{display:"inline-block",fontSize:9,fontWeight:800,color:"#fff",background:"#1D4ED8",borderRadius:999,padding:"2px 6px",letterSpacing:0.6}},"NEW"),
+              h("div",{style:{fontSize:10,color:"#94A3B8",letterSpacing:0.4}},meta.label)),
+            (n.targetType||n.targetUrl)&&h("div",{style:{fontSize:10,fontWeight:700,color:"#1D4ED8",marginLeft:10}},"→")),
+          h("div",{style:{fontSize:12,color:"#334155",lineHeight:1.7,fontWeight:600,whiteSpace:"pre-wrap"}},summary));
+      })),
     // ③ 最近の試合結果
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"最近の試合結果"),
@@ -3313,6 +3338,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
