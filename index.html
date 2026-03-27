@@ -361,6 +361,11 @@ function AppHeader({user,onLogout,onRefresh}) {
       h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}},
         h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.85)",fontWeight:600}},user.name),
         h("div",{style:{display:"flex",gap:6}},
+          HOME_LINKS.map(l=>h("a",{key:l.label,href:l.url,target:"_blank",rel:"noopener noreferrer",title:l.label,style:{
+            width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",
+            background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",
+            borderRadius:8,fontSize:13,textDecoration:"none"
+          }},l.icon)),
           h("button",{onClick:onRefresh,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"🔄"),
           h("button",{onClick:onLogout,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"ログアウト")))));
 }
@@ -1018,23 +1023,17 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
         h("div",{style:{textAlign:"center",background:"rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 16px",flexShrink:0,marginLeft:12}},
           h("div",{style:{fontSize:28,fontWeight:900,color:"#fff"}},daysUntil===0?"今日":daysUntil),
           h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.8)",fontWeight:700}},daysUntil===0?"":"日後")))),
-    // ② LINKS（一番上）
-    h("div",{style:{marginBottom:20}},
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"LINKS"),
-      h("div",{style:{display:"flex",gap:10}},
-        HOME_LINKS.map(l=>h("a",{key:l.label,href:l.url,target:"_blank",rel:"noopener noreferrer",style:{flex:1,background:"#fff",borderRadius:14,padding:"14px 8px",textAlign:"center",textDecoration:"none",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-          h("div",{style:{fontSize:22,marginBottom:5}},l.icon),
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#1a1a2e"}},l.label))))),
     // ② お知らせ
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"お知らせ"),
-      recentNews.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"お知らせはありません"),
-      recentNews.map(n=>h("div",{key:n.id,onClick:()=>openNotice(n),style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",cursor:(n.targetType||n.targetUrl)?"pointer":"default"}},
-        h("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:4}},
-          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e",flex:1,paddingRight:8}},n.title),
-          h("div",{style:{fontSize:11,color:"#bbb"}},fmt(n.date).short)),
-        h("div",{style:{fontSize:12,color:"#666",lineHeight:1.6}},n.content),
-        (n.targetType||n.targetUrl)&&h("div",{style:{marginTop:6,fontSize:11,fontWeight:700,color:"#1D4ED8"}},n.isDeadline?"日程を開く":"詳細を見る")))),
+      recentNews.length===0&&h("div",{style:{background:"#fff",borderRadius:12,padding:16,textAlign:"center",color:"#ccc",fontSize:12}},"お知らせはありません"),
+      recentNews.map(n=>h("div",{key:n.id,onClick:()=>openNotice(n),style:{background:"#fff",borderRadius:12,padding:"9px 12px",marginBottom:6,boxShadow:"0 2px 8px rgba(0,0,0,0.04)",cursor:(n.targetType||n.targetUrl)?"pointer":"default"}},
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:6,minWidth:0}},
+            h("span",{style:{display:"inline-block",fontSize:9,fontWeight:800,color:"#fff",background:"#1D4ED8",borderRadius:999,padding:"2px 6px"}},"NEW"),
+            h("div",{style:{fontSize:10,color:"#94A3B8"}},fmt(n.date).short)),
+          (n.targetType||n.targetUrl)&&h("div",{style:{fontSize:10,fontWeight:700,color:"#1D4ED8"}},"→")),
+        h("div",{style:{fontSize:12,color:"#334155",lineHeight:1.5,fontWeight:600}},(n.content||n.title||"").replace(/^新しい予定が追加されました\s*/,""))))),
     // ③ 最近の試合結果
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"最近の試合結果"),
