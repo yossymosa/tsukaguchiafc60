@@ -1323,13 +1323,33 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
           style: { display: "block", marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none" }
         }, "📎 " + (item.name || `添付PDF ${idx + 1}`)))
       ),
-      isAdmin && h("input", {
-        type: "file",
-        accept: "application/pdf,.pdf",
-        disabled: pdfUploading,
-        onChange: e => uploadPdf((e.target.files || [])[0]),
-        style: { ...css.inp, width: "100%", padding: 10, marginBottom: 0, opacity: pdfUploading ? 0.7 : 1 }
-      }),
+      isAdmin && h("label", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          width: "100%",
+          padding: "12px 14px",
+          borderRadius: 12,
+          border: "1.5px dashed #93C5FD",
+          background: pdfUploading ? "#EFF6FF" : "linear-gradient(135deg,#EFF6FF,#DBEAFE)",
+          color: "#1D4ED8",
+          fontSize: 13,
+          fontWeight: 800,
+          cursor: pdfUploading ? "default" : "pointer",
+          opacity: pdfUploading ? 0.7 : 1
+        }
+      },
+        h("span", {}, pdfUploading ? "PDFアップロード中..." : "＋ PDFを追加"),
+        h("input", {
+          type: "file",
+          accept: "application/pdf,.pdf",
+          disabled: pdfUploading,
+          onChange: e => uploadPdf((e.target.files || [])[0]),
+          style: { display: "none" }
+        })
+      ),
       isAdmin && pdfUploading && h("div", { style: { fontSize: 12, color: "#666", marginTop: 6 } }, "PDFアップロード中...")
     ),
     h("button", {
