@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
@@ -84,19 +84,33 @@ function getTC(type) {
   return m[type]||{bg:"#999",lb:type||"その他"};
 }
 function normalizeType(type) {
-  const label = getTC(type).lb;
+  const raw = String(type || "").trim();
+  const lower = raw.toLowerCase();
+  if (!raw) return "";
+  if (["official","cup","training","practice","event"].includes(lower)) return lower;
+  if (/公式|リーグ|選手権|大会/.test(raw)) return "official";
+  if (/カップ|cup/i.test(raw)) return "cup";
+  if (/トレマ|tm|練習試合|トレーニングマッチ|training/i.test(raw)) return "training";
+  if (/練習|practice/i.test(raw)) return "practice";
+  if (/イベント|開会式|event/i.test(raw)) return "event";
+  const label = getTC(raw).lb;
   if (label === "公式戦") return "official";
   if (label === "カップ戦") return "cup";
   if (label === "トレマ") return "training";
   if (label === "練習") return "practice";
   if (label === "イベント") return "event";
-  return String(type || "");
+  return lower;
 }
 function findScheduleForResult(result, schedules) {
   if (!result) return null;
-  return schedules.find(s => s.id === result.scheduleId)
-    || schedules.find(s => nd(s.date) === nd(result.date) && normalizeType(s.type) === normalizeType(result.type || result.formatLabel || ""))
-    || schedules.find(s => nd(s.date) === nd(result.date));
+  const resultType = normalizeType(result.type || result.formatLabel || "");
+  const sameDay = schedules.filter(s => nd(s.date) === nd(result.date));
+  return schedules.find(s => String(s.id || "") === String(result.scheduleId || ""))
+    || sameDay.find(s => normalizeType(s.type) === resultType && resultType)
+    || sameDay.find(s => String(s.title || "").trim() === String(result.formatLabel || "").trim() && String(result.formatLabel || "").trim())
+    || sameDay.find(s => normalizeType(s.type) === normalizeType(result.formatLabel || "") && String(result.formatLabel || "").trim())
+    || sameDay[0]
+    || null;
 }
 function getResultDisplayType(result, schedules) {
   const linked = findScheduleForResult(result, schedules);
@@ -1801,7 +1815,7 @@ function AttendSection({schedule, members, user, isAdmin}) {
 
   // 締め切りチェック
   const deadline = schedule.deadline || "";
-  const today = new Date().toISOString().slice(0,10);
+  const today = todayLocal();
   const isPast = deadline && deadline < today;
   if (isEventSchedule) {
     const totals = eventAttend.reduce((acc, row) => ({
@@ -2000,10 +2014,7 @@ function EditResultModal({result, members, onSave, onClose}) {
 
 // ── 試合一覧：月別タブコンポーネント ─────────────────────────
 function MatchListByMonth({results,schedules,onGoToMatch}) {
-  const getResultType = r => {
-    const linked = schedules.find(s => s.id === r.scheduleId) || schedules.find(s => nd(s.date) === nd(r.date));
-    return linked?.type || r.type || "";
-  };
+  const getResultType = r => getResultDisplayType(r, schedules);
   // 月別グループ作成（降順）
   const groups = useMemo(() => {
     const map = {};
@@ -2071,7 +2082,7 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
     // 試合リスト
     cur&&cur.rs.map(r=>{
       const tc=getTC(getResultType(r));
-      const s=schedules.find(s=>s.id===r.scheduleId||nd(s.date)===nd(r.date));
+      const s=findScheduleForResult(r,schedules);
       const dt=fmt(r.date);
       return h("div",{key:r.id,onClick:()=>onGoToMatch(r,s),
         style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,
@@ -2149,10 +2160,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const [from,setFrom]=useState(""); const [to,setTo]=useState("");
   const [oppFilter,setOppFilter]=useState("all"); // "all" or opponent name
   useEffect(()=>{ if(initialDashTab) setDashTab(initialDashTab); },[initialDashTab]);
-  const getResultType=row=>{
-    const linked=row.scheduleId?schedules.find(s=>s.id===row.scheduleId):schedules.find(s=>nd(s.date)===nd(row.date));
-    return normalizeType(row.type || linked?.type || "");
-  };
+  const getResultType=row=> normalizeType(getResultDisplayType(row, schedules));
   function typeMatch(r,typeF){
     if(typeF==="all") return true;
     const baseType = r && Object.prototype.hasOwnProperty.call(r,"opponent") ? getResultDisplayType(r,schedules) : normalizeType(r.type);
@@ -2183,7 +2191,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   ,[filtered,oppFilter]);
   const st=calcStats(filtered);
   const tournamentFiltered=useMemo(()=>schedules.filter(s=>{
-    if(!["official","cup","公式戦","カップ戦"].includes(s.type)) return false;
+    if(!["official","cup"].includes(normalizeType(s.type))) return false;
     if(typeF!=="all"&&!typeMatch(s,typeF)) return false;
     const d=nd(s.date);
     if(periodRange.f&&d<periodRange.f) return false;
@@ -2461,7 +2469,7 @@ function LiftingInput({members,liftings}) {
   const save=async()=>{
     if(!selId||!cnt) return;
     setSaving(true);
-    await api("saveLifting",{memberId:selId,memberName:sel?.name||"",count:Number(cnt),date:new Date().toISOString().slice(0,10)});
+    await api("saveLifting",{memberId:selId,memberName:sel?.name||"",count:Number(cnt),date:todayLocal()});
     // ローカル反映
     const lf=liftings.find(x=>x.memberId===selId);
     if(lf){lf.count=Number(cnt);}else{liftings.push({memberId:selId,memberName:sel?.name||"",count:Number(cnt)});}
@@ -2491,7 +2499,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
   const [month,setMonth]=useState(today.getMonth());
   const [modal,setModal]=useState(false);
   const [fs,setFs]=useState({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official"});
-  const todayStr=today.toISOString().slice(0,10);
+  const todayStr=todayLocal();
 
   // 過去の場所一覧（重複除去）
   const pastLocations=[...new Set(schedules.map(s=>s.location).filter(Boolean))];
