@@ -114,7 +114,18 @@ function findScheduleForResult(result, schedules) {
 }
 function getResultDisplayType(result, schedules) {
   const linked = findScheduleForResult(result, schedules);
-  return linked?.type || result.type || result.formatLabel || "";
+  const candidates = [
+    linked?.type,
+    linked?.title,
+    result.type,
+    result.formatLabel,
+    result.memo,
+  ].filter(Boolean);
+  for (const value of candidates) {
+    const normalized = normalizeType(value);
+    if (normalized) return normalized;
+  }
+  return "";
 }
 const TC={
   practice:{bg:"#4CAF50",lb:"練習"},
@@ -218,6 +229,13 @@ function nd(v) {
 function todayLocal() {
   const d=new Date();
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function dateOnly(v) {
+  const s = String(v || "").trim();
+  if (!s) return "";
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
+  return nd(s);
 }
 function fmt(v) {
   const s=nd(v);
@@ -2519,7 +2537,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
     const titleVal=isPractice?"練習":fs.title;
     if(!fs.date) return alert("日付を入力してください");
     if(!titleVal) return alert("タイトルを入力してください");
-    const dateVal=(!fs.allDay&&fs.timeFrom)?fs.date+"T"+fs.timeFrom:fs.date;
+    const dateBase=dateOnly(fs.date) || todayStr; const dateVal=(!fs.allDay&&fs.timeFrom)?dateBase+"T"+fs.timeFrom:dateBase;
     const timeLabel=(!fs.allDay&&fs.timeFrom)?(fs.timeFrom+(fs.timeTo?" - "+fs.timeTo:"")):"";
     await onAddSchedule({...fs,title:titleVal,date:dateVal,timeLabel});
     setFs({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official"});
@@ -2591,7 +2609,7 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
       )
     ),
     isAdmin&&h("div",{style:{display:"flex",gap:8}},
-      h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"7px 14px",fontSize:12,whiteSpace:"nowrap"}},"+ 日程追加"))
+      h("button",{onClick:()=>{setFs(p=>({...p,date:dateOnly(p.date)||todayStr}));setModal(true);},style:{...css.bO,padding:"7px 14px",fontSize:12,whiteSpace:"nowrap"}},"+ 日程追加"))
   )
 ),
     // ── 今月の予定リスト
@@ -2740,7 +2758,7 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
   const [rankSaving,setRankSaving]=useState(false);
   const [editSch,setEditSch]=useState(false);
   const [editSchSaving,setEditSchSaving]=useState(false);
-  const [schForm,setSchForm]=useState({date:schedule.date||"",title:schedule.title||"",location:schedule.location||"",type:schedule.type||"practice",deadline:schedule.deadline||""});
+  const [schForm,setSchForm]=useState({date:dateOnly(schedule.date)||"",title:schedule.title||"",location:schedule.location||"",type:schedule.type||"practice",deadline:dateOnly(schedule.deadline)||""});
   const [hpModal,setHpModal]=useState(false);
   const [hpText,setHpText]=useState("");
   const [aiPrompt,setAiPrompt]=useState("以下のポイントを考慮して、ホームページに載せる文章を作成して、試合結果の下に付け足して");
@@ -2753,12 +2771,12 @@ function DayPage({schedule,results,members,isAdmin,user,users=[],onGoToMatch,onA
     setEditSchSaving(true);
     try{
       const nextType = normalizeType(schForm.type) || schForm.type;
-      await api("updateSchedule",{schedule:{...schForm,id:schedule.id,type:nextType,mvp:schedule.mvp||"",deadline:schForm.deadline||""}});
-      schedule.date = schForm.date;
+      await api("updateSchedule",{schedule:{...schForm,id:schedule.id,date:dateOnly(schForm.date),type:nextType,mvp:schedule.mvp||"",deadline:dateOnly(schForm.deadline)||""}});
+      schedule.date = dateOnly(schForm.date);
       schedule.title = schForm.title;
       schedule.location = schForm.location;
       schedule.type = nextType;
-      schedule.deadline = schForm.deadline || "";
+      schedule.deadline = dateOnly(schForm.deadline) || "";
       setEditSch(false);
     }catch(e){
       alert("日程更新エラー: " + e.message);
@@ -3221,7 +3239,7 @@ function App() {
   };
   const handleAddSchedule=async fs=>{
     setLoading(true);setLoadMsg("追加中...");
-    try{await api("addSchedule",{schedule:fs});await load("更新中...");}
+    try{const payload={...fs,date:dateOnly(fs.date)||todayLocal()};await api("addSchedule",{schedule:payload});await load("更新中...");}
     catch(e){alert("エラー: "+e.message);}
     setLoading(false);
   };
