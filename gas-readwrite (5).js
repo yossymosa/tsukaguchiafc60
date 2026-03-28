@@ -789,19 +789,51 @@ function dispatch(req) {
         const myGoals = goals.filter(g => g.resultId === r.id && resolveTeam(g) === "us");
         const theirGoals = goals.filter(g => g.resultId === r.id && resolveTeam(g) === "them");
 
-        // スケジュールと紐付け（scheduleId優先、なければ日付一致）
-        const sch = schedules.find(s => s.id === r.scheduleId) ||
-                    schedules.find(s => s.date === r.date);
-        if (sch && !r.type) r.type = sch.type;
+                  // スケジュールと紐付け（scheduleId優先、なければ同日候補から種類優先で決定）
+          const normalizeScheduleType = value => {
+            const s = String(value || "").toLowerCase();
+            if (/official|公式|リーグ|大会|選手権/.test(s)) return "official";
+            if (/cup|カップ/.test(s)) return "cup";
+            if (/training|tm|トレマ|練習試合|トレーニングマッチ/.test(s)) return "training";
+            if (/practice|練習/.test(s)) return "practice";
+            if (/event|イベント|開会式/.test(s)) return "event";
+            return "";
+          };
+          const schedulePriority = value => {
+            const t = normalizeScheduleType(value);
+            if (t === "official") return 5;
+            if (t === "cup") return 4;
+            if (t === "training") return 3;
+            if (t === "practice") return 2;
+            if (t === "event") return 1;
+            return 0;
+          };
+          const sameDayAll = schedules.filter(s => s.date === r.date);
+          const titledSameDay = sameDayAll.filter(s => {
+            const title = String(s.title || "").trim();
+            return title && title !== "(タイトルなし)";
+          });
+          const sameDay = titledSameDay.length ? titledSameDay : sameDayAll;
+          const resultType = normalizeScheduleType(r.type || r.formatLabel || r.memo || "");
+          const typedSameDay = resultType ? sameDay.filter(s => normalizeScheduleType(s.type || s.title) === resultType) : [];
+          const pickSchedule = arr => {
+            if (!arr.length) return null;
+            return [...arr].sort((a,b) =>
+              schedulePriority(b.type || b.title) - schedulePriority(a.type || a.title)
+              || (String(b.title || "").trim() ? 1 : 0) - (String(a.title || "").trim() ? 1 : 0)
+            )[0] || null;
+          };
+          const sch = schedules.find(s => String(s.id || "") === String(r.scheduleId || "")) || pickSchedule(typedSameDay) || pickSchedule(sameDay);
+          const resolvedType = normalizeScheduleType((sch ? (sch.type || sch.title) : "") || r.type || r.formatLabel || r.memo || "");
 
-        return {
-          ...r,
-          ourScore:   scores.ourScore,
-          theirScore: scores.theirScore,
-          goals:      myGoals,
-          theirGoals: theirGoals,
-          scheduleId: r.scheduleId || (sch ? sch.id : ""),
-          type:       r.type || (sch ? sch.type : ""),
+          return {
+            ...r,
+            ourScore:   scores.ourScore,
+            theirScore: scores.theirScore,
+            goals:      myGoals,
+            theirGoals: theirGoals,
+            scheduleId: r.scheduleId || (sch ? sch.id : ""),
+            type:       resolvedType || (sch ? sch.type : "") || r.type || "",
         };
       });
 
@@ -1502,3 +1534,4 @@ function decodeHtmlEntities(text) {
     .replace(/&#39;/gi, "'")
     .replace(/&#(\d+);/g, function(_, n) { return String.fromCharCode(Number(n)); });
 }
+
