@@ -67,38 +67,26 @@ const FORMATS = [
 // 繧ｹ繝励す縲檎ｨｮ鬘槭榊・縺ｯ闍ｱ隱槭・譌･譛ｬ隱槭←縺｡繧峨〒繧ょｯｾ蠢・
 // 繧ｹ繝励す縲檎ｨｮ鬘槭榊・縺ｯ闍ｱ隱槭・譌･譛ｬ隱槭←縺｡繧峨〒繧ょｯｾ蠢・
 function getTC(type) {
-  const m={
-    practice:{bg:"#4CAF50",lb:"邱ｴ鄙・},
-    official:{bg:"#1D4ED8",lb:"蜈ｬ蠑乗姶"},
-    training:{bg:"#2563EB",lb:"繝医Ξ繝・},
-    "邱ｴ鄙定ｩｦ蜷・:{bg:"#2563EB",lb:"繝医Ξ繝・},
-    "繝医Ξ繝ｼ繝九Φ繧ｰ繝槭ャ繝・:{bg:"#2563EB",lb:"繝医Ξ繝・},
-    cup:     {bg:"#0F172A",lb:"繧ｫ繝・・謌ｦ"},
-    "邱ｴ鄙・:  {bg:"#4CAF50",lb:"邱ｴ鄙・},
-    "蜈ｬ蠑乗姶":{bg:"#1D4ED8",lb:"蜈ｬ蠑乗姶"},
-    "繝医Ξ繝・:{bg:"#2563EB",lb:"繝医Ξ繝・},
-    "繧ｫ繝・・謌ｦ":{bg:"#0F172A",lb:"繧ｫ繝・・謌ｦ"},
-    "event":{bg:"#009688",lb:"繧､繝吶Φ繝・},
-    "繧､繝吶Φ繝・:{bg:"#009688",lb:"繧､繝吶Φ繝・},
+  const key = normalizeType(type);
+  const m = {
+    practice: { bg: "#4CAF50", lb: "練習" },
+    official: { bg: "#1D4ED8", lb: "公式戦" },
+    training: { bg: "#2563EB", lb: "トレマ" },
+    cup:      { bg: "#0F172A", lb: "カップ戦" },
+    event:    { bg: "#009688", lb: "イベント" },
   };
-  return m[type]||{bg:"#999",lb:type||"縺昴・莉・};
+  return m[key] || { bg: "#999", lb: String(type || "その他") };
 }
 function normalizeType(type) {
   const raw = String(type || "").trim();
   const lower = raw.toLowerCase();
   if (!raw) return "";
-  if (["official","cup","training","practice","event"].includes(lower)) return lower;
-  if (/蜈ｬ蠑楯繝ｪ繝ｼ繧ｰ|驕ｸ謇区ｨｩ|螟ｧ莨・.test(raw)) return "official";
-  if (/繧ｫ繝・・|cup/i.test(raw)) return "cup";
-  if (/繝医Ξ繝桍tm|邱ｴ鄙定ｩｦ蜷・繝医Ξ繝ｼ繝九Φ繧ｰ繝槭ャ繝－training/i.test(raw)) return "training";
-  if (/邱ｴ鄙竹practice/i.test(raw)) return "practice";
-  if (/繧､繝吶Φ繝・髢倶ｼ壼ｼ楯event/i.test(raw)) return "event";
-  const label = getTC(raw).lb;
-  if (label === "蜈ｬ蠑乗姶") return "official";
-  if (label === "繧ｫ繝・・謌ｦ") return "cup";
-  if (label === "繝医Ξ繝・) return "training";
-  if (label === "邱ｴ鄙・) return "practice";
-  if (label === "繧､繝吶Φ繝・) return "event";
+  if (["official", "cup", "training", "practice", "event"].includes(lower)) return lower;
+  if (/公式|リーグ|選手権|大会|official/i.test(raw)) return "official";
+  if (/カップ|cup/i.test(raw)) return "cup";
+  if (/トレマ|tm|練習試合|トレーニングマッチ|training/i.test(raw)) return "training";
+  if (/練習|practice/i.test(raw)) return "practice";
+  if (/イベント|開会式|event/i.test(raw)) return "event";
   return lower;
 }
 function scheduleTypePriority(type) {
@@ -3417,6 +3405,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
