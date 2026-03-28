@@ -157,19 +157,19 @@ function getResultDisplayType(result, schedules) {
   return picked ? normalizeType(picked.type || picked.title || "") : "";
 }
 const TC={
-  practice:{bg:"#4CAF50",lb:"邱ｴ鄙・},
-  official:{bg:"#1D4ED8",lb:"蜈ｬ蠑乗姶"},
-  training:{bg:"#2563EB",lb:"繝医Ξ繝・},
-  cup:     {bg:"#0F172A",lb:"繧ｫ繝・・謌ｦ"},
-  event:   {bg:"#009688",lb:"繧､繝吶Φ繝・},
+  practice:{bg:"#4CAF50",lb:"練習"},
+  official:{bg:"#1D4ED8",lb:"公式戦"},
+  training:{bg:"#2563EB",lb:"トレマ"},
+  cup:{bg:"#0F172A",lb:"カップ戦"},
+  event:{bg:"#009688",lb:"イベント"},
 };
 const PC={FW:{bg:"#1D4ED8"},MF:{bg:"#2563EB"},DF:{bg:"#0F172A"},GK:{bg:"#334155"}};
-const ATTEND_OPTS=["笳・,"ﾃ・,"笆ｳ","譛ｪ"];
+const ATTEND_OPTS=["○","×","△","未"];
 const ATTEND_STYLE={
-  "笳・:{bg:"#4CAF50",c:"#fff"},
-  "ﾃ・:{bg:"#F44336",c:"#fff"},
-  "笆ｳ":{bg:"#FFC107",c:"#333"},
-  "譛ｪ":{bg:"#eee",c:"#aaa"},
+  "○":{bg:"#4CAF50",c:"#fff"},
+  "×":{bg:"#F44336",c:"#fff"},
+  "△":{bg:"#FFC107",c:"#333"},
+  "未":{bg:"#eee",c:"#aaa"},
 };
 
 // 笏笏 API 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
@@ -3405,6 +3405,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
