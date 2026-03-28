@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS 繧呈峩譁ｰ縺励※ Web 繧｢繝励Μ繧貞・繝・・繝ｭ繧､
 // 2. 逋ｺ陦後＆繧後◆ /exec URL 繧偵％縺薙∈雋ｼ繧頑崛縺医ｋ
 // 3. index.html 繧・GitHub 縺ｫ push 縺励※ Vercel 繧呈峩譁ｰ
-const GAS_URL = "https://script.google.com/macros/s/AKfycbw9yTpIh13ZuI4U64K8HlwJjv8d8qm-2_lcqfzoeQVWEiQ6QhhAjQpT7RlE43K52EPP/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzsytaV_f9M9cvWoanZnEtVFjpN1mg2iWPaFhXVzHQKXNbP_8U4Z8FDL7K0xN8y0kkf/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -118,6 +118,11 @@ function candidateSchedulesForResult(result, schedules) {
   });
   return titled.length ? titled : sameDayAll;
 }
+function isPlaceholderSchedule(schedule) {
+  if (!schedule) return true;
+  const title = String(schedule.title || "").trim();
+  return !title || title === "(タイトルなし)";
+}
 function pickHighestPrioritySchedule(candidates) {
   if (!candidates.length) return null;
   const sorted = [...candidates].sort((a,b) =>
@@ -129,7 +134,8 @@ function pickHighestPrioritySchedule(candidates) {
 function findScheduleForResult(result, schedules) {
   if (!result) return null;
   const sameDay = candidateSchedulesForResult(result, schedules);
-  const byId = schedules.find(s => String(s.id || "") === String(result.scheduleId || ""));
+  const byIdRaw = schedules.find(s => String(s.id || "") === String(result.scheduleId || ""));
+  const byId = isPlaceholderSchedule(byIdRaw) ? null : byIdRaw;
   if (byId) return byId;
 
   const resultType = normalizeType(result.type || result.formatLabel || result.memo || "");
@@ -141,16 +147,12 @@ function findScheduleForResult(result, schedules) {
   const memoText = String(result.memo || "").trim();
   if (memoText) {
     const memoMatched = sameDay.find(s => String(s.title || "").trim() === memoText);
-    if (memoMatched) return memoMatched;
+    if (memoMatched && !isPlaceholderSchedule(memoMatched)) return memoMatched;
   }
 
-  const nonUntitled = sameDay.filter(s => {
-    const title = String(s.title || "").trim();
-    return title && title !== "(タイトルなし)";
-  });
-  if (nonUntitled.length === 1) return nonUntitled[0];
-
-  return pickHighestPrioritySchedule(sameDay) || null;
+  const picked = pickHighestPrioritySchedule(sameDay.filter(s => !isPlaceholderSchedule(s)));
+  if (picked) return picked;
+  return sameDay.length === 1 ? sameDay[0] : null;
 }
 function getResultDisplayType(result, schedules) {
   const linked = findScheduleForResult(result, schedules);
@@ -163,7 +165,7 @@ function getResultDisplayType(result, schedules) {
     if (normalized) return normalized;
   }
 
-  const picked = pickHighestPrioritySchedule(candidateSchedulesForResult(result, schedules));
+  const picked = pickHighestPrioritySchedule(candidateSchedulesForResult(result, schedules).filter(s => !isPlaceholderSchedule(s)));
   return picked ? normalizeType(picked.type || picked.title || "") : "";
 }
 const TC={
@@ -3414,6 +3416,8 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
+
 
 
 
