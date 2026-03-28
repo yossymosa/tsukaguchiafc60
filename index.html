@@ -7,8 +7,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="蝪壼哨AFC">
-<title>笞ｽ 蝪壼哨AFC</title>
+  <meta name="apple-mobile-web-app-title" content="塚口AFC">
+<title>塚口AFC Jr</title>
 <link rel="manifest" href="/manifest.json"/>
 <link rel="icon" href="/icon-512.png" type="image/png"/>
 <link rel="apple-touch-icon" href="/icon-512.png"/>
@@ -3328,6 +3328,7 @@ function App() {
   const resolvedMatchSchedule = page?.type==="matchDetail"
     ? (findScheduleForResult(page.match, schedules) || ((page.schedule && page.schedule.id) ? page.schedule : null))
     : null;
+  const resolvedMatchType = page?.type==="matchDetail" ? getResultDisplayType(page.match, schedules) : "";
 
   if(page?.type==="matchDetail") return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
@@ -3416,6 +3417,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
