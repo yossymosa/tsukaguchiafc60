@@ -1047,8 +1047,11 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
     firstAidPerson: schedule.firstAidPerson || "",
     coach: schedule.coach || "丸尾コーチ",
     note: schedule.note || "",
+    pdfUrl: schedule.pdfUrl || "",
+    pdfName: schedule.pdfName || "",
   });
   const [saving, setSaving] = useState(false);
+  const [pdfUploading, setPdfUploading] = useState(false);
   const [attend, setAttend] = useState({});
   const [eventAttend, setEventAttend] = useState([]);
   const [attendLoading, setAttendLoading] = useState(true);
@@ -1112,6 +1115,56 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   const mapUrl = schedule.location
     ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(schedule.location)
     : "";
+  const parsePdfItems = (urlRaw, nameRaw) => {
+    const normalize = value => String(value || "").trim();
+    const urlsText = normalize(urlRaw);
+    const namesText = normalize(nameRaw);
+    if (!urlsText) return [];
+    try {
+      const parsedUrls = JSON.parse(urlsText);
+      if (Array.isArray(parsedUrls)) {
+        if (parsedUrls.length && typeof parsedUrls[0] === "object") {
+          return parsedUrls
+            .map(item => ({ url: normalize(item.url), name: normalize(item.name) }))
+            .filter(item => item.url);
+        }
+        let parsedNames = [];
+        try { parsedNames = JSON.parse(namesText || "[]"); } catch (e) {}
+        return parsedUrls
+          .map((url, idx) => ({ url: normalize(url), name: normalize(parsedNames[idx]) }))
+          .filter(item => item.url);
+      }
+    } catch (e) {}
+    return [{ url: urlsText, name: namesText }];
+  };
+  const pdfItems = parsePdfItems(form.pdfUrl, form.pdfName);
+  const pdfPreviewUrl = url => String(url || "").replace("/view?usp=sharing", "/preview").replace("/view", "/preview");
+  const uploadPdf = async(file) => {
+    if (!file) return;
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name || "")) {
+      alert("PDFファイルを選んでください");
+      return;
+    }
+    setPdfUploading(true);
+    try{
+      const dataUrl = await readFileAsDataUrl(file);
+      const base64 = dataUrl.split(",")[1] || "";
+      const r = await api("uploadSchedulePdf", {
+        scheduleId: schedule.id,
+        fileName: file.name,
+        mimeType: file.type || "application/pdf",
+        base64,
+      });
+      setForm(p => ({ ...p, pdfUrl: r.pdfUrl || "", pdfName: r.pdfName || "" }));
+      schedule.pdfUrl = r.pdfUrl || "";
+      schedule.pdfName = r.pdfName || "";
+      alert("PDFを添付しました");
+    }catch(e){
+      alert("PDFアップロードエラー: " + (e.message || e));
+    }finally{
+      setPdfUploading(false);
+    }
+  };
   const save = async () => {
     setSaving(true);
     await onSave({
@@ -1228,6 +1281,46 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         style: { ...css.inp, width: "100%", resize: "none" }
       })
     ),
+    h("div", { style: { marginBottom: 16 } },
+      h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 6 } }, "PDF添付"),
+      pdfItems.length > 0 && h("div", { style: { marginBottom: 8 } },
+        pdfItems.map((item, idx) => h("a", {
+          key: item.url + idx,
+          href: item.url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          style: { display: "block", marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none" }
+        }, "📎 " + (item.name || `添付PDF ${idx + 1}`)))
+      ),
+      isAdmin && h("label", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          width: "100%",
+          padding: "12px 14px",
+          borderRadius: 12,
+          border: "1.5px dashed #93C5FD",
+          background: pdfUploading ? "#EFF6FF" : "linear-gradient(135deg,#EFF6FF,#DBEAFE)",
+          color: "#1D4ED8",
+          fontSize: 13,
+          fontWeight: 800,
+          cursor: pdfUploading ? "default" : "pointer",
+          opacity: pdfUploading ? 0.7 : 1
+        }
+      },
+        h("span", {}, pdfUploading ? "PDFアップロード中..." : "＋ PDFを追加"),
+        h("input", {
+          type: "file",
+          accept: "application/pdf,.pdf",
+          disabled: pdfUploading,
+          onChange: e => uploadPdf((e.target.files || [])[0]),
+          style: { display: "none" }
+        })
+      ),
+      isAdmin && pdfUploading && h("div", { style: { fontSize: 12, color: "#666", marginTop: 6 } }, "PDFアップロード中...")
+    ),
     h("button", {
       onClick: save,
       disabled: saving,
@@ -1291,6 +1384,50 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
       form.coach && h("div", {},
         h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "コーチ"),
         h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, form.coach)
+      )
+    ),
+    (pdfItems.length > 0 || isAdmin) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#DBEAFE", borderRadius: 10 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", marginBottom: 6 } }, "📎 添付PDF"),
+      pdfItems.length === 0 && h("div", { style: { fontSize: 12, color: "#64748B", marginBottom: isAdmin ? 10 : 0 } }, "添付PDFはまだありません"),
+      pdfItems.map((item, idx) => h("div", { key: item.url + "-preview-" + idx, style: { marginBottom: idx < pdfItems.length - 1 ? 16 : 0 } },
+        h("a", {
+          href: item.url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          style: { display: "inline-block", marginBottom: 10, fontSize: 13, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all" }
+        }, item.name || `PDFを開く ${idx + 1}`),
+        pdfPreviewUrl(item.url) && h("iframe", {
+          src: pdfPreviewUrl(item.url),
+          title: item.name || `添付PDF ${idx + 1}`,
+          style: { width: "100%", height: 360, border: "none", borderRadius: 10, background: "#fff" }
+        })
+      )),
+      isAdmin && h("label", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          width: "100%",
+          padding: "10px 12px",
+          borderRadius: 10,
+          border: "1.5px dashed #93C5FD",
+          background: pdfUploading ? "#EFF6FF" : "rgba(255,255,255,0.7)",
+          color: "#1D4ED8",
+          fontSize: 12,
+          fontWeight: 800,
+          cursor: pdfUploading ? "default" : "pointer",
+          opacity: pdfUploading ? 0.7 : 1
+        }
+      },
+        h("span", {}, pdfUploading ? "PDFアップロード中..." : "＋ PDFを追加"),
+        h("input", {
+          type: "file",
+          accept: "application/pdf,.pdf",
+          disabled: pdfUploading,
+          onChange: e => uploadPdf((e.target.files || [])[0]),
+          style: { display: "none" }
+        })
       )
     ),
     form.note && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8F9FA", borderRadius: 10, fontSize: 13, color: "#666", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.note),
