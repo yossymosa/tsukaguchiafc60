@@ -38,7 +38,7 @@ function __bootMessage(text){
   __bootRoot.innerHTML = '<div style="max-width:480px;margin:24px auto;padding:16px;border-radius:14px;background:#7F1D1D;color:#fff;font:14px/1.6 Noto Sans JP,sans-serif;white-space:pre-wrap;">'+text+'</div>';
 }
 if(!window.preact || !window.preactHooks){
-  __bootMessage("逕ｻ髱｢縺ｮ隱ｭ縺ｿ霎ｼ縺ｿ縺ｫ螟ｱ謨励＠縺ｾ縺励◆\n繝ｩ繧､繝悶Λ繝ｪ縺ｮ蜿門ｾ励↓螟ｱ謨励＠縺ｦ縺・∪縺・);
+  __bootMessage("画面の読み込みに失敗しました\nライブライブラリの取得に失敗しています");
   throw new Error("preact_failed");
 }
 // Preact globals from UMD
@@ -3417,6 +3417,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
