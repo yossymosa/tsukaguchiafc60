@@ -823,7 +823,9 @@ function dispatch(req) {
               || (String(b.title || "").trim() ? 1 : 0) - (String(a.title || "").trim() ? 1 : 0)
             )[0] || null;
           };
-          const sch = schedules.find(s => String(s.id || "") === String(r.scheduleId || "")) || pickSchedule(typedSameDay) || pickSchedule(sameDay);
+          const byIdRaw = schedules.find(s => String(s.id || "") === String(r.scheduleId || ""));
+          const byId = byIdRaw && String(byIdRaw.title || "").trim() && String(byIdRaw.title || "").trim() !== "(タイトルなし)" ? byIdRaw : null;
+          const sch = byId || pickSchedule(typedSameDay) || pickSchedule(sameDay);
           const resolvedType = normalizeScheduleType((sch ? (sch.type || sch.title) : "") || r.type || r.formatLabel || r.memo || "");
 
           return {
@@ -832,7 +834,7 @@ function dispatch(req) {
             theirScore: scores.theirScore,
             goals:      myGoals,
             theirGoals: theirGoals,
-            scheduleId: r.scheduleId || (sch ? sch.id : ""),
+            scheduleId: (sch ? sch.id : "") || r.scheduleId || "",
             type:       resolvedType || (sch ? sch.type : "") || r.type || "",
         };
       });
@@ -1534,4 +1536,6 @@ function decodeHtmlEntities(text) {
     .replace(/&#39;/gi, "'")
     .replace(/&#(\d+);/g, function(_, n) { return String.fromCharCode(Number(n)); });
 }
+
+
 
