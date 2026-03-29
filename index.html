@@ -1060,6 +1060,8 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
   const [attend, setAttend] = useState({});
   const [eventAttend, setEventAttend] = useState([]);
   const [attendLoading, setAttendLoading] = useState(true);
+  const [showClothes, setShowClothes] = useState(false);
+  const [showBelongings, setShowBelongings] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1333,6 +1335,47 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
     }, saving ? "保存中..." : "保存する")
   );
 
+  const participantBlock = h("div", { style: { padding: "12px 14px", background: "#F8F9FA", borderRadius: 10, marginBottom: 8 } },
+    isEventSchedule
+      ? h(Fragment,{},
+          h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 8 } }, "参加人数"),
+          attendLoading
+            ? h("div", { style: { fontSize: 13, color: "#ccc" } }, "読み込み中...")
+            : [
+                h("div", { key: "event-totals", style: { display:"flex", gap:8, marginBottom:10 } },
+                  [
+                    {label:"大人", value:eventTotals.adult, color:"#1D4ED8", bg:"#DBEAFE"},
+                    {label:"小学生", value:eventTotals.child, color:"#2563EB", bg:"#EFF6FF"},
+                    {label:"未就学児", value:eventTotals.preschool, color:"#0F172A", bg:"#E2E8F0"},
+                  ].map(item =>
+                    h("div",{key:item.label,style:{flex:1,textAlign:"center",padding:"10px 6px",borderRadius:10,background:item.bg}},
+                      h("div",{style:{fontSize:20,fontWeight:900,color:item.color}},item.value),
+                      h("div",{style:{fontSize:10,fontWeight:700,color:item.color,marginTop:2}},item.label)))
+                ),
+                ...(eventAttend.length===0
+                  ? [h("div", { key: "event-empty", style: { fontSize: 13, color: "#ccc" } }, "回答なし")]
+                  : eventAttend.slice().sort((a,b)=>String(a.userName||"").localeCompare(String(b.userName||""),"ja")).map(row =>
+                      h("div",{key:row.userId,style:{marginBottom:8}},
+                        h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:2}},row.userName||"名前未設定"),
+                        h("div",{style:{fontSize:12,color:"#666"}},`大人 ${Number(row.adultCount||0)} / 小学生 ${Number(row.childCount||0)} / 未就学児 ${Number(row.preschoolCount||0)}`))
+                    ))
+              ]
+        )
+      : h(Fragment,{},
+          h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 8 } }, "参加メンバー " + (attendLoading ? "" : "(" + participants.length + "人)")),
+          attendLoading
+            ? h("div", { style: { fontSize: 13, color: "#ccc" } }, "読み込み中...")
+            : participants.length === 0
+              ? h("div", { style: { fontSize: 13, color: "#ccc" } }, "参加者なし")
+              : Object.entries(gradeGroups).sort().map(([grade, ms]) =>
+                  h("div", { key: grade, style: { marginBottom: 8 } },
+                    h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 4 } }, grade + ": " + ms.length + "名"),
+                    h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.8 } }, ms.map(m => m.name).join("、"))
+                  )
+                )
+        )
+  );
+
   const readContent = h(Fragment, {},
     schedule.location && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E8F5E9", borderRadius: 10 } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4CAF50", marginBottom: 4 } }, "📍 場所"),
@@ -1363,16 +1406,9 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         )
       )
     ),
-    !isEventSchedule && !isPracticeSchedule && form.clothes && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E3F2FD", borderRadius: 10 } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#2196F3", marginBottom: 4 } }, "👕 服装"),
-      h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.clothes)
-    ),
-    !isEventSchedule && !isPracticeSchedule && form.belongings && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E2E8F0", borderRadius: 10 } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#0F172A", marginBottom: 4 } }, "🎒 持ち物"),
-      h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.belongings)
-    ),
+    participantBlock,
     !isEventSchedule && !isPracticeSchedule && (form.duty || form.coach || form.luggagePerson || form.firstAidPerson) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4A5568", marginBottom: 8 } }, "📌 担当"),
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4A5568", marginBottom: 8 } }, "👨‍🏫 担当・コーチ"),
       form.duty && h("div", { style: { marginBottom: 4 } },
         h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "当番"),
         h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, toSurname(form.duty)),
@@ -1390,6 +1426,26 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "コーチ"),
         h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, form.coach)
       )
+    ),
+    !isEventSchedule && !isPracticeSchedule && form.clothes && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E3F2FD", borderRadius: 10 } },
+      h("button", {
+        onClick: () => setShowClothes(v => !v),
+        style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "transparent", border: "none", padding: 0, cursor: "pointer" }
+      },
+        h("div", { style: { fontSize: 11, fontWeight: 700, color: "#2196F3" } }, "👕 服装"),
+        h("div", { style: { fontSize: 20, fontWeight: 900, color: "#2196F3", lineHeight: 1 } }, showClothes ? "△" : "▽")
+      ),
+      showClothes && h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap", marginTop: 8 } }, form.clothes)
+    ),
+    !isEventSchedule && !isPracticeSchedule && form.belongings && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E2E8F0", borderRadius: 10 } },
+      h("button", {
+        onClick: () => setShowBelongings(v => !v),
+        style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "transparent", border: "none", padding: 0, cursor: "pointer" }
+      },
+        h("div", { style: { fontSize: 11, fontWeight: 700, color: "#0F172A" } }, "🎒 持ち物"),
+        h("div", { style: { fontSize: 20, fontWeight: 900, color: "#0F172A", lineHeight: 1 } }, showBelongings ? "△" : "▽")
+      ),
+      showBelongings && h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap", marginTop: 8 } }, form.belongings)
     ),
     (pdfItems.length > 0 || isAdmin) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#DBEAFE", borderRadius: 10 } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", marginBottom: 6 } }, "📎 添付PDF"),
@@ -1435,47 +1491,7 @@ function DetailSection({schedule, members, users=[], isAdmin, onSave}) {
         })
       )
     ),
-    form.note && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8F9FA", borderRadius: 10, fontSize: 13, color: "#666", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.note),
-    h("div", { style: { padding: "12px 14px", background: "#F8F9FA", borderRadius: 10 } },
-      isEventSchedule
-        ? h(Fragment,{},
-            h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 8 } }, "参加人数"),
-            attendLoading
-              ? h("div", { style: { fontSize: 13, color: "#ccc" } }, "読み込み中...")
-              : [
-                  h("div", { key: "event-totals", style: { display:"flex", gap:8, marginBottom:10 } },
-                    [
-                      {label:"大人", value:eventTotals.adult, color:"#1D4ED8", bg:"#DBEAFE"},
-                      {label:"小学生", value:eventTotals.child, color:"#2563EB", bg:"#EFF6FF"},
-                      {label:"未就学児", value:eventTotals.preschool, color:"#0F172A", bg:"#E2E8F0"},
-                    ].map(item =>
-                      h("div",{key:item.label,style:{flex:1,textAlign:"center",padding:"10px 6px",borderRadius:10,background:item.bg}},
-                        h("div",{style:{fontSize:20,fontWeight:900,color:item.color}},item.value),
-                        h("div",{style:{fontSize:10,fontWeight:700,color:item.color,marginTop:2}},item.label)))
-                  ),
-                  ...(eventAttend.length===0
-                    ? [h("div", { key: "event-empty", style: { fontSize: 13, color: "#ccc" } }, "回答なし")]
-                    : eventAttend.slice().sort((a,b)=>String(a.userName||"").localeCompare(String(b.userName||""),"ja")).map(row =>
-                        h("div",{key:row.userId,style:{marginBottom:8}},
-                          h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:2}},row.userName||"名前未設定"),
-                          h("div",{style:{fontSize:12,color:"#666"}},`大人 ${Number(row.adultCount||0)} / 小学生 ${Number(row.childCount||0)} / 未就学児 ${Number(row.preschoolCount||0)}`))
-                      ))
-                ]
-          )
-        : h(Fragment,{},
-            h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 8 } }, "参加メンバー " + (attendLoading ? "" : "(" + participants.length + "人)")),
-            attendLoading
-              ? h("div", { style: { fontSize: 13, color: "#ccc" } }, "読み込み中...")
-              : participants.length === 0
-                ? h("div", { style: { fontSize: 13, color: "#ccc" } }, "参加者なし")
-                : Object.entries(gradeGroups).sort().map(([grade, ms]) =>
-                    h("div", { key: grade, style: { marginBottom: 8 } },
-                      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 4 } }, grade + ": " + ms.length + "名"),
-                      h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.8 } }, ms.map(m => m.name).join("、"))
-                    )
-                  )
-          )
-    )
+    form.note && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8F9FA", borderRadius: 10, fontSize: 13, color: "#666", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.note)
   );
 
   return h("div", { style: { background: "#fff", borderRadius: 16, padding: 18, marginTop: 14, boxShadow: "0 2px 10px rgba(0,0,0,0.07)" } },
