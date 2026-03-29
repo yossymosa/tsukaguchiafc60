@@ -55,7 +55,7 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbzsytaV_f9M9cvWoanZnEtV
 // ================================================================
 
 const HOME_LINKS = [
-  {label:"チームHP",  url:"https://tsukaguchi-afc.jr", icon:"🌐", sub:"公式ホームページ"},
+  {label:"チームHP",  url:"https://afcjr.xsrv.jp/", icon:"🌐", sub:"公式ホームページ"},
   {label:"公式YouTube", url:"https://youtube.com/playlist?list=PLLo2VVDM0WelHQk4YEdf-dvejZLkVbJ2N&si=xEJa9OEtTiQmKHWU", icon:"▶️", sub:"動画・ハイライト"},
 ];
 const FORMATS = [
@@ -1850,7 +1850,7 @@ function AttendSection({schedule, members, user, isAdmin}) {
   // 名前リスト
   const nameList = (status) => members.filter(m => attend[m.id]===status)
     .sort((a,b)=>Number(a.number)-Number(b.number));
-  const unresolved = members.filter(m => !attend[m.id] || attend[m.id]==="未");
+  const unresolved = grade3.filter(m => !attend[m.id] || attend[m.id]==="未");
 
   if (loading) return h("div",{style:{textAlign:"center",padding:16,color:"#aaa",fontSize:13}},"読み込み中...");
 
@@ -2200,8 +2200,7 @@ function RankList({title,icon,data,unit}) {
 function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDashTab="result",onGoToMatch}) {
   const [dashTab,setDashTab]=useState(initialDashTab); // "result" | "tournament" | "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
-  const [periodF,setPeriodF]=useState("year"); // "year"|"month"|"lastmonth"|"custom"
-  const [from,setFrom]=useState(""); const [to,setTo]=useState("");
+  const [periodF,setPeriodF]=useState("alltime"); // "alltime"|"grade4"|"grade3"|"month"|"lastmonth"
   const [oppFilter,setOppFilter]=useState("all"); // "all" or opponent name
   useEffect(()=>{ if(initialDashTab) setDashTab(initialDashTab); },[initialDashTab]);
   const getResultType=row=>{
@@ -2216,16 +2215,18 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const periodRange=useMemo(()=>{
     const now=new Date();
     const y=now.getFullYear(), m=now.getMonth()+1;
-    // 年度: 4月始まり
     const fyStart=(m>=4?y:y-1);
-    if(periodF==="year")      return {f:`${fyStart}-04-01`, t:`${fyStart+1}-03-31`};
-    if(periodF==="month")     return {f:`${y}-${String(m).padStart(2,"0")}-01`, t:`${y}-${String(m).padStart(2,"0")}-31`};
+    if(periodF==="alltime") return {f:"", t:""};
+    if(periodF==="grade3")  return {f:`${fyStart}-04-01`, t:`${fyStart+1}-03-31`};
+    if(periodF==="grade4")  return {f:`${fyStart+1}-04-01`, t:`${fyStart+2}-03-31`};
+    if(periodF==="month")   return {f:`${y}-${String(m).padStart(2,"0")}-01`, t:`${y}-${String(m).padStart(2,"0")}-31`};
     if(periodF==="lastmonth"){
-      const lm=m===1?12:m-1, ly=m===1?y-1:y;
+      const lm = m===1 ? 12 : m-1;
+      const ly = m===1 ? y-1 : y;
       return {f:`${ly}-${String(lm).padStart(2,"0")}-01`, t:`${ly}-${String(lm).padStart(2,"0")}-31`};
     }
-    return {f:from, t:to};
-  },[periodF,from,to]);
+    return {f:"", t:""};
+  },[periodF]);
   const filtered=useMemo(()=>results.filter(r=>{
     if(typeF!=="all"&&!typeMatch(r,typeF)) return false;
     const d=nd(r.date);
@@ -2276,7 +2277,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     if(!s.mvp) return;
     const t=s.type;
     if(!["official","cup","公式戦","カップ戦"].includes(t)) return;
-    const d=nd(s.date); if(from&&d<from) return; if(to&&d>to) return;
+    const d=nd(s.date); if(periodRange.f&&d<periodRange.f) return; if(periodRange.t&&d>periodRange.t) return;
     // MVP値はメンバー名で保存→IDに逆引き
     const m=members.find(x=>x.name===s.mvp||x.id===s.mvp);
     const key=m?m.id:s.mvp;
@@ -2312,13 +2313,13 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     schedules.forEach(s=>{
       if(!s.mvp) return;
       if(!["official","cup","公式戦","カップ戦"].includes(s.type)) return;
-      const sd=nd(s.date); if(from&&sd<from) return; if(to&&sd>to) return;
+      const sd=nd(s.date); if(periodRange.f&&sd<periodRange.f) return; if(periodRange.t&&sd>periodRange.t) return;
       const mv=members.find(x=>x.name===s.mvp||x.id===s.mvp);
       if(mv&&mv.id===m.id) mvpCount++;
     });
     return {...m,goals,assists,pkMade,pkTotal,mvpCount};
   }).filter(m=>m.goals>0||m.assists>0||m.mvpCount>0).sort((a,b)=>b.goals-a.goals||b.assists-a.assists)
-  ,[filtered,members,schedules,from,to]);
+  ,[filtered,members,schedules,periodRange]);
 
   return h(Fragment,{},
     // サブタブ
@@ -2330,14 +2331,12 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
             color:dashTab===t.k?"#fff":"#aaa",fontSize:11,fontWeight:700,cursor:"pointer"}},t.l))),
     // フィルター（インライン）
     h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"試合分類"),
       h("div",{style:{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}},
-        [{k:"all",l:"全体"},{k:"official",l:"公式戦"},{k:"cup",l:"カップ戦"},{k:"training",l:"トレマ"}].map(t=>h("button",{key:t.k,onClick:()=>setTypeF(t.k),style:{padding:"6px 12px",border:`2px solid ${typeF===t.k?"#1D4ED8":"#eee"}`,borderRadius:20,background:typeF===t.k?"#1D4ED8":"#fff",color:typeF===t.k?"#fff":"#666",fontSize:12,fontWeight:typeF===t.k?700:400,cursor:"pointer"}},t.l))),
+        [{k:"all",l:"すべて"},{k:"official",l:"公式戦"},{k:"cup",l:"カップ戦"},{k:"training",l:"トレマ"}].map(t=>h("button",{key:t.k,onClick:()=>setTypeF(t.k),style:{padding:"6px 12px",border:`2px solid ${typeF===t.k?"#1D4ED8":"#eee"}`,borderRadius:20,background:typeF===t.k?"#1D4ED8":"#fff",color:typeF===t.k?"#fff":"#666",fontSize:12,fontWeight:typeF===t.k?700:400,cursor:"pointer"}},t.l))),
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8,marginTop:4}},"期間"),
       h("div",{style:{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}},
-        [{k:"year",l:"年間"},{k:"month",l:"今月"},{k:"lastmonth",l:"先月"},{k:"custom",l:"期間指定"}].map(t=>h("button",{key:t.k,onClick:()=>setPeriodF(t.k),style:{padding:"6px 12px",border:`2px solid ${periodF===t.k?"#2196F3":"#eee"}`,borderRadius:20,background:periodF===t.k?"#2196F3":"#fff",color:periodF===t.k?"#fff":"#666",fontSize:12,fontWeight:periodF===t.k?700:400,cursor:"pointer"}},t.l))),
-      periodF==="custom"&&h("div",{style:{display:"flex",gap:8,alignItems:"center",marginTop:4}},
-        h("input",{type:"date",value:from,onChange:e=>setFrom(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}}),
-        h("span",{style:{color:"#ccc",flexShrink:0}},"〜"),
-        h("input",{type:"date",value:to,onChange:e=>setTo(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}})),
+        [{k:"alltime",l:"全期間"},{k:"grade4",l:"4年"},{k:"grade3",l:"3年"},{k:"month",l:"今月"},{k:"lastmonth",l:"先月"}].map(t=>h("button",{key:t.k,onClick:()=>setPeriodF(t.k),style:{padding:"6px 12px",border:`2px solid ${periodF===t.k?"#2196F3":"#eee"}`,borderRadius:20,background:periodF===t.k?"#2196F3":"#fff",color:periodF===t.k?"#fff":"#666",fontSize:12,fontWeight:periodF===t.k?700:400,cursor:"pointer"}},t.l))),
       dashTab==="result"&&h("div",{style:{marginTop:10,paddingTop:10,borderTop:"1px solid #f5f5f5"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:6}},"対戦相手"),
         h("select",{value:oppFilter,onChange:e=>setOppFilter(e.target.value),
