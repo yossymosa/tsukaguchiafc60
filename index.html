@@ -1118,7 +1118,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
 function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSave}) {
   const DEFAULT_CLOTHES = "練習シャツ、白パン、青ソックス、トレシュー、長袖インナー\n・防寒具\n・ジャージなどの上着";
   const DEFAULT_BELONGINGS = "ユニフォーム（白・青）、レガース、キャップ、タオル、スパイク\n・氷柱1本（ペットボトル、ジップロックなど）\n・コロコロ氷（水筒orジップロック）\n・水筒\n・着替え\n・軽食（ゼリー系）\n・昼食\n・お湯（当番・荷物担当）\n・着替え（必須）";
-  const COACH_OPTIONS = ["丸尾コーチ", "健太郎先生"];
+  const COACH_OPTIONS = ["丸尾コーチ", "健太郎コーチ"];
   const isEventSchedule = normalizeType(schedule.type) === "event";
   const isPracticeSchedule = normalizeType(schedule.type) === "practice";
   const [editing, setEditing] = useState(false);
@@ -1597,6 +1597,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
 }
 // ── 配車セクション ────────────────────────────────────────────
 function CarpoolSection({schedule, user, isAdmin, members}) {
+  const ADULT_OPTIONS = ["丸尾コーチ", "健太郎コーチ", "その他"];
   const [carpools, setCarpools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [my, setMy] = useState({available:"", capacity:"", note:""});
@@ -1608,6 +1609,9 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
   const [assignMode, setAssignMode] = useState(false);
   // 各車のピックアップ情報 {userId: {place:"", time:""}}
   const [pickupInfo, setPickupInfo] = useState({});
+  // 車ごとの追加情報 {userId: {highway:boolean, adult1:"", adult1Other:"", adult2:"", adult2Other:""}}
+  const [carMeta, setCarMeta] = useState({});
+  const [planLoaded, setPlanLoaded] = useState(false);
   const pickupRows = userId => {
     const raw = pickupInfo[userId];
     if (Array.isArray(raw)) return raw;
@@ -1617,15 +1621,90 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
   const setPickupRows = (userId, rows) => {
     setPickupInfo(p => ({...p, [userId]: rows}));
   };
+  const getMeta = userId => ({
+    highway: false,
+    adult1: "",
+    adult1Other: "",
+    adult2: "",
+    adult2Other: "",
+    ...(carMeta[userId] || {})
+  });
+  const setMeta = (userId, patch) => {
+    setCarMeta(prev => ({
+      ...prev,
+      [userId]: {
+        highway: false,
+        adult1: "",
+        adult1Other: "",
+        adult2: "",
+        adult2Other: "",
+        ...(prev[userId] || {}),
+        ...patch
+      }
+    }));
+  };
+  const resolveAdultName = (v, other) => {
+    if (v === "その他") return String(other || "").trim();
+    return String(v || "").trim();
+  };
+  const getAdultNames = userId => {
+    const m = getMeta(userId);
+    return [
+      resolveAdultName(m.adult1, m.adult1Other),
+      resolveAdultName(m.adult2, m.adult2Other),
+    ].filter(Boolean);
+  };
+  // 高速利用時は「運転手 + 同乗大人1名以上（合計大人2名）」を必須にする
+  const hasEnoughAdultsForHighway = userId => {
+    const m = getMeta(userId);
+    const adults = getAdultNames(userId);
+    return !m.highway || adults.length >= 1;
+  };
+  const toggleAssignMode = () => {
+    if (assignMode) {
+      const invalidCars = cars.filter(car => !hasEnoughAdultsForHighway(car.userId));
+      if (invalidCars.length > 0) {
+        alert("高速利用の車は「運転手 + 同乗大人1名以上（合計2名）」を設定してください。");
+        return;
+      }
+    }
+    setAssignMode(p => !p);
+  };
   const showCarpoolRule = () => {
     alert([
       "【配車ルール】",
       "・配車できる場合は、必ず乗車人数を入力してください。",
+      "・高速利用の車は、運転手 + 同乗大人1名以上（合計大人2名）が必要です。",
       "・集合場所と出発時間を入力してください。",
       "・変更が出たら、できるだけ早く更新してください。",
       "・安全第一（シートベルト着用・定員超過なし）でお願いします。"
     ].join("\n"));
   };
+  useEffect(() => {
+    setPlanLoaded(false);
+    try {
+      const raw = localStorage.getItem("afc_carpool_plan_" + schedule.id);
+      if (raw) {
+        const savedPlan = JSON.parse(raw);
+        if (savedPlan && typeof savedPlan === "object") {
+          if (savedPlan.assignment && typeof savedPlan.assignment === "object") setAssignment(savedPlan.assignment);
+          if (savedPlan.pickupInfo && typeof savedPlan.pickupInfo === "object") setPickupInfo(savedPlan.pickupInfo);
+          if (savedPlan.carMeta && typeof savedPlan.carMeta === "object") setCarMeta(savedPlan.carMeta);
+        }
+      }
+    } catch (e) {}
+    setPlanLoaded(true);
+  }, [schedule.id]);
+  useEffect(() => {
+    if (!planLoaded) return;
+    try {
+      localStorage.setItem("afc_carpool_plan_" + schedule.id, JSON.stringify({
+        assignment,
+        pickupInfo,
+        carMeta
+      }));
+    } catch (e) {}
+  }, [schedule.id, assignment, pickupInfo, carMeta, planLoaded]);
 
   useEffect(()=>{
     let cancelled=false;
@@ -1726,21 +1805,73 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
     isAdmin&&cars.length>0&&participants.length>0&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"🗺 配車割り当て"),
-        h("button",{onClick:()=>setAssignMode(p=>!p),
+        h("button",{onClick:toggleAssignMode,
           style:{fontSize:11,fontWeight:700,color:"#2196F3",background:"none",border:"1px solid #2196F3",borderRadius:8,padding:"4px 10px",cursor:"pointer"}},
           assignMode?"完了":"割り当て")),
       // 車ごとのカード
       cars.map((car,ci)=>{
         const assigned=participants.filter(m=>assignment[m.id]===ci);
+        const meta = getMeta(car.userId);
+        const adultNames = getAdultNames(car.userId);
+        const highwayOk = hasEnoughAdultsForHighway(car.userId);
         const cap=Number(car.capacity||0);
         const isFull=assigned.length>=cap;
         const infos=pickupRows(car.userId);
         // この車に乗る人 or adminはピックアップ編集可
         const canEdit=isAdmin||carpools.some(c=>c.userId===user.id&&c.available==="可"&&cars.findIndex(x=>x.userId===c.userId)===ci);
-        return h("div",{key:car.userId,style:{marginBottom:12,padding:12,background:"#F8F9FA",borderRadius:12,border:`2px solid ${isFull?"#4CAF50":"#eee"}`}},
+        return h("div",{key:car.userId,style:{marginBottom:12,padding:12,background:"#F8F9FA",borderRadius:12,border:`2px solid ${!highwayOk?"#F44336":isFull?"#4CAF50":"#eee"}`}},
           h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}},
             h("div",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},car.userName+" の車"),
             h("div",{style:{fontSize:12,fontWeight:700,color:isFull?"#4CAF50":"#aaa"}},assigned.length+"/"+cap+"人")),
+          h("div",{style:{marginBottom:8,padding:10,background:"#fff",borderRadius:10,border:"1px solid #E2E8F0"}},
+            h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}},
+              h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700}},"高速利用"),
+              canEdit
+                ? h("button",{
+                    onClick:()=>setMeta(car.userId,{highway:!meta.highway}),
+                    style:{
+                      border:"none",
+                      borderRadius:999,
+                      padding:"5px 12px",
+                      background:meta.highway?"#F97316":"#E2E8F0",
+                      color:meta.highway?"#fff":"#334155",
+                      fontSize:11,
+                      fontWeight:700,
+                      cursor:"pointer"
+                    }
+                  },meta.highway?"利用する":"利用しない")
+                : h("div",{style:{fontSize:12,fontWeight:700,color:meta.highway?"#F97316":"#64748B"}},meta.highway?"利用する":"利用しない")
+            ),
+            canEdit
+              ? h(Fragment,{},
+                  [1,2].map(n=>{
+                    const key = "adult"+n;
+                    const otherKey = key+"Other";
+                    return h("div",{key:car.userId+"-adult-"+n,style:{display:"flex",gap:8,alignItems:"center",marginBottom:n===1?8:0}},
+                      h("div",{style:{width:58,fontSize:11,color:"#64748B",fontWeight:700}},"大人"+n),
+                      h("select",{
+                        value:meta[key] || "",
+                        onChange:e=>setMeta(car.userId,{[key]:e.target.value}),
+                        style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
+                      },
+                        h("option",{value:""},"未設定"),
+                        ADULT_OPTIONS.map(v=>h("option",{key:car.userId+"-"+key+"-"+v,value:v},v))
+                      ),
+                      meta[key]==="その他" && h("input",{
+                        value:meta[otherKey] || "",
+                        onChange:e=>setMeta(car.userId,{[otherKey]:e.target.value}),
+                        placeholder:"任意の名前",
+                        style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
+                      })
+                    );
+                  })
+                )
+              : h("div",{style:{fontSize:12,color:"#1a1a2e",lineHeight:1.7}},
+                  "同乗大人: " + (adultNames.length ? adultNames.join("、") : "未設定")
+                ),
+            meta.highway && !highwayOk && h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#F44336"}},
+              "高速利用時は、運転手 + 同乗大人1名以上（合計大人2名）が必要です。")
+          ),
           // ピックアップ情報
           h("div",{style:{marginBottom:8}},
             infos.map((info,rowIdx)=>
@@ -1801,7 +1932,22 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
               h("span",{style:{fontSize:12,fontWeight:700,color:"#fff",background:pc.bg,
                 borderRadius:8,padding:"3px 10px",display:"inline-block",cursor:"pointer"}},
                 m.name+" ▼"));
-          })))));
+          }))),
+      h("div",{style:{marginTop:14,padding:12,background:"#EEF2FF",borderRadius:12,border:"1px solid #DBEAFE"}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#4F46E5",marginBottom:8}},"🚗 最終割り当て"),
+        cars.map((car,ci)=>{
+          const assigned=participants.filter(m=>assignment[m.id]===ci);
+          const meta=getMeta(car.userId);
+          const adults=getAdultNames(car.userId);
+          return h("div",{key:"summary-"+car.userId,style:{marginBottom:8,padding:"8px 10px",background:"#fff",borderRadius:10}},
+            h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:4}},car.userName+" の車"),
+            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"運転手: "+(car.userName||"-")),
+            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"同乗大人: "+(adults.length?adults.join("、"):"なし")),
+            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"選手: "+(assigned.length?assigned.map(m=>m.name).join("、"):"なし")),
+            h("div",{style:{fontSize:11,fontWeight:700,color:meta.highway?"#F97316":"#64748B"}},meta.highway?"高速利用":"一般道")
+          );
+        })
+      )));
 }
 
 // ── 出欠セクション（DayPage内で使用） ────────────────────────
