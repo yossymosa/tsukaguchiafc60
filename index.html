@@ -55,8 +55,8 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbzsytaV_f9M9cvWoanZnEtV
 // ================================================================
 
 const HOME_LINKS = [
-  {label:"公式HP",  url:"https://tsukaguchi-afc.jr", icon:"🌐"},
-  {label:"YouTube", url:"https://youtube.com/playlist?list=PLLo2VVDM0WelHQk4YEdf-dvejZLkVbJ2N&si=xEJa9OEtTiQmKHWU", icon:"▶️"},
+  {label:"チームHP",  url:"https://tsukaguchi-afc.jr", icon:"🌐", sub:"公式ホームページ"},
+  {label:"公式YouTube", url:"https://youtube.com/playlist?list=PLLo2VVDM0WelHQk4YEdf-dvejZLkVbJ2N&si=xEJa9OEtTiQmKHWU", icon:"▶️", sub:"動画・ハイライト"},
 ];
 const FORMATS = [
   {label:"7分ハーフ", hm:7, hv:2},{label:"10分ハーフ",hm:10,hv:2},{label:"12分ハーフ",hm:12,hv:2},
@@ -352,7 +352,6 @@ function ScoreLine({our,their,size=18}) {
   return h("span",{style:{fontSize:size,fontWeight:900,color:c,whiteSpace:"nowrap"}},Number(our),h("span",{style:{color:"#ddd",fontSize:size*0.7,margin:"0 3px"}},"-"),Number(their));
 }
 function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy,onEnableNotifications}) {
-  const noticeLabel = notificationBusy ? "切替中..." : (notificationEnabled ? "通知OFF" : "通知ON");
   return h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",padding:"20px 20px 52px",position:"relative",overflow:"hidden"}},
     h("div",{style:{position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(29,78,216,0.16)"}}),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"relative"}},
@@ -362,7 +361,6 @@ function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy
       h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}},
         h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.85)",fontWeight:600}},user.name),
         h("div",{style:{display:"flex",gap:6}},
-          h("button",{onClick:onEnableNotifications,disabled:notificationBusy,style:{background:notificationEnabled?"rgba(76,175,80,0.22)":"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid "+(notificationEnabled?"rgba(76,175,80,0.45)":"rgba(255,255,255,0.25)"),borderRadius:8,padding:"5px 10px",fontSize:11,cursor:notificationBusy?"wait":"pointer",opacity:notificationBusy?0.7:1}},noticeLabel),
           h("button",{onClick:onRefresh,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"🔄"),
           h("button",{onClick:onLogout,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"ログアウト")))));
 }
@@ -980,7 +978,15 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
   const nextSch=schedules.filter(s=>nd(s.date)>=today).sort((a,b)=>nd(a.date).localeCompare(nd(b.date)))[0];
   const daysUntil=nextSch?Math.ceil((new Date(nd(nextSch.date)+"T00:00:00")-new Date(today+"T00:00:00"))/(1000*60*60*24)):null;
   return h(Fragment,{},
-    // ① 次の試合カード
+    // ① LINKS（最上段）
+    h("div",{style:{marginBottom:20}},
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"LINKS（HP / YouTube）"),
+      h("div",{style:{display:"flex",gap:10}},
+        HOME_LINKS.map(l=>h("a",{key:l.label,href:l.url,target:"_blank",rel:"noopener noreferrer",style:{flex:1,background:"#fff",borderRadius:14,padding:"14px 8px",textAlign:"center",textDecoration:"none",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+          h("div",{style:{fontSize:22,marginBottom:5}},l.icon),
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#1a1a2e"}},l.label),
+          h("div",{style:{fontSize:10,color:"#64748B",marginTop:3}},l.sub||""))))),
+    // ② 次の試合カード
     nextSch&&h("div",{onClick:()=>onGoToDay&&onGoToDay(nextSch),style:{background:"linear-gradient(135deg,#1D4ED8,#0F172A)",borderRadius:18,padding:18,marginTop:8,marginBottom:16,boxShadow:"0 4px 16px rgba(15,23,42,0.28)",cursor:"pointer"}},
       h("div",{style:{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)",letterSpacing:2,marginBottom:8}},"NEXT EVENT"),
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
@@ -990,23 +996,22 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
         h("div",{style:{textAlign:"center",background:"rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 16px",flexShrink:0,marginLeft:12}},
           h("div",{style:{fontSize:28,fontWeight:900,color:"#fff"}},daysUntil===0?"今日":daysUntil),
           h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.8)",fontWeight:700}},daysUntil===0?"":"日後")))),
-    // ② LINKS（一番上）
-    h("div",{style:{marginBottom:20}},
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"LINKS"),
-      h("div",{style:{display:"flex",gap:10}},
-        HOME_LINKS.map(l=>h("a",{key:l.label,href:l.url,target:"_blank",rel:"noopener noreferrer",style:{flex:1,background:"#fff",borderRadius:14,padding:"14px 8px",textAlign:"center",textDecoration:"none",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-          h("div",{style:{fontSize:22,marginBottom:5}},l.icon),
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#1a1a2e"}},l.label))))),
-    // ② お知らせ
+    // ③ お知らせ
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"お知らせ"),
       recentNews.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"お知らせはありません"),
-      recentNews.map(n=>h("div",{key:n.id,style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}},
-        h("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:4}},
-          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e",flex:1,paddingRight:8}},n.title),
-          h("div",{style:{fontSize:11,color:"#bbb"}},fmt(n.date).short)),
-        h("div",{style:{fontSize:12,color:"#666",lineHeight:1.6}},n.content)))),
-    // ③ 最近の試合結果
+      recentNews.map(n=>{
+        const isNewScheduleNotice = String(n.title||"").includes("新しい予定が追加されました") || String(n.content||"").includes("新しい予定が追加されました");
+        const summary = isNewScheduleNotice ? String(n.content||"").replace("新しい予定が追加されました","").trim() : String(n.content||"");
+        return h("div",{key:n.id,style:{background:"#fff",borderRadius:14,padding:"11px 13px",marginBottom:7,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,gap:8}},
+            h("div",{style:{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}},
+              isNewScheduleNotice && h("span",{style:{display:"inline-block",fontSize:9,fontWeight:800,color:"#fff",background:"#1D4ED8",borderRadius:999,padding:"2px 6px",lineHeight:1}},"NEW"),
+              h("div",{style:{fontSize:isNewScheduleNotice?11:13,fontWeight:isNewScheduleNotice?700:700,color:"#1a1a2e",paddingRight:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},n.title)),
+            h("div",{style:{fontSize:10,color:"#bbb",flexShrink:0}},fmt(n.date).short)),
+          summary && h("div",{style:{fontSize:11,color:"#666",lineHeight:1.5,whiteSpace:"pre-wrap"}},summary));
+      })),
+    // ④ 最近の試合結果
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"最近の試合結果"),
       recent.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"試合記録がありません"),
