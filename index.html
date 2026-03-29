@@ -362,7 +362,24 @@ function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy
         h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.85)",fontWeight:600}},user.name),
         h("div",{style:{display:"flex",gap:6}},
           h("button",{onClick:onRefresh,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"🔄"),
-          h("button",{onClick:onLogout,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"ログアウト")))));
+          h("button",{onClick:onLogout,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"ログアウト")))),
+    h("div",{style:{display:"flex",gap:6,marginTop:10,position:"relative",flexWrap:"wrap"}},
+      HOME_LINKS.map(l=>h("a",{
+        key:"header-link-"+l.label,
+        href:l.url,
+        target:"_blank",
+        rel:"noopener noreferrer",
+        style:{
+          textDecoration:"none",
+          fontSize:10,
+          fontWeight:700,
+          color:"#fff",
+          padding:"4px 8px",
+          borderRadius:999,
+          background:"rgba(255,255,255,0.12)",
+          border:"1px solid rgba(255,255,255,0.25)"
+        }
+      },`${l.icon} ${l.label}`))));
 }
 
 // ── ログイン ─────────────────────────────────────────────────
@@ -978,15 +995,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
   const nextSch=schedules.filter(s=>nd(s.date)>=today).sort((a,b)=>nd(a.date).localeCompare(nd(b.date)))[0];
   const daysUntil=nextSch?Math.ceil((new Date(nd(nextSch.date)+"T00:00:00")-new Date(today+"T00:00:00"))/(1000*60*60*24)):null;
   return h(Fragment,{},
-    // ① LINKS（最上段）
-    h("div",{style:{marginBottom:20}},
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"LINKS（HP / YouTube）"),
-      h("div",{style:{display:"flex",gap:10}},
-        HOME_LINKS.map(l=>h("a",{key:l.label,href:l.url,target:"_blank",rel:"noopener noreferrer",style:{flex:1,background:"#fff",borderRadius:14,padding:"14px 8px",textAlign:"center",textDecoration:"none",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-          h("div",{style:{fontSize:22,marginBottom:5}},l.icon),
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#1a1a2e"}},l.label),
-          h("div",{style:{fontSize:10,color:"#64748B",marginTop:3}},l.sub||""))))),
-    // ② 次の試合カード
+    // ① 次の試合カード
     nextSch&&h("div",{onClick:()=>onGoToDay&&onGoToDay(nextSch),style:{background:"linear-gradient(135deg,#1D4ED8,#0F172A)",borderRadius:18,padding:18,marginTop:8,marginBottom:16,boxShadow:"0 4px 16px rgba(15,23,42,0.28)",cursor:"pointer"}},
       h("div",{style:{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.7)",letterSpacing:2,marginBottom:8}},"NEXT EVENT"),
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
@@ -996,7 +1005,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
         h("div",{style:{textAlign:"center",background:"rgba(255,255,255,0.2)",borderRadius:14,padding:"10px 16px",flexShrink:0,marginLeft:12}},
           h("div",{style:{fontSize:28,fontWeight:900,color:"#fff"}},daysUntil===0?"今日":daysUntil),
           h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.8)",fontWeight:700}},daysUntil===0?"":"日後")))),
-    // ③ お知らせ
+    // ② お知らせ
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"お知らせ"),
       recentNews.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"お知らせはありません"),
@@ -1011,7 +1020,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
             h("div",{style:{fontSize:10,color:"#bbb",flexShrink:0}},fmt(n.date).short)),
           summary && h("div",{style:{fontSize:11,color:"#666",lineHeight:1.5,whiteSpace:"pre-wrap"}},summary));
       })),
-    // ④ 最近の試合結果
+    // ③ 最近の試合結果
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"最近の試合結果"),
       recent.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"試合記録がありません"),
