@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-title" content="塚口AFC">
 <title>⚽ 塚口AFC</title>
 <link rel="manifest" href="/manifest.json"/>
-<link rel="icon" href="/icon.svg" type="image/svg+xml"/>
+<link rel="icon" href="/icon-512.png" type="image/png"/>
 <link rel="apple-touch-icon" href="/icon-512.png"/>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;900&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/preact@10.19.3/dist/preact.umd.js"></script>
@@ -135,7 +135,7 @@ async function subscribeWebPush(user) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     throw new Error("この端末ではWeb Pushに対応していません");
   }
-  const swUrl = "/sw.js?v=7";
+  const swUrl = "/sw.js?v=8";
   const reg =
     (await navigator.serviceWorker.getRegistration()) ||
     (await navigator.serviceWorker.register(swUrl));
@@ -977,8 +977,78 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 }
 
 // ── ホームタブ ─────────────────────────────────────────────────
-function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,onOpenDashTab}) {
+function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,onOpenDashTab,onOpenTab}) {
   const [todayKey,setTodayKey]=useState(()=>todayLocal());
+  const fmtNewsDateTime = v => {
+    const d = new Date(String(v || ""));
+    if (isNaN(d.getTime())) return fmt(v).short || "";
+    return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+  const extractDateFromText = text => {
+    const m = String(text || "").match(/(20\d{2})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})/);
+    if (!m) return "";
+    return `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
+  };
+  const findScheduleFromNotice = n => {
+    const targetId = String(n.targetId || "").trim();
+    if (targetId) {
+      const byId = schedules.find(s => String(s.id || "").trim() === targetId);
+      if (byId) return byId;
+    }
+    const src = `${String(n.title || "")} ${String(n.content || "")}`.trim();
+    const dateKey = extractDateFromText(src);
+    const byDate = dateKey ? schedules.filter(s => nd(s.date) === dateKey) : [];
+    if (byDate.length === 1) return byDate[0];
+    if (byDate.length > 1) {
+      const hint = String(n.content || n.title || "").replace("新しい予定が追加されました", "").trim();
+      const hit = byDate.find(s => {
+        const t = String(s.title || "").trim();
+        return hint && (hint.includes(t) || t.includes(hint));
+      });
+      return hit || byDate[0];
+    }
+    return null;
+  };
+  const openNotice = n => {
+    const tt = String(n.targetType || "").toLowerCase();
+    const title = String(n.title || "");
+    const content = String(n.content || "");
+    const targetUrl = String(n.targetUrl || "").trim();
+    const isScheduleNotice =
+      tt === "schedule" || tt === "deadline" ||
+      title.includes("予定") || title.includes("締切") || content.includes("締切");
+    if (isScheduleNotice) {
+      const s = findScheduleFromNotice(n);
+      if (s && onGoToDay) {
+        onGoToDay(s);
+        return;
+      }
+      if (onOpenTab) {
+        onOpenTab("cal");
+        return;
+      }
+    }
+    const isYoutubeNotice = tt === "youtube" || /youtube/i.test(title) || /youtube/i.test(content);
+    if (isYoutubeNotice) {
+      const extractedUrl = (content.match(/https?:\/\/[^\s]+/i) || [])[0] || "";
+      const youtubeUrl = targetUrl || extractedUrl || (HOME_LINKS.find(l => /youtube/i.test(String(l.label || ""))) || {}).url;
+      if (youtubeUrl) {
+        window.open(youtubeUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+    }
+    if (targetUrl) {
+      if (/^https?:\/\//i.test(targetUrl)) {
+        window.open(targetUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (targetUrl.includes("tab=cal") && onOpenTab) { onOpenTab("cal"); return; }
+      if (targetUrl.includes("tab=match") && onOpenTab) { onOpenTab("match"); return; }
+      if (targetUrl.includes("tab=dash") && onOpenTab) { onOpenTab("dash"); return; }
+      if (targetUrl.includes("tab=member") && onOpenTab) { onOpenTab("member"); return; }
+      if (targetUrl.includes("tab=memo") && onOpenTab) { onOpenTab("memo"); return; }
+    }
+  };
   const getResultType = r => {
     const linked = schedules.find(s => s.id === r.scheduleId) || schedules.find(s => nd(s.date) === nd(r.date));
     return linked?.type || r.type || "";
@@ -1012,13 +1082,16 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
       recentNews.map(n=>{
         const isNewScheduleNotice = String(n.title||"").includes("新しい予定が追加されました") || String(n.content||"").includes("新しい予定が追加されました");
         const summary = isNewScheduleNotice ? String(n.content||"").replace("新しい予定が追加されました","").trim() : String(n.content||"");
-        return h("div",{key:n.id,style:{background:"#fff",borderRadius:14,padding:"11px 13px",marginBottom:7,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}},
-          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,gap:8}},
-            h("div",{style:{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}},
+        const canClick = isNewScheduleNotice || /youtube/i.test(String(n.title||"")+" "+String(n.content||"")) || String(n.targetType||"").trim() || String(n.targetUrl||"").trim();
+        return h("div",{key:n.id,onClick:canClick?()=>openNotice(n):undefined,style:{background:"#fff",borderRadius:14,padding:"11px 12px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderLeft:isNewScheduleNotice?"3px solid #1D4ED8":"3px solid #E2E8F0",cursor:canClick?"pointer":"default"}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5,gap:8}},
+            h("div",{style:{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,flexWrap:"wrap"}},
               isNewScheduleNotice && h("span",{style:{display:"inline-block",fontSize:9,fontWeight:800,color:"#fff",background:"#1D4ED8",borderRadius:999,padding:"2px 6px",lineHeight:1}},"NEW"),
-              h("div",{style:{fontSize:isNewScheduleNotice?11:13,fontWeight:isNewScheduleNotice?700:700,color:"#1a1a2e",paddingRight:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},n.title)),
-            h("div",{style:{fontSize:10,color:"#bbb",flexShrink:0}},fmt(n.date).short)),
-          summary && h("div",{style:{fontSize:11,color:"#666",lineHeight:1.5,whiteSpace:"pre-wrap"}},summary));
+              h("div",{style:{fontSize:isNewScheduleNotice?11:13,fontWeight:700,color:"#1a1a2e",paddingRight:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}},n.title || "お知らせ")),
+            h("div",{style:{display:"flex",alignItems:"center",gap:6,flexShrink:0}},
+              h("div",{style:{fontSize:10,color:"#94A3B8"}},fmtNewsDateTime(n.date)),
+              canClick && h("div",{style:{fontSize:12,color:"#94A3B8",fontWeight:700}},"›"))),
+          summary && h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.6,whiteSpace:"pre-wrap"}},summary));
       })),
     // ③ 最近の試合結果
     h("div",{style:{marginBottom:20}},
@@ -3296,7 +3369,7 @@ function App() {
     ...(isAdmin?[{k:"settings",i:"⚙️",l:"設定"}]:[]),
   ];
   const currentTabContent =
-    tab==="home" ? h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab})
+    tab==="home" ? h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:setTab})
     : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule})
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch})
@@ -3325,7 +3398,7 @@ render(h(App,{}), document.getElementById("app"));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=7").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=8").catch(() => {});
   });
 }
 </script>
