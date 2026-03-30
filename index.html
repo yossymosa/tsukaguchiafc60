@@ -993,10 +993,22 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 // ── ホームタブ ─────────────────────────────────────────────────
 function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,onOpenDashTab,onOpenTab}) {
   const [todayKey,setTodayKey]=useState(()=>todayLocal());
+  const parseNewsTs = v => {
+    const d = new Date(String(v || ""));
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  };
   const fmtNewsDateTime = v => {
     const d = new Date(String(v || ""));
     if (isNaN(d.getTime())) return fmt(v).short || "";
     return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+  const isFreshNews = v => {
+    const d = new Date(String(v || ""));
+    if (isNaN(d.getTime())) return false;
+    const postedDate = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const todayDate = new Date(todayKey + "T00:00:00").getTime();
+    const diffDays = Math.floor((todayDate - postedDate) / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 && diffDays < 2; // 更新後2日だけ NEW
   };
   const extractDateFromText = text => {
     const m = String(text || "").match(/(20\d{2})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})/);
@@ -1073,7 +1085,10 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
     return ()=>clearInterval(timer);
   },[]);
   const recent=results.slice(0,5);
-  const recentNews=news.filter(n=>n.category!=="コーチメモ").slice(0,5);
+  const recentNews=news
+    .filter(n=>n.category!=="コーチメモ")
+    .sort((a,b)=>parseNewsTs(b.date)-parseNewsTs(a.date))
+    .slice(0,3);
   // 次の試合を探す
   const today=todayKey;
   const nextSch=schedules.filter(s=>nd(s.date)>=today).sort((a,b)=>nd(a.date).localeCompare(nd(b.date)))[0];
@@ -1094,18 +1109,25 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"お知らせ"),
       recentNews.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"お知らせはありません"),
       recentNews.map(n=>{
-        const isNewScheduleNotice = String(n.title||"").includes("新しい予定が追加されました") || String(n.content||"").includes("新しい予定が追加されました");
-        const summary = isNewScheduleNotice ? String(n.content||"").replace("新しい予定が追加されました","").trim() : String(n.content||"");
-        const canClick = isNewScheduleNotice || /youtube/i.test(String(n.title||"")+" "+String(n.content||"")) || String(n.targetType||"").trim() || String(n.targetUrl||"").trim();
-        return h("div",{key:n.id,onClick:canClick?()=>openNotice(n):undefined,style:{background:"#fff",borderRadius:14,padding:"11px 12px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderLeft:isNewScheduleNotice?"3px solid #1D4ED8":"3px solid #E2E8F0",cursor:canClick?"pointer":"default"}},
+        const titleText = String(n.title||"");
+        const contentText = String(n.content||"");
+        const isScheduleAddedNotice = titleText.includes("新しい予定が追加されました") || contentText.includes("新しい予定が追加されました") || titleText.includes("予定が追加されました") || contentText.includes("予定が追加されました");
+        const summaryRaw = isScheduleAddedNotice
+          ? contentText.replace("新しい予定が追加されました","").replace("予定が追加されました","").replace(/^[:：\s-]+/,"").trim()
+          : contentText.trim();
+        const summary = summaryRaw || (isScheduleAddedNotice ? "予定が追加されました" : "");
+        const displayTitle = isScheduleAddedNotice ? "予定追加" : (titleText || "お知らせ");
+        const canClick = isScheduleAddedNotice || /youtube/i.test(titleText+" "+contentText) || String(n.targetType||"").trim() || String(n.targetUrl||"").trim();
+        const showNew = isFreshNews(n.date);
+        return h("div",{key:n.id,onClick:canClick?()=>openNotice(n):undefined,style:{background:"#fff",borderRadius:14,padding:"11px 12px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderLeft:isScheduleAddedNotice?"3px solid #1D4ED8":"3px solid #E2E8F0",cursor:canClick?"pointer":"default"}},
           h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5,gap:8}},
             h("div",{style:{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,flexWrap:"wrap"}},
-              isNewScheduleNotice && h("span",{style:{display:"inline-block",fontSize:9,fontWeight:800,color:"#fff",background:"#1D4ED8",borderRadius:999,padding:"2px 6px",lineHeight:1}},"NEW"),
-              h("div",{style:{fontSize:isNewScheduleNotice?11:13,fontWeight:700,color:"#1a1a2e",paddingRight:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}},n.title || "お知らせ")),
+              showNew && h("span",{style:{display:"inline-block",fontSize:9,fontWeight:800,color:"#fff",background:"#1D4ED8",borderRadius:999,padding:"2px 6px",lineHeight:1}},"NEW"),
+              h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e",paddingRight:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}},displayTitle)),
             h("div",{style:{display:"flex",alignItems:"center",gap:6,flexShrink:0}},
               h("div",{style:{fontSize:10,color:"#94A3B8"}},fmtNewsDateTime(n.date)),
               canClick && h("div",{style:{fontSize:12,color:"#94A3B8",fontWeight:700}},"›"))),
-          summary && h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.6,whiteSpace:"pre-wrap"}},summary));
+          summary && h("div",{style:{fontSize:12,color:"#1E293B",lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:isScheduleAddedNotice?800:700}},summary));
       })),
     // ③ 最近の試合結果
     h("div",{style:{marginBottom:20}},
@@ -2917,19 +2939,20 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
       const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
       const evs=dayData[d]||[];
       const isToday=dStr===todayStr;
-      const hasPrac=evs.some(e=>["practice"].includes(e.type)||e.type==="練習");
-      const hasMatch=evs.some(e=>["official","training","cup","公式戦","トレマ","カップ戦"].includes(e.type));
-      const hasEvent=evs.some(e=>["event","イベント"].includes(e.type));
+      const primaryEvent = evs[0] || null;
+      const primaryType = primaryEvent ? getTC(primaryEvent.type) : null;
+      const moreCount = evs.length > 1 ? evs.length - 1 : 0;
       const clickDay=()=>{
         if(!evs.length) return;
         onGoToDay(evs[0]); // その日のまとめページへ
       };
-      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"6px 2px",borderRadius:8,background:isToday?"#1D4ED8":evs.length>0?"#EFF6FF":"transparent",minHeight:42,cursor:evs.length>0?"pointer":"default"}},
+      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"6px 3px",borderRadius:8,background:isToday?"#1D4ED8":evs.length>0?"#EFF6FF":"transparent",minHeight:70,cursor:evs.length>0?"pointer":"default"}},
         h("div",{style:{fontSize:13,fontWeight:isToday?900:400,color:isToday?"#fff":di===0?"#F44336":di===6?"#2196F3":"#1a1a2e"}},d),
-        h("div",{style:{display:"flex",gap:1,justifyContent:"center",marginTop:3}},
-          hasPrac&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#4CAF50"}}),
-          hasMatch&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#1D4ED8"}}),
-          hasEvent&&h("div",{style:{width:5,height:5,borderRadius:"50%",background:isToday?"rgba(255,255,255,0.8)":"#009688"}})
+        evs.length>0&&h("div",{style:{marginTop:4,padding:"4px 4px",borderRadius:7,background:isToday?"rgba(255,255,255,0.22)":"#DBEAFE",textAlign:"left"}},
+          h("div",{style:{fontSize:8,fontWeight:800,color:isToday?"#fff":"#1D4ED8",lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
+            (primaryType?primaryType.lb:"予定")+(moreCount>0?` +${moreCount}`:"")),
+          h("div",{style:{fontSize:9,fontWeight:700,color:isToday?"#fff":"#1E293B",lineHeight:1.25,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
+            primaryEvent?.title||"予定")
         )
       );
     })
