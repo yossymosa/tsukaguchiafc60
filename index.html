@@ -1596,8 +1596,8 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
   );
 }
 // ── 配車セクション ────────────────────────────────────────────
-function CarpoolSection({schedule, user, isAdmin, members}) {
-  const ADULT_OPTIONS = ["丸尾コーチ", "健太郎コーチ", "その他"];
+function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
+  const COACH_CANDIDATES = ["丸尾コーチ", "健太郎コーチ", "その他"];
   const [carpools, setCarpools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [my, setMy] = useState({available:"", capacity:"", note:""});
@@ -1611,6 +1611,11 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
   const [pickupInfo, setPickupInfo] = useState({});
   // 車ごとの追加情報 {userId: {highway:boolean, adult1:"", adult1Other:"", adult2:"", adult2Other:""}}
   const [carMeta, setCarMeta] = useState({});
+  const adultUserOptions = [...new Set(
+    (users || [])
+      .map(u => String(u.name || "").trim())
+      .filter(Boolean)
+  )].sort((a,b)=>a.localeCompare(b,"ja"));
   const [planLoaded, setPlanLoaded] = useState(false);
   const pickupRows = userId => {
     const raw = pickupInfo[userId];
@@ -1623,10 +1628,10 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
   };
   const getMeta = userId => ({
     highway: false,
-    adult1: "",
-    adult1Other: "",
-    adult2: "",
-    adult2Other: "",
+    adultUser1: "",
+    adultUser2: "",
+    coach: "",
+    coachOther: "",
     ...(carMeta[userId] || {})
   });
   const setMeta = (userId, patch) => {
@@ -1634,25 +1639,23 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
       ...prev,
       [userId]: {
         highway: false,
-        adult1: "",
-        adult1Other: "",
-        adult2: "",
-        adult2Other: "",
+        adultUser1: "",
+        adultUser2: "",
+        coach: "",
+        coachOther: "",
         ...(prev[userId] || {}),
         ...patch
       }
     }));
   };
-  const resolveAdultName = (v, other) => {
-    if (v === "その他") return String(other || "").trim();
-    return String(v || "").trim();
-  };
   const getAdultNames = userId => {
     const m = getMeta(userId);
-    return [
-      resolveAdultName(m.adult1, m.adult1Other),
-      resolveAdultName(m.adult2, m.adult2Other),
-    ].filter(Boolean);
+    return [String(m.adultUser1 || "").trim(), String(m.adultUser2 || "").trim()].filter(Boolean);
+  };
+  const getCoachName = userId => {
+    const m = getMeta(userId);
+    if (m.coach === "その他") return String(m.coachOther || "").trim();
+    return String(m.coach || "").trim();
   };
   // 高速利用時は「運転手 + 同乗大人1名以上（合計大人2名）」を必須にする
   const hasEnoughAdultsForHighway = userId => {
@@ -1675,6 +1678,7 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
       "【配車ルール】",
       "・配車できる場合は、必ず乗車人数を入力してください。",
       "・高速利用の車は、運転手 + 同乗大人1名以上（合計大人2名）が必要です。",
+      "・同乗大人はユーザー一覧から選択してください（コーチ欄は別）。",
       "・集合場所と出発時間を入力してください。",
       "・変更が出たら、できるだけ早く更新してください。",
       "・安全第一（シートベルト着用・定員超過なし）でお願いします。"
@@ -1738,6 +1742,36 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
   const cars=carpools.filter(c=>c.available==="可"&&Number(c.capacity||0)>0);
   // 参加者リスト（出欠○）
   const participants=members.filter(m=>attend[m.id]==="○").sort((a,b)=>Number(a.number)-Number(b.number));
+  const autoAssign = () => {
+    if (participants.length === 0) {
+      alert("参加者がいません。");
+      return;
+    }
+    const enabledCars = cars
+      .map((car, ci) => ({ car, ci }))
+      .filter(({ car }) => hasEnoughAdultsForHighway(car.userId))
+      .map(({ car, ci }) => ({ ci, remain: Number(car.capacity || 0) }))
+      .filter(c => c.remain > 0);
+    if (enabledCars.length === 0) {
+      alert("割り当て可能な車がありません（高速条件または乗車人数を確認してください）。");
+      return;
+    }
+    const next = {};
+    const list = [...participants].sort((a,b)=>Number(a.number||99)-Number(b.number||99));
+    list.forEach(m => {
+      enabledCars.sort((a,b)=>b.remain-a.remain || a.ci-b.ci);
+      const target = enabledCars.find(c => c.remain > 0);
+      if (!target) return;
+      next[m.id] = target.ci;
+      target.remain -= 1;
+    });
+    setAssignment(next);
+    const assignedCount = Object.keys(next).length;
+    const unassigned = list.length - assignedCount;
+    alert(unassigned > 0
+      ? `自動割り当てしました（${assignedCount}名割当 / ${unassigned}名未割当）`
+      : `自動割り当てしました（${assignedCount}名）`);
+  };
 
   if(loading) return h("div",{style:{textAlign:"center",padding:20,color:"#aaa",fontSize:13}},"読み込み中...");
 
@@ -1805,9 +1839,13 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
     isAdmin&&cars.length>0&&participants.length>0&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"🗺 配車割り当て"),
-        h("button",{onClick:toggleAssignMode,
-          style:{fontSize:11,fontWeight:700,color:"#2196F3",background:"none",border:"1px solid #2196F3",borderRadius:8,padding:"4px 10px",cursor:"pointer"}},
-          assignMode?"完了":"割り当て")),
+        h("div",{style:{display:"flex",gap:6,alignItems:"center"}},
+          h("button",{onClick:autoAssign,
+            style:{fontSize:11,fontWeight:700,color:"#0F172A",background:"#E2E8F0",border:"1px solid #CBD5E1",borderRadius:8,padding:"4px 10px",cursor:"pointer"}},
+            "自動割り当て"),
+          h("button",{onClick:toggleAssignMode,
+            style:{fontSize:11,fontWeight:700,color:"#2196F3",background:"none",border:"1px solid #2196F3",borderRadius:8,padding:"4px 10px",cursor:"pointer"}},
+            assignMode?"完了":"割り当て"))),
       // 車ごとのカード
       cars.map((car,ci)=>{
         const assigned=participants.filter(m=>assignment[m.id]===ci);
@@ -1845,8 +1883,7 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
             canEdit
               ? h(Fragment,{},
                   [1,2].map(n=>{
-                    const key = "adult"+n;
-                    const otherKey = key+"Other";
+                    const key = "adultUser"+n;
                     return h("div",{key:car.userId+"-adult-"+n,style:{display:"flex",gap:8,alignItems:"center",marginBottom:n===1?8:0}},
                       h("div",{style:{width:58,fontSize:11,color:"#64748B",fontWeight:700}},"大人"+n),
                       h("select",{
@@ -1855,19 +1892,37 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
                         style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
                       },
                         h("option",{value:""},"未設定"),
-                        ADULT_OPTIONS.map(v=>h("option",{key:car.userId+"-"+key+"-"+v,value:v},v))
-                      ),
-                      meta[key]==="その他" && h("input",{
-                        value:meta[otherKey] || "",
-                        onChange:e=>setMeta(car.userId,{[otherKey]:e.target.value}),
-                        placeholder:"任意の名前",
-                        style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
-                      })
+                        adultUserOptions.map(v=>h("option",{key:car.userId+"-"+key+"-"+v,value:v},v))
+                      )
                     );
-                  })
+                  }),
+                  h("div",{style:{display:"flex",gap:8,alignItems:"center",marginTop:8}},
+                    h("div",{style:{width:58,fontSize:11,color:"#64748B",fontWeight:700}},"コーチ"),
+                    h("select",{
+                      value:meta.coach || "",
+                      onChange:e=>setMeta(car.userId,{coach:e.target.value}),
+                      style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
+                    },
+                      h("option",{value:""},"未設定"),
+                      COACH_CANDIDATES.map(v=>h("option",{key:car.userId+"-coach-"+v,value:v},v))
+                    ),
+                    meta.coach==="その他" && h("input",{
+                      value:meta.coachOther || "",
+                      onChange:e=>setMeta(car.userId,{coachOther:e.target.value}),
+                      placeholder:"任意の名前",
+                      style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
+                    })
+                  ),
+                  adultUserOptions.length===0 && h("div",{style:{marginTop:6,fontSize:11,color:"#F59E0B",fontWeight:700}},
+                    "ユーザーが未登録のため、大人選択ができません")
                 )
-              : h("div",{style:{fontSize:12,color:"#1a1a2e",lineHeight:1.7}},
-                  "同乗大人: " + (adultNames.length ? adultNames.join("、") : "未設定")
+              : h(Fragment,{},
+                  h("div",{style:{fontSize:12,color:"#1a1a2e",lineHeight:1.7}},
+                    "同乗大人: " + (adultNames.length ? adultNames.join("、") : "未設定")
+                  ),
+                  h("div",{style:{fontSize:12,color:"#1a1a2e",lineHeight:1.7}},
+                    "同乗コーチ: " + (getCoachName(car.userId) || "なし")
+                  )
                 ),
             meta.highway && !highwayOk && h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#F44336"}},
               "高速利用時は、運転手 + 同乗大人1名以上（合計大人2名）が必要です。")
@@ -1939,10 +1994,12 @@ function CarpoolSection({schedule, user, isAdmin, members}) {
           const assigned=participants.filter(m=>assignment[m.id]===ci);
           const meta=getMeta(car.userId);
           const adults=getAdultNames(car.userId);
+          const coachName=getCoachName(car.userId);
           return h("div",{key:"summary-"+car.userId,style:{marginBottom:8,padding:"8px 10px",background:"#fff",borderRadius:10}},
             h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:4}},car.userName+" の車"),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"運転手: "+(car.userName||"-")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"同乗大人: "+(adults.length?adults.join("、"):"なし")),
+            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"同乗コーチ: "+(coachName||"なし")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"選手: "+(assigned.length?assigned.map(m=>m.name).join("、"):"なし")),
             h("div",{style:{fontSize:11,fontWeight:700,color:meta.highway?"#F97316":"#64748B"}},meta.highway?"高速利用":"一般道")
           );
@@ -3179,7 +3236,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,user,users=[],onGoT
       }}),
 
       // 配車タブ
-      dayTab==="carpool"&&h(CarpoolSection,{schedule,user,isAdmin,members}),
+      dayTab==="carpool"&&h(CarpoolSection,{schedule,user,isAdmin,members,users}),
 
       // 出欠タブ
       dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin}),
