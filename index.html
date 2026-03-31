@@ -149,7 +149,7 @@ async function subscribeWebPush(user) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     throw new Error("この端末ではWeb Pushに対応していません");
   }
-  const swUrl = "/sw.js?v=8";
+  const swUrl = "/sw.js?v=9";
   const reg =
     (await navigator.serviceWorker.getRegistration()) ||
     (await navigator.serviceWorker.register(swUrl));
@@ -3129,36 +3129,50 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete}) {
     setModal(false);
   };
 
+  const renderItem=(item)=>{
+    const opened=openId===item.id;
+    return h("div",{key:item.id,style:{background:"#fff",borderRadius:14,marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",overflow:"hidden"}},
+      h("button",{onClick:()=>setOpenId(opened?"":item.id),style:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"14px 14px",border:"none",background:"#fff",cursor:"pointer"}},
+        h("div",{style:{fontSize:14,fontWeight:800,color:"#1E293B",textAlign:"left",flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},item.title),
+        h("div",{style:{fontSize:16,color:"#94A3B8",fontWeight:800,flexShrink:0}},opened?"−":"+")
+      ),
+      opened ? h("div",{style:{padding:"0 14px 14px",borderTop:"1px solid #F1F5F9"}},
+        h("div",{style:{fontSize:13,color:"#334155",lineHeight:1.8,whiteSpace:"pre-wrap",marginTop:10}},item.content||"（内容なし）"),
+        (item.date||item.author) ? h("div",{style:{fontSize:11,color:"#94A3B8",marginTop:10}},
+          (item.date?fmt(item.date).short:"") + (item.author?` / ${item.author}`:"")
+        ) : null,
+        (item.newsId&&isAdmin) ? h("div",{style:{marginTop:10,display:"flex",justifyContent:"flex-end"}},
+          h("button",{onClick:()=>onDelete(item.newsId),style:{border:"none",background:"#FEE2E2",color:"#B91C1C",fontSize:12,fontWeight:700,padding:"6px 10px",borderRadius:8,cursor:"pointer"}},"削除")
+        ) : null
+      ) : null
+    );
+  };
+
   return h(Fragment,{},
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",letterSpacing:1.2}},"資料・FAQ"),
-      isAdmin&&h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"8px 12px",fontSize:12,borderRadius:12}},"+ 追加")),
+      isAdmin ? h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"8px 12px",fontSize:12,borderRadius:12}},"+ 追加") : null
+    ),
     h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},
-      "会計ルール・総会資料・送金方法など、チーム運営に必要な情報をここに集約します。"),
-    items.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"資料はまだありません"),
-    items.map(item=>{
-      const opened=openId===item.id;
-      return h("div",{key:item.id,style:{background:"#fff",borderRadius:14,marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",overflow:"hidden"}},
-        h("button",{onClick:()=>setOpenId(opened?"":item.id),style:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"14px 14px",border:"none",background:"#fff",cursor:"pointer"}},
-          h("div",{style:{fontSize:14,fontWeight:800,color:"#1E293B",textAlign:"left",flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},item.title),
-          h("div",{style:{fontSize:16,color:"#94A3B8",fontWeight:800,flexShrink:0}},opened?"−":"+")),
-        opened&&h("div",{style:{padding:"0 14px 14px",borderTop:"1px solid #F1F5F9"}},
-          h("div",{style:{fontSize:13,color:"#334155",lineHeight:1.8,whiteSpace:"pre-wrap",marginTop:10}},item.content||"（内容なし）"),
-          (item.date||item.author)&&h("div",{style:{fontSize:11,color:"#94A3B8",marginTop:10}},
-            (item.date?fmt(item.date).short:"") + (item.author?` / ${item.author}`:"")),
-          item.newsId&&isAdmin&&h("div",{style:{marginTop:10,display:"flex",justifyContent:"flex-end"}},
-            h("button",{onClick:()=>onDelete(item.newsId),style:{border:"none",background:"#FEE2E2",color:"#B91C1C",fontSize:12,fontWeight:700,padding:"6px 10px",borderRadius:8,cursor:"pointer"}},"削除"))));
-    }),
-    modal&&h(Modal,{title:"資料を追加",onClose:()=>setModal(false)},
+      "会計ルール・総会資料・送金方法など、チーム運営に必要な情報をここに集約します。"
+    ),
+    items.length===0 ? h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"資料はまだありません") : null,
+    items.map(renderItem),
+    modal ? h(Modal,{title:"資料を追加",onClose:()=>setModal(false)},
       h("div",{style:{marginBottom:14}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"タイトル"),
-        h("input",{value:fd.title,onChange:e=>setFd(p=>({...p,title:e.target.value})),placeholder:"例：会計ルール（2026年度）",style:css.inp})),
+        h("input",{value:fd.title,onChange:e=>setFd(p=>({...p,title:e.target.value})),placeholder:"例：会計ルール（2026年度）",style:css.inp})
+      ),
       h("div",{style:{marginBottom:20}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"内容"),
-        h("textarea",{value:fd.content,onChange:e=>setFd(p=>({...p,content:e.target.value})),rows:8,placeholder:"手順・注意事項・リンクなど",style:{...css.inp,resize:"none"}})),
+        h("textarea",{value:fd.content,onChange:e=>setFd(p=>({...p,content:e.target.value})),rows:8,placeholder:"手順・注意事項・リンクなど",style:{...css.inp,resize:"none"}})
+      ),
       h("div",{style:{display:"flex",gap:10}},
         h("button",{onClick:()=>setModal(false),style:css.bG},"キャンセル"),
-        h("button",{onClick:saveDoc,style:css.bS},"保存する")));
+        h("button",{onClick:saveDoc,style:css.bS},"保存する")
+      )
+    ) : null
+  );
 }
 
 // ── その日の試合まとめページ ─────────────────────────────────────
@@ -3809,7 +3823,7 @@ render(h(App,{}), document.getElementById("app"));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=8").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=9").catch(() => {});
   });
 }
 </script>
