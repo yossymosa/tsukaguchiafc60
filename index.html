@@ -1670,6 +1670,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   };
   const getMeta = userId => ({
     highway: false,
+    driver: "",
     adultUser1: "",
     adultUser2: "",
     coach: "",
@@ -1681,6 +1682,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       ...prev,
       [userId]: {
         highway: false,
+        driver: "",
         adultUser1: "",
         adultUser2: "",
         coach: "",
@@ -1694,6 +1696,11 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     const m = getMeta(userId);
     return [String(m.adultUser1 || "").trim(), String(m.adultUser2 || "").trim()].filter(Boolean);
   };
+  const getDriverName = car => {
+    const m = getMeta(car.userId);
+    const selected = String(m.driver || "").trim();
+    return selected || String(car.userName || "").trim();
+  };
   const getCoachName = userId => {
     const m = getMeta(userId);
     if (m.coach === "その他") return String(m.coachOther || "").trim();
@@ -1704,16 +1711,18 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     return normalizeName(carUserName) === luggageKey;
   };
   // 高速利用時は「運転手 + 同乗大人1名以上（合計大人2名）」を必須にする
-  const hasEnoughAdultsForHighway = userId => {
-    const m = getMeta(userId);
-    const adults = getAdultNames(userId);
-    return !m.highway || adults.length >= 1;
+  const hasEnoughAdultsForHighway = car => {
+    const m = getMeta(car.userId);
+    if (!m.highway) return true;
+    const driver = getDriverName(car);
+    const adults = getAdultNames(car.userId);
+    return !!driver && adults.length >= 1;
   };
   const toggleAssignMode = () => {
     if (assignMode) {
-      const invalidCars = cars.filter(car => !hasEnoughAdultsForHighway(car.userId));
+      const invalidCars = cars.filter(car => !hasEnoughAdultsForHighway(car));
       if (invalidCars.length > 0) {
-        alert("高速利用の車は「運転手 + 同乗大人1名以上（合計2名）」を設定してください。");
+        alert("高速利用の車は大人2人（運転手＋同乗大人）を選んでください。");
         return;
       }
     }
@@ -1819,7 +1828,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     }
     const enabledCars = cars
       .map((car, ci) => ({ car, ci }))
-      .filter(({ car }) => hasEnoughAdultsForHighway(car.userId))
+      .filter(({ car }) => hasEnoughAdultsForHighway(car))
       .map(({ car, ci }) => {
         const reserved = getAdultNames(car.userId).length + (getCoachName(car.userId) ? 1 : 0);
         return { ci, remain: Number(car.capacity || 0) - reserved };
@@ -1965,11 +1974,12 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8}},"配車可能リスト"),
         cars.map((car,ci)=>{
           const s = seatSummary(ci);
+          const driverName = getDriverName(car);
           return h("div",{key:"list-"+car.userId,style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"6px 4px",borderBottom:ci<cars.length-1?"1px dashed #E2E8F0":"none"}},
             h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e"}},
               car.userName + (isLuggageCar(car.userName)?"（荷物車）":"")),
             h("div",{style:{fontSize:11,color:"#475569"}},
-              `定員${s.cap} / 大人${s.adults} / コーチ${s.coach} / 子供${s.children} / 空席${s.free}`)
+              `運転手:${driverName || "-"} / 定員${s.cap} / 大人${s.adults} / コーチ${s.coach} / 子供${s.children} / 空席${s.free}`)
           );
         }),
         h("div",{style:{marginTop:8,fontSize:11,color:"#64748B"}},
@@ -1978,14 +1988,27 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           h("span",{style:{display:"inline-block",background:ROLE_COLORS.coach,color:"#fff",borderRadius:6,padding:"2px 7px"}},"コーチ")
         )
       ),
+      h("div",{style:{marginBottom:12,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8}},"行く人リスト（子供）"),
+        participants.length===0
+          ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"出欠○の選手がいません")
+          : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+              participants.map(m=>
+                h("span",{key:"p-chip-"+m.id,style:{fontSize:12,fontWeight:700,color:"#fff",background:ROLE_COLORS.child,borderRadius:999,padding:"4px 10px"}},
+                  (m.number?("#"+m.number+" "):"")+m.name)
+              )
+            )
+      ),
 
       // 車ごとのカード
       cars.map((car,ci)=>{
         const assigned=participants.filter(m=>assignment[m.id]===ci);
         const meta = getMeta(car.userId);
+        const driverName = getDriverName(car);
+        const driverOptions = [...new Set([String(car.userName || "").trim(), ...adultUserOptions].filter(Boolean))];
         const adultNames = getAdultNames(car.userId);
         const coachName = getCoachName(car.userId);
-        const highwayOk = hasEnoughAdultsForHighway(car.userId);
+        const highwayOk = hasEnoughAdultsForHighway(car);
         const seat = seatSummary(ci);
         const isFull=seat.rawFree<=0;
         const infos=pickupRows(car.userId);
@@ -1998,6 +2021,15 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             ),
             h("div",{style:{fontSize:12,fontWeight:700,color:isFull?"#4CAF50":"#aaa"}},`${seat.used}/${seat.cap}席（残${seat.free}）`)),
           h("div",{style:{marginBottom:8,padding:10,background:"#fff",borderRadius:10,border:"1px solid #E2E8F0"}},
+            canEdit
+              ? h("div",{style:{display:"flex",gap:8,alignItems:"center",marginBottom:8}},
+                  h("div",{style:{width:58,fontSize:11,color:"#64748B",fontWeight:700}},"運転手"),
+                  h("select",{value:meta.driver || "",onChange:e=>setMeta(car.userId,{driver:e.target.value}),style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}},
+                    h("option",{value:""},"未設定（既定: " + (car.userName || "-") + "）"),
+                    driverOptions.map(v=>h("option",{key:car.userId+"-driver-"+v,value:v},v))
+                  )
+                )
+              : h("div",{style:{fontSize:12,color:"#1a1a2e",lineHeight:1.7,marginBottom:8}},"運転手: " + (driverName || "-")),
             h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}},
               h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700}},"高速利用"),
               canEdit
@@ -2035,7 +2067,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                   h("div",{style:{fontSize:12,color:"#1a1a2e",lineHeight:1.7}},"同乗コーチ: " + (coachName || "なし"))
                 ),
             meta.highway && !highwayOk && h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#F44336"}},
-              "高速利用時は、運転手 + 同乗大人1名以上（合計大人2名）が必要です。")
+              "高速利用ON: 大人2人選んでください（運転手＋同乗大人）。")
           ),
           h("div",{style:{marginBottom:8}},
             infos.map((info,rowIdx)=>
@@ -2056,6 +2088,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             ),
           h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,minHeight:32}},
             adultNames.map(name=>h("span",{key:car.userId+"-adult-chip-"+name,style:{fontSize:11,fontWeight:700,color:"#fff",background:ROLE_COLORS.adult,borderRadius:8,padding:"3px 8px"}},"大人 "+name)),
+            driverName&&h("span",{style:{fontSize:11,fontWeight:700,color:"#fff",background:"#0F172A",borderRadius:8,padding:"3px 8px"}},"運転手 "+driverName),
             coachName&&h("span",{style:{fontSize:11,fontWeight:700,color:"#fff",background:ROLE_COLORS.coach,borderRadius:8,padding:"3px 8px"}},"コーチ "+coachName),
             assigned.map(m=>
               h("span",{key:m.id,onClick:()=>assignMode&&setAssignment(p=>({...p,[m.id]:undefined})),
@@ -2067,28 +2100,47 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       }),
 
       assignMode&&h("div",{style:{marginTop:12,padding:12,background:"#DBEAFE",borderRadius:12}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#FF9800",marginBottom:8}},"未割り当て（子供）"),
-        h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
-          participants.filter(m=>assignment[m.id]===undefined||assignment[m.id]===null).map(m=>
-            h("div",{key:m.id,style:{position:"relative"}},
-              h("select",{value:"",
-                onChange:e=>{const ci2=Number(e.target.value); if(!isNaN(ci2)&&ci2>=0){ if(seatSummary(ci2).free<=0){ alert("その車は空席がありません"); return; } setAssignment(p=>({...p,[m.id]:ci2})); }},
-                style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}},
-                h("option",{value:""},"車を選択"),
-                cars.map((car,ci2)=>{
-                  const s=seatSummary(ci2);
-                  return h("option",{key:ci2,value:ci2,disabled:s.free<=0},`${car.userName}（残${s.free}）`);
-                })),
-              h("span",{style:{fontSize:12,fontWeight:700,color:"#fff",background:ROLE_COLORS.child,borderRadius:8,padding:"3px 10px",display:"inline-block",cursor:"pointer"}},
-                "子供 "+m.name+" ▼")
-            )
-          ))),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#1D4ED8",marginBottom:8}},"配車を選ぶ（子供ごとに車を選択）"),
+        participants.length===0
+          ? h("div",{style:{fontSize:12,color:"#64748B"}},"参加者がいません")
+          : participants.map(m=>{
+              const selected = assignment[m.id];
+              return h("div",{key:"assign-row-"+m.id,style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
+                h("div",{style:{minWidth:120,fontSize:12,fontWeight:700,color:"#1E293B"}},(m.number?("#"+m.number+" "):"")+m.name),
+                h("select",{
+                  value:selected===undefined||selected===null?"":String(selected),
+                  onChange:e=>{
+                    const v=e.target.value;
+                    if(v===""){ setAssignment(p=>({...p,[m.id]:undefined})); return; }
+                    const ci2=Number(v);
+                    if(!isNaN(ci2)&&ci2>=0){
+                      const current=assignment[m.id];
+                      const s=seatSummary(ci2);
+                      const remaining = s.free + (current===ci2?1:0);
+                      if(remaining<=0){ alert("その車は空席がありません"); return; }
+                      setAssignment(p=>({...p,[m.id]:ci2}));
+                    }
+                  },
+                  style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
+                },
+                  h("option",{value:""},"未割り当て"),
+                  cars.map((car,ci2)=>{
+                    const s=seatSummary(ci2);
+                    const isCurrent = selected===ci2;
+                    const remain = s.free + (isCurrent?1:0);
+                    return h("option",{key:"assign-opt-"+m.id+"-"+ci2,value:String(ci2),disabled:remain<=0&&!isCurrent},`${car.userName}（残${Math.max(0,remain)}）`);
+                  })
+                )
+              );
+            })
+      ),
 
       h("div",{style:{marginTop:14,padding:12,background:"#EEF2FF",borderRadius:12,border:"1px solid #DBEAFE"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#4F46E5",marginBottom:8}},"🚗 最終割り当て"),
         cars.map((car,ci)=>{
           const assigned=participants.filter(m=>assignment[m.id]===ci);
           const meta=getMeta(car.userId);
+          const driverName=getDriverName(car);
           const adults=getAdultNames(car.userId);
           const coachName=getCoachName(car.userId);
           const driverAnswer = carpools.find(c => String(c.userId || "") === String(car.userId || ""));
@@ -2097,7 +2149,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           return h("div",{key:"summary-"+car.userId,style:{marginBottom:8,padding:"8px 10px",background:"#fff",borderRadius:10}},
             h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:4}},
               car.userName+" の車"+(isLuggageCar(car.userName)?"（荷物車）":"")),
-            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"運転手: "+(car.userName||"-")),
+            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"運転手: "+(driverName||"-")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"同乗大人: "+(adults.length?adults.join("、"):"なし")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"同乗コーチ: "+(coachName||"なし")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"子供: "+(assigned.length?assigned.map(m=>m.name).join("、"):"なし")),
@@ -3954,7 +4006,6 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
-
 
 
 
