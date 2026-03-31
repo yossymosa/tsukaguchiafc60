@@ -2929,11 +2929,11 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
     h("button",{onClick:next,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"›")
   ),
 
-  h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:6}},
+  h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",marginBottom:6}},
     ["日","月","火","水","木","金","土"].map((d,i)=>h("div",{key:d,style:{textAlign:"center",fontSize:11,fontWeight:700,color:i===0?"#F44336":i===6?"#2196F3":"#aaa",padding:"4px 0"}},d))
   ),
 
-  weeks.map((wk,wi)=>h("div",{key:wi,style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}},
+  weeks.map((wk,wi)=>h("div",{key:wi,style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:2}},
     wk.map((d,di)=>{
       if(!d) return h("div",{key:di});
       const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
@@ -2946,12 +2946,12 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
         if(!evs.length) return;
         onGoToDay(evs[0]); // その日のまとめページへ
       };
-      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"6px 3px",borderRadius:8,background:isToday?"#1D4ED8":evs.length>0?"#EFF6FF":"transparent",minHeight:70,cursor:evs.length>0?"pointer":"default"}},
+      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"6px 3px",borderRadius:8,background:isToday?"#1D4ED8":evs.length>0?"#EFF6FF":"transparent",minHeight:70,minWidth:0,width:"100%",overflow:"hidden",cursor:evs.length>0?"pointer":"default"}},
         h("div",{style:{fontSize:13,fontWeight:isToday?900:400,color:isToday?"#fff":di===0?"#F44336":di===6?"#2196F3":"#1a1a2e"}},d),
-        evs.length>0&&h("div",{style:{marginTop:4,padding:"4px 4px",borderRadius:7,background:isToday?"rgba(255,255,255,0.22)":"#DBEAFE",textAlign:"left"}},
+        evs.length>0&&h("div",{style:{marginTop:4,padding:"4px 4px",borderRadius:7,background:isToday?"rgba(255,255,255,0.22)":"#DBEAFE",textAlign:"left",width:"100%",boxSizing:"border-box",overflow:"hidden"}},
           h("div",{style:{fontSize:8,fontWeight:800,color:isToday?"#fff":"#1D4ED8",lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
             (primaryType?primaryType.lb:"予定")+(moreCount>0?` +${moreCount}`:"")),
-          h("div",{style:{fontSize:9,fontWeight:700,color:isToday?"#fff":"#1E293B",lineHeight:1.25,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
+          h("div",{style:{fontSize:9,fontWeight:700,color:isToday?"#fff":"#1E293B",lineHeight:1.25,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}},
             primaryEvent?.title||"予定")
         )
       );
@@ -3092,6 +3092,73 @@ function MemoTab({news,isAdmin,user,onAdd,onDelete}) {
       h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"タイトル"),h("input",{value:fn.title,onChange:e=>setFn(p=>({...p,title:e.target.value})),placeholder:"タイトル",style:css.inp})),
       h("div",{style:{marginBottom:20}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"内容"),h("textarea",{value:fn.content,onChange:e=>setFn(p=>({...p,content:e.target.value})),rows:6,style:{...css.inp,resize:"none"}})),
       h("div",{style:{display:"flex",gap:10}},h("button",{onClick:()=>setModal(false),style:css.bG},"キャンセル"),h("button",{onClick:save,style:css.bS},"投稿する"))));
+}
+
+// ── 資料/FAQタブ ────────────────────────────────────────────────
+function InfoTab({news,isAdmin,user,onAdd,onDelete}) {
+  const [openId,setOpenId]=useState("fixed-accounting");
+  const [modal,setModal]=useState(false);
+  const [fd,setFd]=useState({title:"",content:""});
+
+  const docs=(news||[])
+    .filter(n=>(n.category||"")==="資料")
+    .sort((a,b)=>new Date(String(b.date||0)).getTime()-new Date(String(a.date||0)).getTime());
+
+  const fixedFaq=[
+    {id:"fixed-accounting",title:"会計ルール",content:"会計ルールの概要や精算の流れをここにまとめてください。"},
+    {id:"fixed-meeting",title:"総会資料",content:"総会資料の要点や共有事項をここにまとめてください。"},
+    {id:"fixed-paypay",title:"PayPay送金方法",content:"PayPayの送金手順や注意点をここにまとめてください。"},
+  ];
+
+  const items=[
+    ...fixedFaq,
+    ...docs.map(n=>({
+      id:"doc-"+n.id,
+      title:n.title||"資料",
+      content:n.content||"",
+      date:n.date||"",
+      author:n.author||"",
+      newsId:n.id
+    }))
+  ];
+
+  const saveDoc=async()=>{
+    if(!fd.title||!fd.content) return alert("タイトルと内容を入力してください");
+    await onAdd({title:fd.title,content:fd.content,category:"資料",author:user.name});
+    setFd({title:"",content:""});
+    setModal(false);
+  };
+
+  return h(Fragment,{},
+    h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}},
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",letterSpacing:1.2}},"資料・FAQ"),
+      isAdmin&&h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"8px 12px",fontSize:12,borderRadius:12}},"+ 追加")),
+    h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},
+      "会計ルール・総会資料・送金方法など、チーム運営に必要な情報をここに集約します。"),
+    items.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"資料はまだありません"),
+    items.map(item=>{
+      const opened=openId===item.id;
+      return h("div",{key:item.id,style:{background:"#fff",borderRadius:14,marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",overflow:"hidden"}},
+        h("button",{onClick:()=>setOpenId(opened?"":item.id),style:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"14px 14px",border:"none",background:"#fff",cursor:"pointer"}},
+          h("div",{style:{fontSize:14,fontWeight:800,color:"#1E293B",textAlign:"left",flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},item.title),
+          h("div",{style:{fontSize:16,color:"#94A3B8",fontWeight:800,flexShrink:0}},opened?"−":"+")),
+        opened&&h("div",{style:{padding:"0 14px 14px",borderTop:"1px solid #F1F5F9"}},
+          h("div",{style:{fontSize:13,color:"#334155",lineHeight:1.8,whiteSpace:"pre-wrap",marginTop:10}},item.content||"（内容なし）"),
+          (item.date||item.author)&&h("div",{style:{fontSize:11,color:"#94A3B8",marginTop:10}},
+            (item.date?fmt(item.date).short:"") + (item.author?` / ${item.author}`:"")),
+          item.newsId&&isAdmin&&h("div",{style:{marginTop:10,display:"flex",justifyContent:"flex-end"}},
+            h("button",{onClick:()=>onDelete(item.newsId),style:{border:"none",background:"#FEE2E2",color:"#B91C1C",fontSize:12,fontWeight:700,padding:"6px 10px",borderRadius:8,cursor:"pointer"}},"削除"))));
+    }),
+    modal&&h(Modal,{title:"資料を追加",onClose:()=>setModal(false)},
+      h("div",{style:{marginBottom:14}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"タイトル"),
+        h("input",{value:fd.title,onChange:e=>setFd(p=>({...p,title:e.target.value})),placeholder:"例：会計ルール（2026年度）",style:css.inp})),
+      h("div",{style:{marginBottom:20}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"内容"),
+        h("textarea",{value:fd.content,onChange:e=>setFd(p=>({...p,content:e.target.value})),rows:8,placeholder:"手順・注意事項・リンクなど",style:{...css.inp,resize:"none"}})),
+      h("div",{style:{display:"flex",gap:10}},
+        h("button",{onClick:()=>setModal(false),style:css.bG},"キャンセル"),
+        h("button",{onClick:saveDoc,style:css.bS},"保存する")));
 }
 
 // ── その日の試合まとめページ ─────────────────────────────────────
@@ -3708,6 +3775,7 @@ function App() {
     {k:"dash",   i:"📊",l:"成績"},
     {k:"member", i:"👥",l:"選手"},
     {k:"memo",   i:"📝",l:"メモ"},
+    {k:"docs",   i:"📚",l:"資料"},
     ...(isAdmin?[{k:"settings",i:"⚙️",l:"設定"}]:[]),
   ];
   const currentTabContent =
@@ -3717,6 +3785,7 @@ function App() {
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch})
     : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
+    : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="settings" ? h(SettingsTab,{user,users,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile})
     : null;
 
