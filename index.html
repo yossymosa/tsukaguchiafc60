@@ -1634,8 +1634,12 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
 // ── 配車セクション ────────────────────────────────────────────
 function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const COACH_CANDIDATES = ["丸尾コーチ", "健太郎コーチ", "その他"];
+  const ROLE_COLORS = { child:"#1D4ED8", adult:"#16A34A", coach:"#7C3AED" };
+  const normalizeName = v => String(v||"").replace(/\s+/g," ").replace(/さん$/,"").trim();
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user || {};
   const familyChoices = parseFamilyMembers(currentUserProfile.familyMembers || []);
+  const luggageLabel = String(schedule.luggagePerson || "").trim();
+  const luggageKey = normalizeName(luggageLabel);
   const [carpools, setCarpools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [my, setMy] = useState({available:"", capacity:"", note:"", familyPlan:"", familyMembers:[]});
@@ -1694,6 +1698,10 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     const m = getMeta(userId);
     if (m.coach === "その他") return String(m.coachOther || "").trim();
     return String(m.coach || "").trim();
+  };
+  const isLuggageCar = carUserName => {
+    if (!luggageKey) return false;
+    return normalizeName(carUserName) === luggageKey;
   };
   // 高速利用時は「運転手 + 同乗大人1名以上（合計大人2名）」を必須にする
   const hasEnoughAdultsForHighway = userId => {
@@ -1793,6 +1801,17 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const cars=carpools.filter(c=>c.available==="可"&&Number(c.capacity||0)>0);
   // 参加者リスト（出欠○）
   const participants=members.filter(m=>attend[m.id]==="○").sort((a,b)=>Number(a.number)-Number(b.number));
+  const seatSummary = ci => {
+    const car = cars[ci];
+    if (!car) return {cap:0, adults:0, coach:0, children:0, used:0, free:0, rawFree:0};
+    const cap = Math.max(0, Number(car.capacity || 0));
+    const adults = getAdultNames(car.userId).length;
+    const coach = getCoachName(car.userId) ? 1 : 0;
+    const children = participants.filter(m => assignment[m.id] === ci).length;
+    const used = adults + coach + children;
+    const rawFree = cap - used;
+    return { cap, adults, coach, children, used, rawFree, free: Math.max(0, rawFree) };
+  };
   const autoAssign = () => {
     if (participants.length === 0) {
       alert("参加者がいません。");
@@ -1801,10 +1820,13 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     const enabledCars = cars
       .map((car, ci) => ({ car, ci }))
       .filter(({ car }) => hasEnoughAdultsForHighway(car.userId))
-      .map(({ car, ci }) => ({ ci, remain: Number(car.capacity || 0) }))
+      .map(({ car, ci }) => {
+        const reserved = getAdultNames(car.userId).length + (getCoachName(car.userId) ? 1 : 0);
+        return { ci, remain: Number(car.capacity || 0) - reserved };
+      })
       .filter(c => c.remain > 0);
     if (enabledCars.length === 0) {
-      alert("割り当て可能な車がありません（高速条件または乗車人数を確認してください）。");
+      alert("割り当て可能な空席がありません（高速条件・同乗大人・定員を確認してください）。");
       return;
     }
     const next = {};
@@ -1897,6 +1919,12 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         style:{...css.bS,width:"100%",opacity:saving?0.6:1}},
         saved?"✓ 保存済":saving?"保存中...":"回答する")),
 
+    h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"📦 荷物車"),
+      h("div",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},
+        luggageLabel ? ("荷物担当: " + luggageLabel) : "荷物担当は詳細タブで設定してください"),
+      luggageLabel && h("div",{style:{marginTop:4,fontSize:11,color:"#64748B"}},"配車割り当てでは、この担当者の車を荷物車として明示しています。")),
+
     // 集計
     h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
@@ -1932,37 +1960,50 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           h("button",{onClick:toggleAssignMode,
             style:{fontSize:11,fontWeight:700,color:"#2196F3",background:"none",border:"1px solid #2196F3",borderRadius:8,padding:"4px 10px",cursor:"pointer"}},
             assignMode?"完了":"割り当て"))),
+
+      h("div",{style:{marginBottom:12,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8}},"配車可能リスト"),
+        cars.map((car,ci)=>{
+          const s = seatSummary(ci);
+          return h("div",{key:"list-"+car.userId,style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"6px 4px",borderBottom:ci<cars.length-1?"1px dashed #E2E8F0":"none"}},
+            h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e"}},
+              car.userName + (isLuggageCar(car.userName)?"（荷物車）":"")),
+            h("div",{style:{fontSize:11,color:"#475569"}},
+              `定員${s.cap} / 大人${s.adults} / コーチ${s.coach} / 子供${s.children} / 空席${s.free}`)
+          );
+        }),
+        h("div",{style:{marginTop:8,fontSize:11,color:"#64748B"}},
+          h("span",{style:{display:"inline-block",background:ROLE_COLORS.adult,color:"#fff",borderRadius:6,padding:"2px 7px",marginRight:6}},"大人"),
+          h("span",{style:{display:"inline-block",background:ROLE_COLORS.child,color:"#fff",borderRadius:6,padding:"2px 7px",marginRight:6}},"子供"),
+          h("span",{style:{display:"inline-block",background:ROLE_COLORS.coach,color:"#fff",borderRadius:6,padding:"2px 7px"}},"コーチ")
+        )
+      ),
+
       // 車ごとのカード
       cars.map((car,ci)=>{
         const assigned=participants.filter(m=>assignment[m.id]===ci);
         const meta = getMeta(car.userId);
         const adultNames = getAdultNames(car.userId);
+        const coachName = getCoachName(car.userId);
         const highwayOk = hasEnoughAdultsForHighway(car.userId);
-        const cap=Number(car.capacity||0);
-        const isFull=assigned.length>=cap;
+        const seat = seatSummary(ci);
+        const isFull=seat.rawFree<=0;
         const infos=pickupRows(car.userId);
-        // この車に乗る人 or adminはピックアップ編集可
         const canEdit=isAdmin||carpools.some(c=>c.userId===user.id&&c.available==="可"&&cars.findIndex(x=>x.userId===c.userId)===ci);
         return h("div",{key:car.userId,style:{marginBottom:12,padding:12,background:"#F8F9FA",borderRadius:12,border:`2px solid ${!highwayOk?"#F44336":isFull?"#4CAF50":"#eee"}`}},
           h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}},
-            h("div",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},car.userName+" の車"),
-            h("div",{style:{fontSize:12,fontWeight:700,color:isFull?"#4CAF50":"#aaa"}},assigned.length+"/"+cap+"人")),
+            h("div",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},
+              car.userName+" の車",
+              isLuggageCar(car.userName)&&h("span",{style:{marginLeft:8,fontSize:10,color:"#fff",background:"#0F172A",padding:"2px 6px",borderRadius:999,fontWeight:800}},"荷物車")
+            ),
+            h("div",{style:{fontSize:12,fontWeight:700,color:isFull?"#4CAF50":"#aaa"}},`${seat.used}/${seat.cap}席（残${seat.free}）`)),
           h("div",{style:{marginBottom:8,padding:10,background:"#fff",borderRadius:10,border:"1px solid #E2E8F0"}},
             h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}},
               h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700}},"高速利用"),
               canEdit
                 ? h("button",{
                     onClick:()=>setMeta(car.userId,{highway:!meta.highway}),
-                    style:{
-                      border:"none",
-                      borderRadius:999,
-                      padding:"5px 12px",
-                      background:meta.highway?"#F97316":"#E2E8F0",
-                      color:meta.highway?"#fff":"#334155",
-                      fontSize:11,
-                      fontWeight:700,
-                      cursor:"pointer"
-                    }
+                    style:{border:"none",borderRadius:999,padding:"5px 12px",background:meta.highway?"#F97316":"#E2E8F0",color:meta.highway?"#fff":"#334155",fontSize:11,fontWeight:700,cursor:"pointer"}
                   },meta.highway?"利用する":"利用しない")
                 : h("div",{style:{fontSize:12,fontWeight:700,color:meta.highway?"#F97316":"#64748B"}},meta.highway?"利用する":"利用しない")
             ),
@@ -1972,11 +2013,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                     const key = "adultUser"+n;
                     return h("div",{key:car.userId+"-adult-"+n,style:{display:"flex",gap:8,alignItems:"center",marginBottom:n===1?8:0}},
                       h("div",{style:{width:58,fontSize:11,color:"#64748B",fontWeight:700}},"大人"+n),
-                      h("select",{
-                        value:meta[key] || "",
-                        onChange:e=>setMeta(car.userId,{[key]:e.target.value}),
-                        style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
-                      },
+                      h("select",{value:meta[key] || "",onChange:e=>setMeta(car.userId,{[key]:e.target.value}),style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}},
                         h("option",{value:""},"未設定"),
                         adultUserOptions.map(v=>h("option",{key:car.userId+"-"+key+"-"+v,value:v},v))
                       )
@@ -1984,96 +2021,69 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                   }),
                   h("div",{style:{display:"flex",gap:8,alignItems:"center",marginTop:8}},
                     h("div",{style:{width:58,fontSize:11,color:"#64748B",fontWeight:700}},"コーチ"),
-                    h("select",{
-                      value:meta.coach || "",
-                      onChange:e=>setMeta(car.userId,{coach:e.target.value}),
-                      style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
-                    },
+                    h("select",{value:meta.coach || "",onChange:e=>setMeta(car.userId,{coach:e.target.value}),style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}},
                       h("option",{value:""},"未設定"),
                       COACH_CANDIDATES.map(v=>h("option",{key:car.userId+"-coach-"+v,value:v},v))
                     ),
-                    meta.coach==="その他" && h("input",{
-                      value:meta.coachOther || "",
-                      onChange:e=>setMeta(car.userId,{coachOther:e.target.value}),
-                      placeholder:"任意の名前",
-                      style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
-                    })
+                    meta.coach==="その他" && h("input",{value:meta.coachOther || "",onChange:e=>setMeta(car.userId,{coachOther:e.target.value}),placeholder:"任意の名前",style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}})
                   ),
                   adultUserOptions.length===0 && h("div",{style:{marginTop:6,fontSize:11,color:"#F59E0B",fontWeight:700}},
                     "ユーザーが未登録のため、大人選択ができません")
                 )
               : h(Fragment,{},
-                  h("div",{style:{fontSize:12,color:"#1a1a2e",lineHeight:1.7}},
-                    "同乗大人: " + (adultNames.length ? adultNames.join("、") : "未設定")
-                  ),
-                  h("div",{style:{fontSize:12,color:"#1a1a2e",lineHeight:1.7}},
-                    "同乗コーチ: " + (getCoachName(car.userId) || "なし")
-                  )
+                  h("div",{style:{fontSize:12,color:"#1a1a2e",lineHeight:1.7}},"同乗大人: " + (adultNames.length ? adultNames.join("、") : "未設定")),
+                  h("div",{style:{fontSize:12,color:"#1a1a2e",lineHeight:1.7}},"同乗コーチ: " + (coachName || "なし"))
                 ),
             meta.highway && !highwayOk && h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#F44336"}},
               "高速利用時は、運転手 + 同乗大人1名以上（合計大人2名）が必要です。")
           ),
-          // ピックアップ情報
           h("div",{style:{marginBottom:8}},
             infos.map((info,rowIdx)=>
               h("div",{key:car.userId+"-"+rowIdx,style:{display:"flex",gap:8,marginBottom:rowIdx<infos.length-1?8:0,alignItems:"flex-end"}},
                 h("div",{style:{flex:1}},
                   h("div",{style:{fontSize:10,color:"#aaa",marginBottom:2}},rowIdx===0?"集合場所":"追加場所"),
                   canEdit
-                    ? h("input",{value:info.place,onChange:e=>{
-                        const next=pickupRows(car.userId).map((x,i)=>i===rowIdx?{...x,place:e.target.value}:x);
-                        setPickupRows(car.userId,next);
-                      },placeholder:"例: 塚口公園駐車場",style:{...css.inp,fontSize:12,padding:"5px 8px",width:"100%"}})
+                    ? h("input",{value:info.place,onChange:e=>{const next=pickupRows(car.userId).map((x,i)=>i===rowIdx?{...x,place:e.target.value}:x); setPickupRows(car.userId,next);},placeholder:"例: 塚口公園駐車場",style:{...css.inp,fontSize:12,padding:"5px 8px",width:"100%"}})
                     : h("div",{style:{fontSize:12,color:"#1a1a2e",fontWeight:600}},info.place||"-")),
                 h("div",{style:{width:80}},
                   h("div",{style:{fontSize:10,color:"#aaa",marginBottom:2}},rowIdx===0?"出発時間":"時間"),
                   canEdit
-                    ? h("input",{value:info.time,onChange:e=>{
-                        const next=pickupRows(car.userId).map((x,i)=>i===rowIdx?{...x,time:e.target.value}:x);
-                        setPickupRows(car.userId,next);
-                      },placeholder:"8:20",style:{...css.inp,fontSize:12,padding:"5px 8px",width:"100%"}})
+                    ? h("input",{value:info.time,onChange:e=>{const next=pickupRows(car.userId).map((x,i)=>i===rowIdx?{...x,time:e.target.value}:x); setPickupRows(car.userId,next);},placeholder:"8:20",style:{...css.inp,fontSize:12,padding:"5px 8px",width:"100%"}})
                     : h("div",{style:{fontSize:12,color:"#1a1a2e",fontWeight:600}},info.time||"-")),
                 canEdit&&h("div",{style:{display:"flex",gap:4,marginBottom:1}},
-                  h("button",{onClick:()=>{
-                    const next=[...pickupRows(car.userId),{place:"",time:""}];
-                    setPickupRows(car.userId,next);
-                  },style:{border:"none",background:"#E3F2FD",color:"#2196F3",borderRadius:8,padding:"6px 8px",fontSize:12,fontWeight:700,cursor:"pointer"}},"+"),
-                  infos.length>1&&h("button",{onClick:()=>{
-                    const next=pickupRows(car.userId).filter((_,i)=>i!==rowIdx);
-                    setPickupRows(car.userId,next.length?next:[{place:"",time:""}]);
-                  },style:{border:"none",background:"#FFEBEE",color:"#F44336",borderRadius:8,padding:"6px 8px",fontSize:12,fontWeight:700,cursor:"pointer"}},"-"))))
+                  h("button",{onClick:()=>{const next=[...pickupRows(car.userId),{place:"",time:""}]; setPickupRows(car.userId,next);},style:{border:"none",background:"#E3F2FD",color:"#2196F3",borderRadius:8,padding:"6px 8px",fontSize:12,fontWeight:700,cursor:"pointer"}},"+"),
+                  infos.length>1&&h("button",{onClick:()=>{const next=pickupRows(car.userId).filter((_,i)=>i!==rowIdx); setPickupRows(car.userId,next.length?next:[{place:"",time:""}]);},style:{border:"none",background:"#FFEBEE",color:"#F44336",borderRadius:8,padding:"6px 8px",fontSize:12,fontWeight:700,cursor:"pointer"}},"-"))))
             ),
           h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,minHeight:32}},
-            assigned.map(m=>{
-              const pc=PC[m.position]||{bg:"#999"};
-              return h("span",{key:m.id,
-                onClick:()=>assignMode&&setAssignment(p=>({...p,[m.id]:undefined})),
-                style:{fontSize:12,fontWeight:700,color:"#fff",background:pc.bg,borderRadius:8,
-                  padding:"3px 10px",cursor:assignMode?"pointer":"default"}},
-                m.name+(assignMode?" ×":""));
-            }),
-            assigned.length===0&&h("div",{style:{fontSize:12,color:"#ccc"}},"未割り当て")));
+            adultNames.map(name=>h("span",{key:car.userId+"-adult-chip-"+name,style:{fontSize:11,fontWeight:700,color:"#fff",background:ROLE_COLORS.adult,borderRadius:8,padding:"3px 8px"}},"大人 "+name)),
+            coachName&&h("span",{style:{fontSize:11,fontWeight:700,color:"#fff",background:ROLE_COLORS.coach,borderRadius:8,padding:"3px 8px"}},"コーチ "+coachName),
+            assigned.map(m=>
+              h("span",{key:m.id,onClick:()=>assignMode&&setAssignment(p=>({...p,[m.id]:undefined})),
+                style:{fontSize:12,fontWeight:700,color:"#fff",background:ROLE_COLORS.child,borderRadius:8,padding:"3px 10px",cursor:assignMode?"pointer":"default"}},
+                "子供 "+m.name+(assignMode?" ×":""))
+            ),
+            (adultNames.length===0 && !coachName && assigned.length===0)&&h("div",{style:{fontSize:12,color:"#ccc"}},"未割り当て"))
+        );
       }),
-      // 未割り当ての参加者
+
       assignMode&&h("div",{style:{marginTop:12,padding:12,background:"#DBEAFE",borderRadius:12}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#FF9800",marginBottom:8}},"未割り当て"),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#FF9800",marginBottom:8}},"未割り当て（子供）"),
         h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
-          participants.filter(m=>assignment[m.id]===undefined||assignment[m.id]===null).map(m=>{
-            const pc=PC[m.position]||{bg:"#999"};
-            return h("div",{key:m.id,style:{position:"relative"}},
-              h("select",{
-                value:"",
-                onChange:e=>{
-                  const ci2=Number(e.target.value);
-                  if(!isNaN(ci2)&&ci2>=0) setAssignment(p=>({...p,[m.id]:ci2}));
-                },
+          participants.filter(m=>assignment[m.id]===undefined||assignment[m.id]===null).map(m=>
+            h("div",{key:m.id,style:{position:"relative"}},
+              h("select",{value:"",
+                onChange:e=>{const ci2=Number(e.target.value); if(!isNaN(ci2)&&ci2>=0){ if(seatSummary(ci2).free<=0){ alert("その車は空席がありません"); return; } setAssignment(p=>({...p,[m.id]:ci2})); }},
                 style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}},
                 h("option",{value:""},"車を選択"),
-                cars.map((car,ci2)=>h("option",{key:ci2,value:ci2},car.userName))),
-              h("span",{style:{fontSize:12,fontWeight:700,color:"#fff",background:pc.bg,
-                borderRadius:8,padding:"3px 10px",display:"inline-block",cursor:"pointer"}},
-                m.name+" ▼"));
-          }))),
+                cars.map((car,ci2)=>{
+                  const s=seatSummary(ci2);
+                  return h("option",{key:ci2,value:ci2,disabled:s.free<=0},`${car.userName}（残${s.free}）`);
+                })),
+              h("span",{style:{fontSize:12,fontWeight:700,color:"#fff",background:ROLE_COLORS.child,borderRadius:8,padding:"3px 10px",display:"inline-block",cursor:"pointer"}},
+                "子供 "+m.name+" ▼")
+            )
+          ))),
+
       h("div",{style:{marginTop:14,padding:12,background:"#EEF2FF",borderRadius:12,border:"1px solid #DBEAFE"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#4F46E5",marginBottom:8}},"🚗 最終割り当て"),
         cars.map((car,ci)=>{
@@ -2083,13 +2093,16 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           const coachName=getCoachName(car.userId);
           const driverAnswer = carpools.find(c => String(c.userId || "") === String(car.userId || ""));
           const fam = parseFamilyMembers(driverAnswer?.familyMembers || []);
+          const seat=seatSummary(ci);
           return h("div",{key:"summary-"+car.userId,style:{marginBottom:8,padding:"8px 10px",background:"#fff",borderRadius:10}},
-            h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:4}},car.userName+" の車"),
+            h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:4}},
+              car.userName+" の車"+(isLuggageCar(car.userName)?"（荷物車）":"")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"運転手: "+(car.userName||"-")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"同乗大人: "+(adults.length?adults.join("、"):"なし")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"同乗コーチ: "+(coachName||"なし")),
+            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"子供: "+(assigned.length?assigned.map(m=>m.name).join("、"):"なし")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"家族同行: "+(driverAnswer?.familyPlan ? (driverAnswer.familyPlan + (fam.length ? "（"+fam.join("、")+"）" : "")) : "未回答")),
-            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"選手: "+(assigned.length?assigned.map(m=>m.name).join("、"):"なし")),
+            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"座席: "+seat.used+"/"+seat.cap+"（残"+seat.free+"）"),
             h("div",{style:{fontSize:11,fontWeight:700,color:meta.highway?"#F97316":"#64748B"}},meta.highway?"高速利用":"一般道")
           );
         })
@@ -3099,68 +3112,104 @@ function MemoTab({news,isAdmin,user,onAdd,onDelete}) {
 }
 
 // ── 資料/FAQタブ ────────────────────────────────────────────────
-function InfoTab({news,isAdmin,user,onAdd,onDelete}) {
-  const [openId,setOpenId]=useState("fixed-accounting");
-  const [modal,setModal]=useState(false);
-  const [fd,setFd]=useState({title:"",content:"",file:null});
+function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
+  const [openId,setOpenId]=useState("");
+  const [createModal,setCreateModal]=useState(false);
+  const [editModal,setEditModal]=useState(false);
   const [saving,setSaving]=useState(false);
+  const [fd,setFd]=useState({title:"",content:"",file:null});
+  const [ed,setEd]=useState({id:"",title:"",content:"",attachmentUrl:"",attachmentName:"",file:null,removeAttachment:false});
 
-  const docs=(news||[])
+  const items=(news||[])
     .filter(n=>(n.category||"")==="資料")
-    .sort((a,b)=>new Date(String(b.date||0)).getTime()-new Date(String(a.date||0)).getTime());
-
-  const fixedFaq=[
-    {id:"fixed-accounting",title:"会計ルール",content:"会計ルールの概要や精算の流れをここにまとめてください。"},
-    {id:"fixed-meeting",title:"総会資料",content:"総会資料の要点や共有事項をここにまとめてください。"},
-    {id:"fixed-paypay",title:"PayPay送金方法",content:"PayPayの送金手順や注意点をここにまとめてください。"},
-  ];
-
-  const items=[
-    ...fixedFaq,
-    ...docs.map(n=>({
-      id:"doc-"+n.id,
+    .sort((a,b)=>new Date(String(b.date||0)).getTime()-new Date(String(a.date||0)).getTime())
+    .map(n=>({
+      id:String(n.id||""),
       title:n.title||"資料",
       content:n.content||"",
       date:n.date||"",
       author:n.author||"",
       attachmentUrl:n.attachmentUrl||"",
       attachmentName:n.attachmentName||"",
-      newsId:n.id
-    }))
-  ];
+    }));
+
+  const uploadAttachment = async (file) => {
+    if(!file) return {attachmentUrl:"",attachmentName:""};
+    if(Number(file.size||0) > 20*1024*1024) throw new Error("添付ファイルは20MB以下にしてください");
+    const dataUrl = await readFileAsDataUrl(file);
+    const base64 = String(dataUrl||"").split(",")[1] || "";
+    if(!base64) throw new Error("添付ファイルの読み込みに失敗しました");
+    const uploaded = await api("uploadNewsAttachment",{
+      fileName: file.name || "document",
+      mimeType: file.type || "application/octet-stream",
+      base64
+    });
+    return {
+      attachmentUrl: uploaded.url || "",
+      attachmentName: uploaded.name || file.name || ""
+    };
+  };
 
   const saveDoc=async()=>{
     if(saving) return;
     if(!fd.title||!fd.content) return alert("タイトルと内容を入力してください");
     setSaving(true);
     try{
-      let attachmentUrl = "";
-      let attachmentName = "";
-      if(fd.file){
-        if(Number(fd.file.size||0) > 20*1024*1024) throw new Error("添付ファイルは20MB以下にしてください");
-        const dataUrl = await readFileAsDataUrl(fd.file);
-        const base64 = String(dataUrl||"").split(",")[1] || "";
-        if(!base64) throw new Error("添付ファイルの読み込みに失敗しました");
-        const uploaded = await api("uploadNewsAttachment",{
-          fileName: fd.file.name || "document",
-          mimeType: fd.file.type || "application/octet-stream",
-          base64
-        });
-        attachmentUrl = uploaded.url || "";
-        attachmentName = uploaded.name || fd.file.name || "";
-      }
+      const uploaded = fd.file ? await uploadAttachment(fd.file) : {attachmentUrl:"",attachmentName:""};
       await onAdd({
         title:fd.title,
         content:fd.content,
         category:"資料",
         author:user.name,
+        attachmentUrl:uploaded.attachmentUrl,
+        attachmentName:uploaded.attachmentName
+      });
+      setFd({title:"",content:"",file:null});
+      setCreateModal(false);
+    }catch(e){
+      alert("資料保存エラー: " + (e && e.message ? e.message : e));
+    }
+    setSaving(false);
+  };
+
+  const startEdit = item => {
+    setEd({
+      id:item.id,
+      title:item.title||"",
+      content:item.content||"",
+      attachmentUrl:item.attachmentUrl||"",
+      attachmentName:item.attachmentName||"",
+      file:null,
+      removeAttachment:false
+    });
+    setEditModal(true);
+  };
+
+  const saveEdit = async () => {
+    if(saving) return;
+    if(!ed.id) return alert("更新対象が見つかりません");
+    if(!ed.title||!ed.content) return alert("タイトルと内容を入力してください");
+    setSaving(true);
+    try{
+      let attachmentUrl = ed.removeAttachment ? "" : (ed.attachmentUrl||"");
+      let attachmentName = ed.removeAttachment ? "" : (ed.attachmentName||"");
+      if(ed.file){
+        const uploaded = await uploadAttachment(ed.file);
+        attachmentUrl = uploaded.attachmentUrl;
+        attachmentName = uploaded.attachmentName;
+      }
+      await onUpdate({
+        id:ed.id,
+        title:ed.title,
+        content:ed.content,
+        category:"資料",
+        author:user.name,
         attachmentUrl,
         attachmentName
       });
-      setFd({title:"",content:"",file:null});
-      setModal(false);
+      setEditModal(false);
     }catch(e){
-      alert("資料保存エラー: " + (e && e.message ? e.message : e));
+      alert("資料更新エラー: " + (e && e.message ? e.message : e));
     }
     setSaving(false);
   };
@@ -3175,15 +3224,15 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete}) {
       opened ? h("div",{style:{padding:"0 14px 14px",borderTop:"1px solid #F1F5F9"}},
         h("div",{style:{fontSize:13,color:"#334155",lineHeight:1.8,whiteSpace:"pre-wrap",marginTop:10}},item.content||"（内容なし）"),
         item.attachmentUrl ? h("a",{href:item.attachmentUrl,target:"_blank",rel:"noopener noreferrer",
-          style:{display:"inline-flex",alignItems:"center",marginTop:10,padding:"6px 10px",borderRadius:8,
-            background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:700,textDecoration:"none"}},
+          style:{display:"inline-flex",alignItems:"center",marginTop:10,padding:"6px 10px",borderRadius:8,background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:700,textDecoration:"none"}},
           "📎 " + (item.attachmentName || "添付資料を開く")
         ) : null,
         (item.date||item.author) ? h("div",{style:{fontSize:11,color:"#94A3B8",marginTop:10}},
           (item.date?fmt(item.date).short:"") + (item.author?` / ${item.author}`:"")
         ) : null,
-        (item.newsId&&isAdmin) ? h("div",{style:{marginTop:10,display:"flex",justifyContent:"flex-end"}},
-          h("button",{onClick:()=>onDelete(item.newsId),style:{border:"none",background:"#FEE2E2",color:"#B91C1C",fontSize:12,fontWeight:700,padding:"6px 10px",borderRadius:8,cursor:"pointer"}},"削除")
+        isAdmin ? h("div",{style:{marginTop:10,display:"flex",gap:8,justifyContent:"flex-end"}},
+          h("button",{onClick:()=>startEdit(item),style:{border:"none",background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:700,padding:"6px 10px",borderRadius:8,cursor:"pointer"}},"編集"),
+          h("button",{onClick:()=>onDelete(item.id),style:{border:"none",background:"#FEE2E2",color:"#B91C1C",fontSize:12,fontWeight:700,padding:"6px 10px",borderRadius:8,cursor:"pointer"}},"削除")
         ) : null
       ) : null
     );
@@ -3192,14 +3241,13 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete}) {
   return h(Fragment,{},
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",letterSpacing:1.2}},"資料・FAQ"),
-      isAdmin ? h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"8px 12px",fontSize:12,borderRadius:12}},"+ 追加") : null
+      isAdmin ? h("button",{onClick:()=>setCreateModal(true),style:{...css.bO,padding:"8px 12px",fontSize:12,borderRadius:12}},"+ 追加") : null
     ),
-    h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},
-      "チーム運営に必要な情報をためていく"
-    ),
+    h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},"チーム運営に必要な情報をためていく"),
     items.length===0 ? h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"資料はまだありません") : null,
     items.map(renderItem),
-    modal ? h(Modal,{title:"資料を追加",onClose:()=>setModal(false)},
+
+    createModal ? h(Modal,{title:"資料を追加",onClose:()=>setCreateModal(false)},
       h("div",{style:{marginBottom:14}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"タイトル"),
         h("input",{value:fd.title,onChange:e=>setFd(p=>({...p,title:e.target.value})),placeholder:"例：会計ルール（2026年度）",style:css.inp})
@@ -3210,14 +3258,37 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete}) {
       ),
       h("div",{style:{marginBottom:20}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"資料添付"),
-        h("input",{type:"file",onChange:e=>setFd(p=>({...p,file:(e.target.files&&e.target.files[0])?e.target.files[0]:null})),
-          style:{...css.inp,padding:"8px 10px"}}),
-        fd.file ? h("div",{style:{fontSize:11,color:"#64748B",marginTop:6,wordBreak:"break-all"}},
-          "選択中: " + fd.file.name + " (" + Math.ceil((Number(fd.file.size||0)/1024)) + "KB)") : null
+        h("input",{type:"file",onChange:e=>setFd(p=>({...p,file:(e.target.files&&e.target.files[0])?e.target.files[0]:null})),style:{...css.inp,padding:"8px 10px"}}),
+        fd.file ? h("div",{style:{fontSize:11,color:"#64748B",marginTop:6,wordBreak:"break-all"}},"選択中: " + fd.file.name + " (" + Math.ceil((Number(fd.file.size||0)/1024)) + "KB)") : null
       ),
       h("div",{style:{display:"flex",gap:10}},
-        h("button",{onClick:()=>{ if(saving) return; setModal(false); },style:css.bG},saving?"処理中...":"キャンセル"),
+        h("button",{onClick:()=>{ if(saving) return; setCreateModal(false); },style:css.bG},saving?"処理中...":"キャンセル"),
         h("button",{onClick:saveDoc,disabled:saving,style:{...css.bS,opacity:saving?0.7:1,cursor:saving?"wait":"pointer"}},saving?"保存中...":"保存する")
+      )
+    ) : null,
+
+    editModal ? h(Modal,{title:"資料を編集",onClose:()=>setEditModal(false)},
+      h("div",{style:{marginBottom:14}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"タイトル"),
+        h("input",{value:ed.title,onChange:e=>setEd(p=>({...p,title:e.target.value})),style:css.inp})
+      ),
+      h("div",{style:{marginBottom:14}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"内容"),
+        h("textarea",{value:ed.content,onChange:e=>setEd(p=>({...p,content:e.target.value})),rows:8,style:{...css.inp,resize:"none"}})
+      ),
+      h("div",{style:{marginBottom:14}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"添付資料"),
+        ed.attachmentUrl ? h("a",{href:ed.attachmentUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-block",fontSize:12,color:"#1D4ED8",fontWeight:700,textDecoration:"none",marginBottom:8}},
+          "現在の添付: " + (ed.attachmentName || "添付資料を開く")
+        ) : h("div",{style:{fontSize:12,color:"#94A3B8",marginBottom:8}},"現在の添付はありません"),
+        h("input",{type:"file",onChange:e=>setEd(p=>({...p,file:(e.target.files&&e.target.files[0])?e.target.files[0]:null,removeAttachment:false})),style:{...css.inp,padding:"8px 10px"}}),
+        h("button",{onClick:()=>setEd(p=>({...p,removeAttachment:!p.removeAttachment,file:null})),
+          style:{marginTop:8,border:"1px solid #CBD5E1",background:ed.removeAttachment?"#FEE2E2":"#fff",color:ed.removeAttachment?"#B91C1C":"#475569",borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}},
+          ed.removeAttachment?"添付を削除して保存する":"添付を削除する")
+      ),
+      h("div",{style:{display:"flex",gap:10}},
+        h("button",{onClick:()=>{ if(saving) return; setEditModal(false); },style:css.bG},saving?"処理中...":"キャンセル"),
+        h("button",{onClick:saveEdit,disabled:saving,style:{...css.bS,opacity:saving?0.7:1,cursor:saving?"wait":"pointer"}},saving?"保存中...":"更新する")
       )
     ) : null
   );
@@ -3780,6 +3851,12 @@ function App() {
     catch(e){alert("エラー: "+e.message);}
     setLoading(false);
   };
+  const handleUpdateNews=async n=>{
+    setLoading(true);setLoadMsg("更新中...");
+    try{await api("updateNews",{news:n});await load("更新中...");}
+    catch(e){alert("エラー: "+e.message);}
+    setLoading(false);
+  };
   const handleUpdateProfile=async({name,memberId,familyMembers=[]})=>{
     const r=await api("updateUserProfile",{userId:user.id,name,memberId,familyMembers});
     saveUser({...user,...r.user});
@@ -3847,7 +3924,7 @@ function App() {
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch})
     : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
-    : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
+    : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
     : tab==="settings" ? h(SettingsTab,{user,users,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile})
     : null;
 
