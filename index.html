@@ -205,6 +205,33 @@ function nd(v) {
   if(!isNaN(d.getTime())) return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
   return s;
 }
+function findLinkedScheduleForResult(result, schedules=[]) {
+  if (!result || !Array.isArray(schedules) || schedules.length === 0) return null;
+  const sid = String(result.scheduleId || "").trim();
+  if (sid) {
+    const byId = schedules.find(s => String(s.id || "") === sid);
+    if (byId) return byId;
+  }
+  const d = nd(result.date);
+  if (!d) return null;
+  const sameDate = schedules.filter(s => nd(s.date) === d);
+  if (sameDate.length === 0) return null;
+  let candidates = sameDate;
+  const t = normalizeType(result.type || "");
+  if (t) {
+    const typed = sameDate.filter(s => normalizeType(s.type || "") === t);
+    if (typed.length) candidates = typed;
+  }
+  const opponent = String(result.opponent || "").trim();
+  if (opponent) {
+    const titled = candidates.filter(s => String(s.title || "").includes(opponent));
+    if (titled.length === 1) return titled[0];
+    if (titled.length > 1) candidates = titled;
+  }
+  const withTitle = candidates.filter(s => String(s.title || "").trim());
+  if (withTitle.length) return withTitle[0];
+  return candidates[0] || sameDate[0];
+}
 function todayLocal() {
   const d=new Date();
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -1076,7 +1103,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
     }
   };
   const getResultType = r => {
-    const linked = schedules.find(s => s.id === r.scheduleId) || schedules.find(s => nd(s.date) === nd(r.date));
+    const linked = findLinkedScheduleForResult(r, schedules);
     return linked?.type || r.type || "";
   };
   useEffect(()=>{
@@ -1135,7 +1162,7 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
       recent.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"試合記録がありません"),
       recent.map(r=>{
         const tc=getTC(getResultType(r));
-        const s=schedules.find(s=>s.id===r.scheduleId||nd(s.date)===nd(r.date));
+        const s=findLinkedScheduleForResult(r, schedules);
         const dt=fmt(r.date);
         return h("div",{key:r.id,onClick:()=>onGoToMatch(r,s),style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",cursor:"pointer"}},
           h("div",{style:{textAlign:"center",flexShrink:0,width:36}},h("div",{style:{fontSize:11,color:"#aaa"}},dt.short),h("div",{style:{fontSize:10,color:"#ccc"}},dt.dw)),
@@ -2520,7 +2547,7 @@ function EditResultModal({result, members, onSave, onClose}) {
 // ── 試合一覧：月別タブコンポーネント ─────────────────────────
 function MatchListByMonth({results,schedules,onGoToMatch}) {
   const getResultType = r => {
-    const linked = schedules.find(s => s.id === r.scheduleId) || schedules.find(s => nd(s.date) === nd(r.date));
+    const linked = findLinkedScheduleForResult(r, schedules);
     return linked?.type || r.type || "";
   };
   // 月別グループ作成（降順）
@@ -2590,7 +2617,7 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
     // 試合リスト
     cur&&cur.rs.map(r=>{
       const tc=getTC(getResultType(r));
-      const s=schedules.find(s=>s.id===r.scheduleId||nd(s.date)===nd(r.date));
+      const s=findLinkedScheduleForResult(r, schedules);
       const dt=fmt(r.date);
       return h("div",{key:r.id,onClick:()=>onGoToMatch(r,s),
         style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,
@@ -2661,7 +2688,7 @@ function RankList({title,icon,data,unit}) {
     }));
 }
 
-function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDashTab="result",onGoToMatch}) {
+function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDashTab="result",onGoToMatch,onGoToDay}) {
   const [dashTab,setDashTab]=useState(initialDashTab); // "result" | "tournament" | "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
   const [periodF,setPeriodF]=useState("alltime"); // "alltime"|"grade4"|"grade3"|"month"|"lastmonth"|"custom"
@@ -2670,7 +2697,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const [oppFilter,setOppFilter]=useState("all"); // "all" or opponent name
   useEffect(()=>{ if(initialDashTab) setDashTab(initialDashTab); },[initialDashTab]);
   const getResultType=row=>{
-    const linked=row.scheduleId?schedules.find(s=>s.id===row.scheduleId):schedules.find(s=>nd(s.date)===nd(row.date));
+    const linked=findLinkedScheduleForResult(row, schedules);
     return normalizeType(row.type || linked?.type || "");
   };
   function typeMatch(r,typeF){
@@ -2872,7 +2899,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
             oppFiltered.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:16}},"試合がありません"),
             oppFiltered.map((r,i)=>{
               const tc=getTC(r.type);
-              const linkedSchedule = schedules.find(s => s.id === r.scheduleId) || schedules.find(s => nd(s.date) === nd(r.date));
+              const linkedSchedule = findLinkedScheduleForResult(r, schedules);
               const dt=fmt(r.date);
               const our=Number(r.ourScore||0),their=Number(r.theirScore||0);
               const rw=our>their?"勝":our===their?"分":"負";
@@ -2898,12 +2925,13 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
       tournamentRows.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:"18px 0"}},"大会結果はまだありません"),
       tournamentRows.length>0&&h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"大会一覧"),
       tournamentRows.map((s,i)=>
-        h("div",{key:s.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:i<tournamentRows.length-1?8:0,padding:"10px 12px",background:"#F8F9FA",borderRadius:12}},
+        h("div",{key:s.id,onClick:onGoToDay?()=>onGoToDay(s):undefined,style:{display:"flex",alignItems:"center",gap:10,marginBottom:i<tournamentRows.length-1?8:0,padding:"10px 12px",background:"#F8F9FA",borderRadius:12,cursor:onGoToDay?"pointer":"default"}},
           h("div",{style:{width:74,flexShrink:0,fontSize:11,color:"#aaa"}},fmt(s.date).short),
           h("div",{style:{flex:1,minWidth:0}},
             h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},s.title||"（タイトルなし）"),
             h("div",{style:{fontSize:11,color:"#aaa",marginTop:2}},(s.location||"場所未設定")+" / "+getTC(s.type).lb)),
-          h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4ED8",background:"#DBEAFE",borderRadius:999,padding:"6px 10px",flexShrink:0}},s.rank)))),
+          h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4ED8",background:"#DBEAFE",borderRadius:999,padding:"6px 10px",flexShrink:0}},s.rank),
+          onGoToDay && h("div",{style:{fontSize:14,color:"#94A3B8",fontWeight:700,marginLeft:2}},"›")))),
 
     // ── ランキングタブ ──
     dashTab==="rank"&&h(Fragment,{},
@@ -3916,7 +3944,15 @@ function App() {
   };
 
   // ── ハンドラ（全てここで定義）─────────────────────────────────
-  const goToMatch=(r,s)=>setPage({type:"matchDetail",match:r,schedule:s});
+  const goToMatch=(r,s)=>{
+    const linked = s || findLinkedScheduleForResult(r, schedules) || {
+      id: r?.scheduleId || "",
+      date: r?.date || "",
+      title: r?.opponent ? ("vs " + r.opponent) : "試合",
+      type: r?.type || ""
+    };
+    setPage({type:"matchDetail",match:r,schedule:linked});
+  };
   const goToDay  =(s)  =>setPage({type:"dayDetail",schedule:s});
   const openDashTab = (nextTab) => {
     setDashInitialTab(nextTab || "result");
@@ -3998,10 +4034,14 @@ function App() {
     h(GoalPage,{
       match:page.match,schedule:page.schedule,members,isAdmin,
       onHome:goBack,
-      onBack:()=>setPage({type:"dayDetail",schedule:page.schedule}),
+      onBack:()=>{
+        const backSchedule = findLinkedScheduleForResult(page.match, schedules) || page.schedule;
+        setPage({type:"dayDetail",schedule:backSchedule});
+      },
       onSaved:async()=>{
         await load("更新中...");
-        setPage({type:"dayDetail",schedule:page.schedule});
+        const backSchedule = findLinkedScheduleForResult(page.match, schedules) || page.schedule;
+        setPage({type:"dayDetail",schedule:backSchedule});
       }
     }));
 
@@ -4048,7 +4088,7 @@ function App() {
     tab==="home" ? h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:setTab})
     : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule})
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch})
-    : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch})
+    : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
@@ -4081,7 +4121,6 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
-
 
 
 
