@@ -1692,7 +1692,9 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const ROLE_COLORS = { child:"#1D4ED8", adult:"#16A34A", coach:"#7C3AED" };
   const normalizeName = v => String(v||"").replace(/\s+/g," ").replace(/さん$/,"").trim();
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user || {};
-  const familyChoices = parseFamilyMembers(currentUserProfile.familyMembers || []);
+  const familyChoices = parseFamilyMembers(
+    currentUserProfile.familyMembers || currentUserProfile.familyComposition || []
+  );
   const luggageLabel = String(schedule.luggagePerson || "").trim();
   const luggageKey = normalizeName(luggageLabel);
   const [carpools, setCarpools] = useState([]);
@@ -2039,6 +2041,10 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       ? `自動割り当てしました（${assignedCount}名割当 / ${unassigned}名未割当）`
       : `自動割り当てしました（${assignedCount}名）`);
   };
+  const familyChoiceList = [...new Set([
+    ...familyChoices,
+    ...parseFamilyMembers(my.familyMembers || [])
+  ])];
 
   if(loading) return h("div",{style:{textAlign:"center",padding:20,color:"#aaa",fontSize:13}},"読み込み中...");
 
@@ -2097,10 +2103,10 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       !!my.available && h("div",{style:{marginBottom:14,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
         h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",marginBottom:8}},
           "行く人（家族）を選択"),
-        familyChoices.length===0
+        familyChoiceList.length===0
           ? h("div",{style:{fontSize:11,color:"#F59E0B",fontWeight:700}},"先に設定タブで家族構成を登録してください")
           : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
-              familyChoices.map(name=>{
+              familyChoiceList.map(name=>{
                 const checked=(my.familyMembers||[]).includes(name);
                 return h("button",{
                   key:"fm-"+name,
@@ -4003,7 +4009,7 @@ function MemberTab({members,liftings=[]}) {
 function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile}) {
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
   const child = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
-  const familyListView = parseFamilyMembers(currentUserProfile.familyMembers || []);
+  const familyListView = parseFamilyMembers(currentUserProfile.familyMembers || currentUserProfile.familyComposition || []);
   const [editing,setEditing] = useState(false);
   const [name,setName] = useState(currentUserProfile.name || "");
   const [memberId,setMemberId] = useState(currentUserProfile.memberId || "");
@@ -4014,8 +4020,8 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
     const latest = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
     setName(latest.name || "");
     setMemberId(latest.memberId || "");
-    setFamilyText(parseFamilyMembers(latest.familyMembers || []).join("\n"));
-  },[user.id,user.name,user.memberId,JSON.stringify((users||[]).map(u=>[u.id,u.familyMembers]))]);
+    setFamilyText(parseFamilyMembers(latest.familyMembers || latest.familyComposition || []).join("\n"));
+  },[user.id,user.name,user.memberId,JSON.stringify((users||[]).map(u=>[u.id,u.familyMembers,u.familyComposition]))]);
 
   const generations = [...new Set(members.map(m=>String(m.generation||"").trim()).filter(Boolean))].sort((a,b)=>Number(b)-Number(a));
   const memberOptions = generations.flatMap(gen => {
@@ -4056,7 +4062,7 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"家族構成（1行1名）"),
           h("textarea",{value:familyText,onChange:e=>setFamilyText(e.target.value),rows:4,placeholder:"例:\n父\n母\n妹",style:{...css.inp,resize:"none"}})),
         h("div",{style:{display:"flex",gap:10}},
-          h("button",{onClick:()=>{setEditing(false);setName(currentUserProfile.name||"");setMemberId(currentUserProfile.memberId||"");setFamilyText(parseFamilyMembers(currentUserProfile.familyMembers||[]).join("\n"));},style:css.bG},"キャンセル"),
+          h("button",{onClick:()=>{setEditing(false);setName(currentUserProfile.name||"");setMemberId(currentUserProfile.memberId||"");setFamilyText(parseFamilyMembers(currentUserProfile.familyMembers||currentUserProfile.familyComposition||[]).join("\n"));},style:css.bG},"キャンセル"),
           h("button",{onClick:save,disabled:saving||!name||!memberId,style:{...css.bS,opacity:(!name||!memberId)?0.5:1}},saving?"保存中...":"保存する")))
       : h(Fragment,{},
         h("div",{style:{fontSize:12,color:"#888",marginBottom:8}},"メールアドレス"),
