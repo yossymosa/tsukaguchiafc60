@@ -1707,6 +1707,10 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const [assignment, setAssignment] = useState({});
   // 家族車割り当て state: {memberId: familyCarUserId}
   const [familyRideAssign, setFamilyRideAssign] = useState({});
+  // スロット割り当て state: {"kind:userId:slotIndex": "m:memberId" | "x:candidateId"}
+  const [seatAssignments, setSeatAssignments] = useState({});
+  // 家族名などメンバー外の割り当て state: {candidateId: "d:ci" | "f:userId"}
+  const [extraRideAssign, setExtraRideAssign] = useState({});
   // 各車のピックアップ情報 {userId: {place:"", time:""}}
   const [pickupInfo, setPickupInfo] = useState({});
   // 車ごとの追加情報 {userId: {highway:boolean, adultUser1:"", adultUser2:"", coach:"", coachOther:""}}
@@ -1774,6 +1778,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       "・最初に「配車できますか？」で『可 / 不可 / 家族で行く』を選んでください。",
       "・各家庭で「行く人（家族）」を入力してください。",
       "・管理者はまず配車候補リストから使う車を選んでください。",
+      "・同乗者は、選んだ車ごとの座席スロットで割り当てます。",
       "・『可』を選んだ場合は、何人乗せられるか（運転手を含む）を入力してください。",
       "・『家族で行く』を選んだ場合は、空きがある場合の受け入れ人数（0〜）を入力してください。",
       "・『不可』を選んだ場合でも、行く家族メンバーは選択できます（子供は配車対象のまま）。",
@@ -1795,6 +1800,8 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           if (savedPlan && typeof savedPlan === "object") {
             if (savedPlan.assignment && typeof savedPlan.assignment === "object") setAssignment(savedPlan.assignment);
             if (savedPlan.familyRideAssign && typeof savedPlan.familyRideAssign === "object") setFamilyRideAssign(savedPlan.familyRideAssign);
+            if (savedPlan.seatAssignments && typeof savedPlan.seatAssignments === "object") setSeatAssignments(savedPlan.seatAssignments);
+            if (savedPlan.extraRideAssign && typeof savedPlan.extraRideAssign === "object") setExtraRideAssign(savedPlan.extraRideAssign);
             if (savedPlan.pickupInfo && typeof savedPlan.pickupInfo === "object") setPickupInfo(savedPlan.pickupInfo);
             if (savedPlan.carMeta && typeof savedPlan.carMeta === "object") setCarMeta(savedPlan.carMeta);
             if (Array.isArray(savedPlan.selectedFleetUserIds)) setSelectedFleetUserIds(savedPlan.selectedFleetUserIds.map(v=>String(v||"")).filter(Boolean));
@@ -1809,12 +1816,14 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       localStorage.setItem("afc_carpool_plan_" + schedule.id, JSON.stringify({
         assignment,
         familyRideAssign,
+        seatAssignments,
+        extraRideAssign,
         pickupInfo,
         carMeta,
         selectedFleetUserIds
       }));
     } catch (e) {}
-  }, [schedule.id, assignment, familyRideAssign, pickupInfo, carMeta, selectedFleetUserIds, planLoaded]);
+  }, [schedule.id, assignment, familyRideAssign, seatAssignments, extraRideAssign, pickupInfo, carMeta, selectedFleetUserIds, planLoaded]);
 
   useEffect(()=>{
     let cancelled=false;
@@ -1922,7 +1931,10 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     const ownChildMemberId = String(profile.memberId || "").trim();
     const ownChildOnboard = ownChildMemberId && !!familyOwnRideByMemberId[ownChildMemberId];
     const manualChildren = attendingChildren.filter(m => String(familyRideAssign[m.id] || "") === String(cp.userId || ""));
-    const used = manualChildren.length;
+    const extraAssigned = Object.keys(extraRideAssign || {}).filter(
+      riderId => String(extraRideAssign[riderId] || "") === ("f:" + String(cp.userId || ""))
+    ).length;
+    const used = manualChildren.length + extraAssigned;
     return { cap, used, free: Math.max(0, cap - used), ownChildOnboard, manualChildren };
   };
   const familyRideCarByUserId = {};
@@ -1947,44 +1959,148 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       return allFleetUserIds;
     });
   }, [allFleetUserIds.join("|")]);
-  useEffect(() => {
-    if (allFleetUserIds.length > 0 && selectedFleetUserIds.length === 0) return;
-    const allowedDispatch = new Set(selectedDispatchRows.map(row => row.ci));
-    const allowedFamily = new Set(selectedFamilyRideCars.map(car => String(car.userId || "")));
-    setAssignment(prev => {
-      const next = {};
-      let changed = false;
-      Object.keys(prev || {}).forEach(memberId => {
-        const ci = prev[memberId];
-        if (allowedDispatch.has(ci)) {
-          next[memberId] = ci;
-        } else {
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-    setFamilyRideAssign(prev => {
-      const next = {};
-      let changed = false;
-      Object.keys(prev || {}).forEach(memberId => {
-        const userId = String(prev[memberId] || "");
-        if (userId && allowedFamily.has(userId)) {
-          next[memberId] = userId;
-        } else if (userId) {
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-  }, [
-    allFleetUserIds.join("|"),
-    selectedFleetUserIds.length,
-    selectedDispatchRows.map(row => String(row.ci)).join("|"),
-    selectedFamilyRideCars.map(car => String(car.userId || "")).join("|")
-  ]);
   // 配車対象の参加者（家族移動で対象外の子供を除外）
   const participants = attendingChildren.filter(m => !familyOwnRideMemberIds.has(String(m.id)));
+  const familyRiderCandidates = (() => {
+    const list = [];
+    const seen = new Set();
+    carpools.forEach(cp => {
+      parseFamilyMembers(cp.familyMembers || []).forEach(name => {
+        const riderId = "x:" + String(cp.userId || "") + ":" + encodeURIComponent(String(name || "").trim());
+        if (seen.has(riderId)) return;
+        seen.add(riderId);
+        list.push({
+          id: riderId,
+          name: String(name || "").trim(),
+          label: `${String(name || "").trim()}（${cp.userName || "家族"}）`,
+          type: "family"
+        });
+      });
+    });
+    return list;
+  })();
+  const childRiderCandidates = participants.map(m => ({
+    id: "m:" + String(m.id || ""),
+    name: m.name || "",
+    label: `${m.name || "-"}（選手）`,
+    type: "child",
+    memberId: String(m.id || "")
+  }));
+  const riderCandidates = [...childRiderCandidates, ...familyRiderCandidates];
+  const riderIds = riderCandidates.map(r => r.id);
+  const riderById = {};
+  riderCandidates.forEach(r => { riderById[r.id] = r; });
+  const seatCountForRow = row =>
+    row.kind === "dispatch"
+      ? Math.max(0, Number(row?.car?.capacity || 0) - 1)
+      : Math.max(0, Number(row?.car?.capacity || 0));
+  const seatKeyFor = (row, idx) => `${row.kind}:${String(row?.car?.userId || "")}:${idx}`;
+  const seatKeysForSelected = selectedFleetRows.flatMap(row =>
+    Array.from({length: seatCountForRow(row)}, (_, idx) => seatKeyFor(row, idx))
+  );
+  const seatKeysByTarget = {};
+  selectedFleetRows.forEach(row => {
+    const token = row.kind === "dispatch"
+      ? ("d:" + String(row.ci))
+      : ("f:" + String(row.car.userId || ""));
+    seatKeysByTarget[token] = Array.from({length: seatCountForRow(row)}, (_, idx) => seatKeyFor(row, idx));
+  });
+  const targetTokenBySeatKey = seatKey => {
+    const parts = String(seatKey || "").split(":");
+    if (parts.length < 3) return "";
+    const kind = parts[0];
+    const userId = parts[1];
+    if (kind === "dispatch") {
+      const ci = carIndexByUserId[String(userId || "")];
+      return ci === undefined ? "" : ("d:" + String(ci));
+    }
+    if (kind === "family") {
+      return "f:" + String(userId || "");
+    }
+    return "";
+  };
+  const sameObject = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {});
+  useEffect(() => {
+    const validSeatKeySet = new Set(seatKeysForSelected);
+    const validRiderSet = new Set(riderIds);
+    setSeatAssignments(prev => {
+      const next = {};
+      Object.keys(prev || {}).forEach(key => {
+        const riderId = String(prev[key] || "");
+        if (!validSeatKeySet.has(key)) return;
+        if (riderId && !validRiderSet.has(riderId)) return;
+        if (riderId) next[key] = riderId;
+      });
+      return sameObject(prev, next) ? prev : next;
+    });
+  }, [seatKeysForSelected.join("|"), riderIds.join("|")]);
+  useEffect(() => {
+    if (!planLoaded) return;
+    if (Object.keys(seatAssignments || {}).length > 0) return;
+    const nextSeats = {};
+    const takeSeat = (target, riderId) => {
+      const keys = seatKeysByTarget[target] || [];
+      const freeKey = keys.find(k => !nextSeats[k]);
+      if (!freeKey) return false;
+      nextSeats[freeKey] = riderId;
+      return true;
+    };
+    Object.keys(assignment || {}).forEach(memberId => {
+      const ci = assignment[memberId];
+      if (ci === undefined || ci === null) return;
+      takeSeat("d:" + String(ci), "m:" + String(memberId));
+    });
+    Object.keys(familyRideAssign || {}).forEach(memberId => {
+      const userId = String(familyRideAssign[memberId] || "");
+      if (!userId) return;
+      takeSeat("f:" + userId, "m:" + String(memberId));
+    });
+    Object.keys(extraRideAssign || {}).forEach(riderId => {
+      const target = String(extraRideAssign[riderId] || "");
+      if (!target) return;
+      takeSeat(target, riderId);
+    });
+    if (Object.keys(nextSeats).length > 0) {
+      setSeatAssignments(nextSeats);
+    }
+  }, [planLoaded, JSON.stringify(assignment || {}), JSON.stringify(familyRideAssign || {}), JSON.stringify(extraRideAssign || {}), seatKeysForSelected.join("|")]);
+  useEffect(() => {
+    const nextAssign = {};
+    const nextFamilyAssign = {};
+    const nextExtra = {};
+    Object.keys(seatAssignments || {}).forEach(seatKey => {
+      const riderId = String(seatAssignments[seatKey] || "");
+      if (!riderId) return;
+      const target = targetTokenBySeatKey(seatKey);
+      if (!target) return;
+      if (riderId.startsWith("m:")) {
+        const memberId = riderId.slice(2);
+        if (target.startsWith("d:")) {
+          nextAssign[memberId] = Number(target.slice(2));
+        } else if (target.startsWith("f:")) {
+          nextFamilyAssign[memberId] = target.slice(2);
+        }
+        return;
+      }
+      if (riderId.startsWith("x:")) {
+        nextExtra[riderId] = target;
+      }
+    });
+    setAssignment(prev => sameObject(prev, nextAssign) ? prev : nextAssign);
+    setFamilyRideAssign(prev => sameObject(prev, nextFamilyAssign) ? prev : nextFamilyAssign);
+    setExtraRideAssign(prev => sameObject(prev, nextExtra) ? prev : nextExtra);
+  }, [seatAssignments, selectedFleetRows.map(row => row.kind + ":" + row.car.userId + ":" + row.ci).join("|")]);
+  const riderIdsByTarget = {};
+  const riderTargetById = {};
+  Object.keys(seatAssignments || {}).forEach(seatKey => {
+    const riderId = String(seatAssignments[seatKey] || "");
+    if (!riderId) return;
+    const target = targetTokenBySeatKey(seatKey);
+    if (!target) return;
+    riderTargetById[riderId] = target;
+    if (!riderIdsByTarget[target]) riderIdsByTarget[target] = [];
+    riderIdsByTarget[target].push(riderId);
+  });
   const autoFamilyChildrenForCar = ci =>
     attendingChildren.filter(m => {
       const info = familyOwnRideByMemberId[String(m.id)];
@@ -2000,41 +2116,62 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     const autoFamilyChildren = autoFamilyChildrenForCar(ci);
     const manualChildren = participants.filter(m => assignment[m.id] === ci);
     const manualFamilyChildren = participants.filter(m => String(familyRideAssign[m.id] || "") === String(car.userId || ""));
-    const children = autoFamilyChildren.length + manualChildren.length + manualFamilyChildren.length;
+    const extraAssigned = Object.keys(extraRideAssign || {}).filter(
+      riderId => String(extraRideAssign[riderId] || "") === ("d:" + String(ci))
+    ).length;
+    const children = autoFamilyChildren.length + manualChildren.length + manualFamilyChildren.length + extraAssigned;
     const used = driver + adults + coach + children;
     const rawFree = cap - used;
     return { cap, adults, coach, children, used, rawFree, free: Math.max(0, rawFree), autoFamilyChildren, manualChildren };
   };
   const autoAssign = () => {
-    const manualFamilyAssignedIds = new Set(Object.keys(familyRideAssign || {}).filter(k => String(familyRideAssign[k] || "").trim()));
-    const assignTargetParticipants = participants.filter(m => !manualFamilyAssignedIds.has(String(m.id)));
+    const assignTargetParticipants = [...participants];
     if (assignTargetParticipants.length === 0) {
       alert("参加者がいません。");
       return;
     }
     const enabledCars = selectedDispatchRows
-      .map(row => ({ car: row.car, ci: row.ci }))
+      .map(row => ({ car: row.car, ci: row.ci, row }))
       .filter(({ car }) => hasEnoughAdultsForHighway(car))
-      .map(({ car, ci }) => {
-        const familyAssigned = participants.filter(m => String(familyRideAssign[m.id] || "") === String(car.userId || "")).length;
-        const reserved = 1 + getAdultNames(car.userId).length + (getCoachName(car.userId) ? 1 : 0) + autoFamilyChildrenForCar(ci).length + familyAssigned;
-        return { ci, remain: Number(car.capacity || 0) - reserved };
+      .map(({ car, ci, row }) => {
+        const cap = seatCountForRow(row);
+        return { ci, cap, userId: String(car.userId || "") };
       })
-      .filter(c => c.remain > 0);
+      .filter(c => c.cap > 0);
     if (enabledCars.length === 0) {
       alert("割り当て可能な空席がありません（高速条件・同乗大人・定員を確認してください）。");
       return;
     }
-    const next = {};
-    const list = [...assignTargetParticipants].sort((a,b)=>Number(a.number||99)-Number(b.number||99));
-    list.forEach(m => {
-      enabledCars.sort((a,b)=>b.remain-a.remain || a.ci-b.ci);
-      const target = enabledCars.find(c => c.remain > 0);
-      if (!target) return;
-      next[m.id] = target.ci;
-      target.remain -= 1;
+    const dispatchSeatKeys = selectedDispatchRows.flatMap(row =>
+      Array.from({length: seatCountForRow(row)}, (_, idx) => seatKeyFor(row, idx))
+    );
+    const dispatchSeatKeySet = new Set(dispatchSeatKeys);
+    const nextSeats = {};
+    Object.keys(seatAssignments || {}).forEach(key => {
+      const riderId = String(seatAssignments[key] || "");
+      if (!riderId) return;
+      if (!dispatchSeatKeySet.has(key)) {
+        nextSeats[key] = riderId;
+        return;
+      }
+      if (!riderId.startsWith("m:")) {
+        nextSeats[key] = riderId;
+      }
     });
-    setAssignment(next);
+    const freeSeatKeys = dispatchSeatKeys.filter(key => !nextSeats[key]);
+    const list = [...assignTargetParticipants].sort((a,b)=>Number(a.number||99)-Number(b.number||99));
+    const next = {};
+    list.forEach(m => {
+      const seatKey = freeSeatKeys.shift();
+      if (!seatKey) return;
+      const riderId = "m:" + String(m.id || "");
+      nextSeats[seatKey] = riderId;
+      const target = targetTokenBySeatKey(seatKey);
+      if (target.startsWith("d:")) {
+        next[m.id] = Number(target.slice(2));
+      }
+    });
+    setSeatAssignments(nextSeats);
     const assignedCount = Object.keys(next).length;
     const unassigned = list.length - assignedCount;
     alert(unassigned > 0
@@ -2297,7 +2434,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           "ユーザー未登録のため、大人候補がありません")
       ),
       h("div",{style:{marginBottom:12,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8}},"行く人リスト（子供）"),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8}},"行く人リスト（選手＋家族）"),
         attendingChildren.length===0
           ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"出欠○の選手がいません")
           : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
@@ -2306,6 +2443,12 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                   (m.number?("#"+m.number+" "):"")+m.name)
               )
             ),
+        familyRiderCandidates.length>0 && h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginTop:8}},
+          familyRiderCandidates.map(r=>
+            h("span",{key:"f-chip-"+r.id,style:{fontSize:11,fontWeight:700,color:"#92400E",background:"#FEF3C7",borderRadius:999,padding:"4px 10px"}},
+              r.label)
+          )
+        ),
         familyOwnRideMemberIds.size>0 && h("div",{style:{marginTop:8,fontSize:11,color:"#F59E0B",fontWeight:700}},
           "配車対象外（家族移動）: " + attendingChildren
             .filter(m=>familyOwnRideMemberIds.has(String(m.id)))
@@ -2314,69 +2457,62 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       ),
 
       selectedFleetRows.length>0&&h("div",{style:{marginTop:12,padding:12,background:"#DBEAFE",borderRadius:12}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#1D4ED8",marginBottom:8}},"参加者リストから車を選択"),
-        participants.length===0
-          ? h("div",{style:{fontSize:12,color:"#64748B"}},"参加者がいません")
-          : participants.map(m=>{
-              const selectedDispatch = assignment[m.id];
-              const selectedFamilyUserId = String(familyRideAssign[m.id] || "");
-              const selectedValue = selectedFamilyUserId
-                ? ("f:" + selectedFamilyUserId)
-                : (selectedDispatch===undefined||selectedDispatch===null ? "" : ("d:" + String(selectedDispatch)));
-              return h("div",{key:"assign-row-"+m.id,style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
-                h("div",{style:{minWidth:120,fontSize:12,fontWeight:700,color:"#1E293B"}},(m.number?("#"+m.number+" "):"")+m.name),
-                h("select",{
-                  value:selectedValue,
-                  onChange:e=>{
-                    const v=String(e.target.value || "");
-                    if(v===""){
-                      setAssignment(p=>({...p,[m.id]:undefined}));
-                      setFamilyRideAssign(p=>({...p,[m.id]:""}));
-                      return;
-                    }
-                    if(v.startsWith("d:")){
-                      const ci2=Number(v.slice(2));
-                      if(!isNaN(ci2)&&ci2>=0){
-                        const currentDispatch = assignment[m.id];
-                        const s=seatSummary(ci2);
-                        const remaining = s.free + (currentDispatch===ci2?1:0);
-                        if(remaining<=0){ alert("その車は空席がありません"); return; }
-                        setFamilyRideAssign(p=>({...p,[m.id]:""}));
-                        setAssignment(p=>({...p,[m.id]:ci2}));
-                      }
-                      return;
-                    }
-                    if(v.startsWith("f:")){
-                      const familyUserId = v.slice(2);
-                      const fs = familySeatSummaryByUserId(familyUserId);
-                      const currentFamily = String(familyRideAssign[m.id] || "");
-                      const remaining = fs.free + (currentFamily===familyUserId ? 1 : 0);
-                      if(remaining<=0){ alert("その家族車は空席がありません"); return; }
-                      setAssignment(p=>({...p,[m.id]:undefined}));
-                      setFamilyRideAssign(p=>({...p,[m.id]:familyUserId}));
-                    }
-                  },
-                  style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
-                },
-                  h("option",{value:""},"未割り当て"),
-                  selectedDispatchRows.map(row=>{
-                    const car = row.car;
-                    const ci2 = row.ci;
-                    const s=seatSummary(ci2);
-                    const isCurrent = selectedValue===("d:"+String(ci2));
-                    const remain = s.free + (isCurrent?1:0);
-                    return h("option",{key:"assign-opt-d-"+m.id+"-"+String(car.userId||ci2),value:"d:"+String(ci2),disabled:remain<=0&&!isCurrent},`[配車] ${car.userName}（残${Math.max(0,remain)}）`);
-                  }),
-                  selectedFamilyRideCars.map(fc=>{
-                    const fs=familySeatSummaryByUserId(fc.userId);
-                    const keyVal = "f:"+String(fc.userId || "");
-                    const isCurrent = selectedValue===keyVal;
-                    const remain = fs.free + (isCurrent?1:0);
-                    return h("option",{key:"assign-opt-f-"+m.id+"-"+String(fc.userId||""),value:keyVal,disabled:remain<=0&&!isCurrent},`[家族車/非配車] ${fc.userName}（残${Math.max(0,remain)}）`);
-                  })
-                )
-              );
-            })
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#1D4ED8",marginBottom:8}},"同乗者を車ごとに割り当て"),
+        h("div",{style:{fontSize:11,color:"#475569",marginBottom:10}},"候補は「行く人（選手＋家族入力名）」です。1人は1つの座席にのみ割り当てできます。"),
+        selectedFleetRows.map(row=>{
+          const car = row.car;
+          const targetToken = row.kind === "dispatch" ? ("d:" + String(row.ci)) : ("f:" + String(car.userId || ""));
+          const seatCount = seatCountForRow(row);
+          const assignedRiders = riderIdsByTarget[targetToken] || [];
+          return h("div",{key:"seat-card-"+String(row.kind)+"-"+String(car.userId||""),style:{marginBottom:10,padding:10,background:"#fff",borderRadius:10,border:"1px solid #BFDBFE"}},
+            h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}},
+              h("div",{style:{fontSize:12,fontWeight:800,color:"#0F172A"}},
+                (car.userName || "-") + (row.kind === "dispatch" ? " の車" : " の家族車")),
+              h("div",{style:{fontSize:11,fontWeight:700,color:"#475569"}},
+                `割当 ${assignedRiders.length}/${seatCount}`)
+            ),
+            seatCount<=0
+              ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"割り当て可能な席がありません")
+              : Array.from({length: seatCount}, (_, idx) => {
+                  const seatKey = seatKeyFor(row, idx);
+                  const selectedRiderId = String(seatAssignments[seatKey] || "");
+                  const usedElsewhere = new Set(
+                    Object.keys(seatAssignments || {})
+                      .filter(k => k !== seatKey)
+                      .map(k => String(seatAssignments[k] || ""))
+                      .filter(Boolean)
+                  );
+                  return h("div",{key:"seat-row-"+seatKey,style:{display:"flex",alignItems:"center",gap:8,marginBottom:idx<seatCount-1?8:0}},
+                    h("div",{style:{width:84,fontSize:11,fontWeight:700,color:"#64748B"}},"同乗者" + (idx + 1)),
+                    h("select",{
+                      value:selectedRiderId,
+                      onChange:e=>{
+                        const riderId = String(e.target.value || "");
+                        setSeatAssignments(prev => {
+                          const next = {...(prev || {})};
+                          Object.keys(next).forEach(k => {
+                            if (k !== seatKey && String(next[k] || "") === riderId && riderId) {
+                              next[k] = "";
+                            }
+                          });
+                          next[seatKey] = riderId;
+                          if (!riderId) delete next[seatKey];
+                          return next;
+                        });
+                      },
+                      style:{...css.inp,flex:1,minWidth:0,padding:"6px 8px",fontSize:12}
+                    },
+                      h("option",{value:""},"未割り当て"),
+                      riderCandidates.map(r=>{
+                        const isCurrent = selectedRiderId === r.id;
+                        const disabled = usedElsewhere.has(r.id) && !isCurrent;
+                        return h("option",{key:"seat-opt-"+seatKey+"-"+r.id,value:r.id,disabled},r.label);
+                      })
+                    )
+                  );
+                })
+          );
+        })
       ),
 
       h("div",{style:{marginTop:14,padding:12,background:"#EEF2FF",borderRadius:12,border:"1px solid #DBEAFE"}},
@@ -2385,12 +2521,13 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           const car = row.car;
           const ci = row.ci;
           const autoFamilyChildren = autoFamilyChildrenForCar(ci);
-          const manualAssigned=participants.filter(m=>assignment[m.id]===ci);
-          const manualFamilyAssigned=participants.filter(m=>String(familyRideAssign[m.id]||"")===String(car.userId||""));
+          const targetToken = "d:" + String(ci);
+          const slotRiders = (riderIdsByTarget[targetToken] || [])
+            .map(riderId => riderById[riderId])
+            .filter(Boolean);
           const assignedNames = [
             ...autoFamilyChildren.map(m=>m.name+"（家族）"),
-            ...manualAssigned.map(m=>m.name),
-            ...manualFamilyAssigned.map(m=>m.name+"（家族車/非配車）")
+            ...slotRiders.map(r => r.type === "child" ? r.name : r.label)
           ];
           const shouldShowDispatchSummary =
             assignedNames.length > 0 || isLuggageCar(car.userName);
@@ -2420,7 +2557,10 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         }),
         selectedFamilyRideCars.map(fc=>{
           const fs = familySeatSummaryByUserId(fc.userId);
-          const familyAssigned = participants.filter(m => String(familyRideAssign[m.id] || "") === String(fc.userId || ""));
+          const targetToken = "f:" + String(fc.userId || "");
+          const familyAssigned = (riderIdsByTarget[targetToken] || [])
+            .map(riderId => riderById[riderId])
+            .filter(Boolean);
           const shouldShowFamilySummary =
             familyAssigned.length > 0 || fs.ownChildOnboard || isLuggageCar(fc.userName);
           if(!shouldShowFamilySummary) return null;
@@ -2428,30 +2568,47 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:4}},
               (fc.userName||"-")+" の家族車"+(isLuggageCar(fc.userName)?"（荷物車）":"")),
             h("div",{style:{fontSize:11,fontWeight:700,color:"#B45309",marginBottom:2}},"家族車（非配車）"),
-            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"子供: "+(familyAssigned.length?familyAssigned.map(m=>m.name).join("、"):"なし")),
+            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"同乗者: "+(familyAssigned.length?familyAssigned.map(r=>r.type==="child"?r.name:r.label).join("、"):"なし")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"座席: "+fs.used+"/"+fs.cap+"（残"+fs.free+"）")
           );
         }),
         h("div",{style:{marginTop:10,padding:"10px 12px",background:"#fff",borderRadius:10,border:"1px dashed #C7D2FE"}},
-          h("div",{style:{fontSize:11,fontWeight:800,color:"#4F46E5",marginBottom:6}},"出席した子供の乗車先"),
-          attendingChildren.length===0
-            ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"出席者なし")
-            : attendingChildren.map(m=>{
-                const id = String(m.id);
-                const familyInfo = familyOwnRideByMemberId[id];
+          h("div",{style:{fontSize:11,fontWeight:800,color:"#4F46E5",marginBottom:6}},"行く人の乗車先"),
+          [...attendingChildren.map(m=>({kind:"child",id:String(m.id||""),name:(m.number?("#"+m.number+" "):"")+m.name})),
+           ...familyRiderCandidates.map(r=>({kind:"family",id:r.id,name:r.label}))
+          ].length===0
+            ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"行く人なし")
+            : [...attendingChildren.map(m=>({kind:"child",id:String(m.id||""),name:(m.number?("#"+m.number+" "):"")+m.name})),
+               ...familyRiderCandidates.map(r=>({kind:"family",id:r.id,name:r.label}))
+              ].map(row=>{
+                const targetToLabel = token => {
+                  if (!token) return "未割り当て";
+                  if (token.startsWith("d:")) {
+                    const ci = Number(token.slice(2));
+                    return cars[ci] ? ((cars[ci].userName || "-") + " の車") : "未割り当て";
+                  }
+                  if (token.startsWith("f:")) {
+                    const userId = token.slice(2);
+                    const fc = familyRideCarByUserId[userId];
+                    return (fc ? (fc.userName || "-") : "-") + " の家族車";
+                  }
+                  return "未割り当て";
+                };
                 let label = "未割り当て";
-                if (familyInfo?.mode === "familyOnly") {
-                  label = (familyInfo.userName || "-") + " の家族車（配車対象外）";
-                } else if (familyInfo?.mode === "selfCar" && cars[familyInfo.carIndex]) {
-                  label = (cars[familyInfo.carIndex].userName || "-") + " の車（家族）";
-                } else if (String(familyRideAssign[m.id] || "").trim() && familyRideCarByUserId[String(familyRideAssign[m.id] || "").trim()]) {
-                  const fc = familyRideCarByUserId[String(familyRideAssign[m.id] || "").trim()];
-                  label = (fc.userName || "-") + " の家族車（非配車）";
-                } else if (assignment[m.id] !== undefined && assignment[m.id] !== null && cars[assignment[m.id]]) {
-                  label = (cars[assignment[m.id]].userName || "-") + " の車";
+                if (row.kind === "child") {
+                  const familyInfo = familyOwnRideByMemberId[row.id];
+                  if (familyInfo?.mode === "familyOnly") {
+                    label = (familyInfo.userName || "-") + " の家族車（配車対象外）";
+                  } else if (familyInfo?.mode === "selfCar" && cars[familyInfo.carIndex]) {
+                    label = (cars[familyInfo.carIndex].userName || "-") + " の車（家族）";
+                  } else {
+                    label = targetToLabel(riderTargetById["m:" + row.id] || "");
+                  }
+                } else {
+                  label = targetToLabel(riderTargetById[row.id] || "");
                 }
-                return h("div",{key:"ride-dest-"+m.id,style:{display:"flex",justifyContent:"space-between",gap:10,padding:"4px 0",borderTop:"1px solid #F1F5F9"}},
-                  h("div",{style:{fontSize:12,fontWeight:700,color:"#1E293B"}},(m.number?("#"+m.number+" "):"")+m.name),
+                return h("div",{key:"ride-dest-"+row.kind+"-"+row.id,style:{display:"flex",justifyContent:"space-between",gap:10,padding:"4px 0",borderTop:"1px solid #F1F5F9"}},
+                  h("div",{style:{fontSize:12,fontWeight:700,color:"#1E293B"}},row.name),
                   h("div",{style:{fontSize:12,color:"#475569",textAlign:"right"}},label)
                 );
               })
