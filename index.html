@@ -248,6 +248,34 @@ function getCurrentThirdGeneration() {
   const fiscalYear = now.getMonth() + 1 >= 4 ? now.getFullYear() : now.getFullYear() - 1;
   return fiscalYear - 1965;
 }
+function toHalfWidthDigits(v){
+  return String(v || "").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+}
+function getGradeNumber(grade){
+  const s = toHalfWidthDigits(String(grade || "")).trim();
+  const m = s.match(/(\d+)\s*年/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+function getGenerationByGrade(grade){
+  const n = getGradeNumber(grade);
+  if (!n || n < 1 || n > 6) return "";
+  return String(getCurrentThirdGeneration() + 3 - n);
+}
+function formatGenerationGrade(grade, generation){
+  const gradeText = toHalfWidthDigits(String(grade || "").trim());
+  const genDigits = String(generation || "").replace(/[^\d]/g, "");
+  const resolvedGen = genDigits || getGenerationByGrade(gradeText);
+  if (resolvedGen && gradeText) return `${resolvedGen}期（${gradeText}）`;
+  if (resolvedGen) return `${resolvedGen}期`;
+  return gradeText;
+}
+function formatMemberGenerationGrade(member){
+  if (!member) return "";
+  const grade = resolveGrade(member) || member.grade || "";
+  return formatGenerationGrade(grade, member.generation);
+}
 function resolveGrade(member) {
   const gen = Number(String(member?.generation || "").replace(/[^\d]/g,""));
   if (!gen) return member?.grade || "";
@@ -259,7 +287,8 @@ function resolveGrade(member) {
   return member?.grade || "";
 }
 function normalizeMember(member) {
-  return {...member, grade: resolveGrade(member)};
+  const grade = resolveGrade(member);
+  return {...member, grade, gradeDisplay: formatGenerationGrade(grade, member?.generation)};
 }
 function calcStats(rs) {
   if(!rs.length) return {games:0,wins:0,draws:0,losses:0,gf:0,ga:0,pct:"-"};
@@ -1236,7 +1265,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
 
   const gradeGroups = {};
   participants.forEach(m => {
-    const g = m.grade || "その他";
+    const g = formatMemberGenerationGrade(m) || m.grade || "その他";
     if (!gradeGroups[g]) gradeGroups[g] = [];
     gradeGroups[g].push(m);
   });
@@ -1760,13 +1789,13 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const showCarpoolRule = () => {
     alert([
       "【配車ルール】",
-      "・最初に「配車可否」「何人乗せられるか（運転手含む）」「家族で行くか」を入力してください。",
-      "・配車できる場合は、必ず乗車人数を入力してください（定員は運転手を含む）。",
-      "・家族で行く場合も、確認用として乗車人数を入力してください。",
+      "・最初に「配車できますか？」で『可 / 不可 / 家族で行く』を選んでください。",
+      "・『可』を選んだ場合は、何人乗せられるか（運転手を含む）を入力してください。",
+      "・『家族で行く』を選んだ場合は、空きがある場合の受け入れ人数（0〜）を入力してください。",
       "・高速利用の車は、運転手 + 同乗大人1名以上（合計大人2名）が必要です。",
       "・同乗大人はユーザー一覧から選択してください（コーチ欄は別）。",
-      "・配車不可で家族で行く場合、その子供は配車対象外です。",
-      "・配車可で家族で行く場合、空きがあればその子供は自家用車扱いで配車対象外です。",
+      "・『家族で行く』を選んだ家庭の子供は、配車対象外になります。",
+      "・『家族で行く』で空き人数を入力した場合、他の子供を家族車に割り当てできます。",
       "・集合場所と出発時間を入力してください。",
       "・変更が出たら、できるだけ早く更新してください。",
       "・安全第一（シートベルト着用・定員超過なし）でお願いします。"
@@ -1809,13 +1838,23 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       if(cancelled)return;
       setCarpools(cr.carpools||[]);
       const mine=(cr.carpools||[]).find(c=>c.userId===user.id);
-      if(mine) setMy({
-        available:mine.available||"",
-        capacity:mine.capacity||"",
-        note:mine.note||"",
-        familyPlan:mine.familyPlan||"",
-        familyMembers:parseFamilyMembers(mine.familyMembers||[])
-      });
+      if(mine){
+        const availableRaw = String(mine.available || "").trim();
+        const legacyFamilyPlan = String(mine.familyPlan || "").trim();
+        const available =
+          availableRaw === "未定"
+            ? ""
+            : ((availableRaw === "不可" && legacyFamilyPlan === "行く") || (!availableRaw && legacyFamilyPlan === "行く"))
+              ? "家族で行く"
+              : availableRaw;
+        setMy({
+          available,
+          capacity:String(mine.capacity ?? ""),
+          note:mine.note||"",
+          familyPlan:available==="家族で行く" ? "行く" : (legacyFamilyPlan || "行かない"),
+          familyMembers:parseFamilyMembers(mine.familyMembers||[])
+        });
+      }
       const map={};
       (ar.attend||[]).forEach(a=>{map[a.memberId]=a.status;});
       setAttend(map);
@@ -1826,17 +1865,19 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
 
   const save=async()=>{
     if(!my.available) return alert("可否を選択してください");
-    if(!my.familyPlan) return alert("家族で行くかを選択してください");
-    if((my.available==="可" || my.familyPlan==="行く") && !(Number(my.capacity||0)>0)){
+    const capNum = Number(my.capacity || 0);
+    if(my.available==="可" && !(capNum>0)){
       return alert("何人乗せられるか（運転手を含む）を入力してください");
     }
-    if(my.familyPlan==="行く" && parseFamilyMembers(my.familyMembers||[]).length===0){
-      return alert("参加する家族を選択してください");
+    if(my.available==="家族で行く" && (my.capacity==="" || Number.isNaN(capNum) || capNum<0)){
+      return alert("家族で行く場合の受け入れ人数（0以上）を選択してください");
     }
     setSaving(true);
+    const isFamilyRide = my.available === "家族で行く";
     const payload = {
       ...my,
-      familyMembers: parseFamilyMembers(my.familyMembers || [])
+      familyPlan: isFamilyRide ? "行く" : "行かない",
+      familyMembers: isFamilyRide ? parseFamilyMembers(my.familyMembers || []) : []
     };
     await api("saveCarpool",{scheduleId:schedule.id,userId:user.id,userName:user.name,...payload});
     const next=[...carpools.filter(c=>c.userId!==user.id),{scheduleId:schedule.id,userId:user.id,userName:user.name,...payload}];
@@ -1856,13 +1897,20 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   // 家族移動の判定（配車対象外）
   const familyOwnRideByMemberId = {};
   const userById = {};
+  const isFamilyTrip = cp =>
+    String(cp?.available || "").trim() === "家族で行く" ||
+    String(cp?.familyPlan || "").trim() === "行く";
   (users || []).forEach(u => { userById[String(u.id || "")] = u; });
   carpools.forEach(cp => {
-    if (String(cp.familyPlan || "") !== "行く") return;
+    if (!isFamilyTrip(cp)) return;
     const profile = userById[String(cp.userId || "")] || {};
     const memberId = String(profile.memberId || "").trim();
     if (!memberId) return;
     if (!attendingChildren.some(m => String(m.id) === memberId)) return;
+    if (String(cp.available || "") === "家族で行く") {
+      familyOwnRideByMemberId[memberId] = { mode: "familyOnly", userName: cp.userName || "" };
+      return;
+    }
     if (String(cp.available || "") === "不可") {
       familyOwnRideByMemberId[memberId] = { mode: "familyOnly", userName: cp.userName || "" };
       return;
@@ -1876,10 +1924,11 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     }
   });
   const familyOwnRideMemberIds = new Set(Object.keys(familyOwnRideByMemberId));
-  const familyRideCars = carpools.filter(cp =>
-    String(cp.familyPlan || "") === "行く" &&
-    Number(cp.capacity || 0) > 0
-  );
+  const familyRideCars = carpools.filter(cp => {
+    const available = String(cp?.available || "").trim();
+    const familyPlan = String(cp?.familyPlan || "").trim() === "行く";
+    return available === "家族で行く" || (!available && familyPlan) || (available === "不可" && familyPlan);
+  });
   const familySeatSummaryByUserId = userId => {
     const cp = familyRideCars.find(x => String(x.userId || "") === String(userId || ""));
     if (!cp) return { cap: 0, used: 0, free: 0, ownChildOnboard: false, manualChildren: [] };
@@ -1887,9 +1936,8 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     const profile = userById[String(cp.userId || "")] || {};
     const ownChildMemberId = String(profile.memberId || "").trim();
     const ownChildOnboard = ownChildMemberId && !!familyOwnRideByMemberId[ownChildMemberId];
-    const familyMembersCount = parseFamilyMembers(cp.familyMembers || []).length;
     const manualChildren = attendingChildren.filter(m => String(familyRideAssign[m.id] || "") === String(cp.userId || ""));
-    const used = 1 + familyMembersCount + (ownChildOnboard ? 1 : 0) + manualChildren.length; // 運転手 + 家族 + 子供
+    const used = manualChildren.length;
     return { cap, used, free: Math.max(0, cap - used), ownChildOnboard, manualChildren };
   };
   const familyRideCarByUserId = {};
@@ -1981,51 +2029,50 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"配車できますか？"),
         h("div",{style:{display:"flex",gap:8}},
-          [["可","#4CAF50"],["不可","#F44336"],["未定","#FF9800"]].map(([v,col])=>
-            h("button",{key:v,onClick:()=>setMy(p=>({...p,available:v})),
+          [["可","#4CAF50"],["不可","#F44336"],["家族で行く","#2563EB"]].map(([v,col])=>
+            h("button",{key:v,onClick:()=>setMy(p=>{
+                const isFamilyRide = v === "家族で行く";
+                const next = {
+                  ...p,
+                  available:v,
+                  familyPlan:isFamilyRide ? "行く" : "行かない",
+                  familyMembers:isFamilyRide ? p.familyMembers : []
+                };
+                if (v === "可" && Number(p.capacity || 0) <= 0) next.capacity = "";
+                return next;
+              }),
               style:{flex:1,padding:"11px 0",border:`2px solid ${my.available===v?col:"#eee"}`,
                 borderRadius:12,background:my.available===v?col:"#fff",
                 color:my.available===v?"#fff":"#aaa",fontSize:14,fontWeight:700,cursor:"pointer"}},v)))),
-      (my.available==="可" || my.familyPlan==="行く")&&h("div",{style:{marginBottom:12}},
+      (my.available==="可" || my.available==="家族で行く")&&h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:4}},
           my.available==="可"
             ? "何人乗せられますか？（運転手を含む）"
-            : "家族車の定員は？（運転手を含む）"),
-        (my.familyPlan==="行く" && my.available!=="可") && h("div",{style:{fontSize:11,color:"#F59E0B",fontWeight:700,marginBottom:8}},
-          "家族車（配車対象外）の確認用です"),
+            : "空きがある場合何人載せれますか（事情があり載せれない場合は0を選んでください）"),
         h("div",{style:{display:"flex",gap:8}},
-          [1,2,3,4,5,6].map(n=>
+          (my.available==="家族で行く" ? [0,1,2,3,4,5,6] : [1,2,3,4,5,6]).map(n=>
             h("button",{key:n,onClick:()=>setMy(p=>({...p,capacity:String(n)})),
               style:{flex:1,padding:"10px 0",border:`2px solid ${my.capacity===String(n)?"#2196F3":"#eee"}`,
                 borderRadius:10,background:my.capacity===String(n)?"#2196F3":"#fff",
                 color:my.capacity===String(n)?"#fff":"#aaa",fontSize:14,fontWeight:700,cursor:"pointer"}},n)))),
-      h("div",{style:{marginBottom:14,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
-        h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",marginBottom:8}},"家族アンケート"),
-        h("div",{style:{fontSize:11,color:"#64748B",marginBottom:8}},"家族で会場に行くかを選択"),
-        h("div",{style:{display:"flex",gap:8,marginBottom:8}},
-          ["行く","行かない","未定"].map(v=>
-            h("button",{key:"family-"+v,onClick:()=>setMy(p=>({...p,familyPlan:v,familyMembers:v==="行く"?p.familyMembers:[]})),
-              style:{flex:1,padding:"8px 0",border:`2px solid ${my.familyPlan===v?"#1D4ED8":"#E5E7EB"}`,borderRadius:10,background:my.familyPlan===v?"#DBEAFE":"#fff",color:my.familyPlan===v?"#1D4ED8":"#64748B",fontSize:12,fontWeight:700,cursor:"pointer"}},v))
-        ),
-        my.familyPlan==="行く" && h(Fragment,{},
-          familyChoices.length===0
-            ? h("div",{style:{fontSize:11,color:"#F59E0B",fontWeight:700}},"先に設定タブで家族構成を登録してください")
-            : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
-                familyChoices.map(name=>{
-                  const checked=(my.familyMembers||[]).includes(name);
-                  return h("button",{
-                    key:"fm-"+name,
-                    onClick:()=>setMy(p=>{
-                      const cur=parseFamilyMembers(p.familyMembers||[]);
-                      const next=checked ? cur.filter(x=>x!==name) : [...cur,name];
-                      return {...p,familyMembers:next};
-                    }),
-                    style:{border:`1px solid ${checked?"#1D4ED8":"#CBD5E1"}`,background:checked?"#DBEAFE":"#fff",color:checked?"#1D4ED8":"#334155",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}
-                  },(checked?"✓ ":"")+name);
-                })
-              ),
-          my.familyPlan==="行く" && (my.familyMembers||[]).length===0 && h("div",{style:{marginTop:6,fontSize:11,color:"#F97316",fontWeight:700}},"参加する家族を選択してください")
-        )
+      my.available==="家族で行く" && h("div",{style:{marginBottom:14,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
+        h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",marginBottom:8}},"家族同行メンバー（任意）"),
+        familyChoices.length===0
+          ? h("div",{style:{fontSize:11,color:"#F59E0B",fontWeight:700}},"先に設定タブで家族構成を登録してください")
+          : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+              familyChoices.map(name=>{
+                const checked=(my.familyMembers||[]).includes(name);
+                return h("button",{
+                  key:"fm-"+name,
+                  onClick:()=>setMy(p=>{
+                    const cur=parseFamilyMembers(p.familyMembers||[]);
+                    const next=checked ? cur.filter(x=>x!==name) : [...cur,name];
+                    return {...p,familyMembers:next};
+                  }),
+                  style:{border:`1px solid ${checked?"#1D4ED8":"#CBD5E1"}`,background:checked?"#DBEAFE":"#fff",color:checked?"#1D4ED8":"#334155",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}
+                },(checked?"✓ ":"")+name);
+              })
+            )
       ),
       h("div",{style:{marginBottom:14}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"備考（任意）"),
@@ -2055,12 +2102,13 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
             h("div",{style:{flex:1}},
               h("div",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},cp.userName||"不明"),
-              cp.familyPlan && h("div",{style:{fontSize:11,color:"#64748B",marginTop:2}},
-                "家族: " + cp.familyPlan + (fam.length ? "（" + fam.join("、") + "）" : ""))
+              (cp.familyPlan || String(cp.available || "")==="家族で行く") && h("div",{style:{fontSize:11,color:"#64748B",marginTop:2}},
+                "家族: " + (String(cp.available || "")==="家族で行く" ? "行く" : cp.familyPlan) + (fam.length ? "（" + fam.join("、") + "）" : ""))
             ),
           h("div",{style:{fontSize:12,fontWeight:700,
-            color:cp.available==="可"?"#4CAF50":cp.available==="不可"?"#F44336":"#FF9800"}},cp.available),
+            color:cp.available==="可"?"#4CAF50":cp.available==="不可"?"#F44336":cp.available==="家族で行く"?"#2563EB":"#FF9800"}},cp.available),
           cp.available==="可"&&h("div",{style:{fontSize:12,color:"#2196F3",fontWeight:700}},cp.capacity+"人"),
+          cp.available==="家族で行く"&&h("div",{style:{fontSize:12,color:"#2563EB",fontWeight:700}},`空き${Number(cp.capacity||0)}人`),
           cp.note&&h("div",{style:{fontSize:11,color:"#aaa",flex:1,textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},cp.note));
         })()),
       !isAdmin&&carpools.length===0&&h("div",{})),
@@ -2094,7 +2142,9 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
               isFamily && h("span",{style:{fontSize:10,fontWeight:700,color:"#9A3412",background:"#FFEDD5",borderRadius:999,padding:"2px 6px",flexShrink:0}},"配車対象外")
             ),
             h("div",{style:{fontSize:11,color:"#475569",textAlign:"right",whiteSpace:"nowrap"}},
-              `運転手:${driverName || "-"} / 定員${s.cap} / 空席${s.free}`)
+              isDispatch
+                ? `運転手:${driverName || "-"} / 定員${s.cap} / 空席${s.free}`
+                : `運転手:${driverName || "-"} / 受入枠${s.cap} / 空き${s.free}`)
           );
         }),
         h("div",{style:{marginTop:8,fontSize:11,color:"#64748B"}},
@@ -2321,7 +2371,11 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"同乗大人: "+(adults.length?adults.join("、"):"なし")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"同乗コーチ: "+(coachName||"なし")),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"子供: "+(assignedNames.length?assignedNames.join("、"):"なし")),
-            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"家族同行: "+(driverAnswer?.familyPlan ? (driverAnswer.familyPlan + (fam.length ? "（"+fam.join("、")+"）" : "")) : "未回答")),
+            h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"家族同行: "+(
+              String(driverAnswer?.available || "")==="家族で行く"
+                ? ("行く" + (fam.length ? "（"+fam.join("、")+"）" : ""))
+                : (driverAnswer?.familyPlan ? (driverAnswer.familyPlan + (fam.length ? "（"+fam.join("、")+"）" : "")) : "未回答")
+            )),
             h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},"座席: "+seat.used+"/"+seat.cap+"（残"+seat.free+"）"),
             h("div",{style:{fontSize:11,fontWeight:700,color:meta.highway?"#F97316":"#64748B"}},meta.highway?"高速利用":"一般道")
           );
@@ -2786,7 +2840,7 @@ function RankList({title,icon,data,unit}) {
       return h("div",{key:`${x.m.id}-${x.cnt}-${i}`,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<sortedData.length-1?10:0}},
         h("div",{style:{width:24,fontSize:i===0?18:14,fontWeight:900,color:i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":"#ccc",textAlign:"center"}},i+1),
         h("div",{style:{width:34,height:34,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},x.m.number),
-        h("div",{style:{flex:1}},h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},x.m.name),h("div",{style:{fontSize:11,color:"#aaa"}},x.m.grade+" · "+x.m.position)),
+        h("div",{style:{flex:1}},h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},x.m.name),h("div",{style:{fontSize:11,color:"#aaa"}},formatMemberGenerationGrade(x.m)+" · "+x.m.position)),
         h("div",{style:{fontSize:22,fontWeight:900,color:i===0?"#1D4ED8":"#1a1a2e"}},x.cnt,h("span",{style:{fontSize:12,color:"#aaa",fontWeight:400}},unit)));
     }));
 }
@@ -2799,6 +2853,31 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const [to,setTo]=useState("");
   const [oppFilter,setOppFilter]=useState("all"); // "all" or opponent name
   useEffect(()=>{ if(initialDashTab) setDashTab(initialDashTab); },[initialDashTab]);
+  const activeThirdGen = useMemo(() => {
+    const gens = (members || [])
+      .map(m => {
+        const gen = Number(String(m.generation || "").replace(/[^\d]/g, ""));
+        const gradeNum = getGradeNumber(resolveGrade(m) || m.grade);
+        return { gen, gradeNum };
+      })
+      .filter(x => x.gen && x.gradeNum === 3)
+      .map(x => x.gen);
+    if (gens.length) return Math.max(...gens);
+    const dates = [
+      ...(results || []).map(r => nd(r.date)),
+      ...(schedules || []).map(s => nd(s.date)),
+    ].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    if (dates.length) {
+      const latest = dates[dates.length - 1];
+      const y = Number(latest.slice(0,4));
+      const m = Number(latest.slice(5,7));
+      const fy = m >= 4 ? y : y - 1;
+      return fy - 1965;
+    }
+    return getCurrentThirdGeneration();
+  }, [members, results, schedules]);
+  const grade3FiscalStart = activeThirdGen + 1965;
+  const grade4FiscalStart = grade3FiscalStart - 1;
   const getResultType=row=>{
     const linked=findLinkedScheduleForResult(row, schedules);
     return normalizeType(row.type || linked?.type || "");
@@ -2811,10 +2890,9 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const periodRange=useMemo(()=>{
     const now=new Date();
     const y=now.getFullYear(), m=now.getMonth()+1;
-    const fyStart=(m>=4?y:y-1);
     if(periodF==="alltime") return {f:"", t:""};
-    if(periodF==="grade3")  return {f:`${fyStart}-04-01`, t:`${fyStart+1}-03-31`};
-    if(periodF==="grade4")  return {f:`${fyStart+1}-04-01`, t:`${fyStart+2}-03-31`};
+    if(periodF==="grade3")  return {f:`${grade3FiscalStart}-04-01`, t:`${grade3FiscalStart+1}-03-31`};
+    if(periodF==="grade4")  return {f:`${grade4FiscalStart}-04-01`, t:`${grade4FiscalStart+1}-03-31`};
     if(periodF==="month")   return {f:`${y}-${String(m).padStart(2,"0")}-01`, t:`${y}-${String(m).padStart(2,"0")}-31`};
     if(periodF==="lastmonth"){
       const lm = m===1 ? 12 : m-1;
@@ -2823,7 +2901,9 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     }
     if(periodF==="custom") return {f:from, t:to};
     return {f:"", t:""};
-  },[periodF,from,to]);
+  },[periodF,from,to,grade3FiscalStart,grade4FiscalStart]);
+  const periodGrade3Label = formatGenerationGrade("3年", String(activeThirdGen));
+  const periodGrade4Label = formatGenerationGrade("4年", String(activeThirdGen - 1));
   const filtered=useMemo(()=>results.filter(r=>{
     if(typeF!=="all"&&!typeMatch(r,typeF)) return false;
     const d=nd(r.date);
@@ -2933,7 +3013,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
         [{k:"all",l:"すべて"},{k:"official",l:"公式戦"},{k:"cup",l:"カップ戦"},{k:"training",l:"トレマ"}].map(t=>h("button",{key:t.k,onClick:()=>setTypeF(t.k),style:{padding:"6px 12px",border:`2px solid ${typeF===t.k?"#1D4ED8":"#eee"}`,borderRadius:20,background:typeF===t.k?"#1D4ED8":"#fff",color:typeF===t.k?"#fff":"#666",fontSize:12,fontWeight:typeF===t.k?700:400,cursor:"pointer"}},t.l))),
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8,marginTop:4}},"期間"),
       h("div",{style:{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}},
-        [{k:"alltime",l:"全期間"},{k:"grade4",l:"4年"},{k:"grade3",l:"3年"},{k:"month",l:"今月"},{k:"lastmonth",l:"先月"},{k:"custom",l:"期間指定"}].map(t=>h("button",{key:t.k,onClick:()=>setPeriodF(t.k),style:{padding:"6px 12px",border:`2px solid ${periodF===t.k?"#2196F3":"#eee"}`,borderRadius:20,background:periodF===t.k?"#2196F3":"#fff",color:periodF===t.k?"#fff":"#666",fontSize:12,fontWeight:periodF===t.k?700:400,cursor:"pointer"}},t.l))),
+        [{k:"alltime",l:"全期間"},{k:"grade4",l:periodGrade4Label},{k:"grade3",l:periodGrade3Label},{k:"month",l:"今月"},{k:"lastmonth",l:"先月"},{k:"custom",l:"期間指定"}].map(t=>h("button",{key:t.k,onClick:()=>setPeriodF(t.k),style:{padding:"6px 12px",border:`2px solid ${periodF===t.k?"#2196F3":"#eee"}`,borderRadius:20,background:periodF===t.k?"#2196F3":"#fff",color:periodF===t.k?"#fff":"#666",fontSize:12,fontWeight:periodF===t.k?700:400,cursor:"pointer"}},t.l))),
       periodF==="custom"&&h("div",{style:{display:"flex",gap:8,alignItems:"center",marginTop:4}},
         h("input",{type:"date",value:from,onChange:e=>setFrom(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}}),
         h("span",{style:{color:"#ccc",flexShrink:0}},"〜"),
@@ -3053,7 +3133,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
             return h("div",{key:x.m.id,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<9?10:0}},
               h("div",{style:{width:24,fontSize:i===0?18:14,fontWeight:900,color:i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":"#ccc",textAlign:"center"}},i+1),
               h("div",{style:{width:34,height:34,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},x.m.number),
-              h("div",{style:{flex:1}},h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},x.m.name),h("div",{style:{fontSize:11,color:"#aaa"}},x.m.grade+" · "+x.m.position)),
+              h("div",{style:{flex:1}},h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},x.m.name),h("div",{style:{fontSize:11,color:"#aaa"}},formatMemberGenerationGrade(x.m)+" · "+x.m.position)),
               h("div",{style:{fontSize:22,fontWeight:900,color:i===0?"#1D4ED8":"#1a1a2e"}},x.cnt,h("span",{style:{fontSize:12,color:"#aaa",fontWeight:400}},"本")));
           })),
 
@@ -3092,7 +3172,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
               h("div",{style:{width:40,height:40,borderRadius:10,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700}},m.number),
               h("div",{style:{flex:1}},
                 h("div",{style:{fontSize:15,fontWeight:800,color:"#1a1a2e"}},m.name),
-                h("div",{style:{fontSize:11,color:"#aaa"}},m.grade+" · "+m.position))),
+                h("div",{style:{fontSize:11,color:"#aaa"}},formatMemberGenerationGrade(m)+" · "+m.position))),
             h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:6,textAlign:"center"}},
               [{l:"⚽ ゴール",v:m.goals,c:"#1D4ED8"},
                {l:"🅰 アシスト",v:m.assists,c:"#2196F3"},
@@ -3251,7 +3331,7 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
     h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"今月の予定"),
     Object.keys(dayData).length===0
       ?h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"今月の日程はありません")
-      :Object.keys(dayData).sort((a,b)=>Number(b)-Number(a)).map(d=>{  // 降順
+      :Object.keys(dayData).sort((a,b)=>Number(a)-Number(b)).map(d=>{
           const evs=dayData[d];
           const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
           const dt=fmt(dStr);
@@ -3817,23 +3897,51 @@ function DayPage({schedule,results,schedules,members,isAdmin,user,users=[],onGoT
 // ── メンバータブ ────────────────────────────────────────────
 function MemberTab({members,liftings=[]}) {
   const [pos,setPos]=useState("all");
-  const [gradeF,setGradeF]=useState("3年");
-  const allowedGrades = ["3年","３年","2年","２年","1年","１年"];
-  const gradeOrder = {"3年":0,"３年":0,"2年":1,"２年":1,"1年":2,"１年":2};
-  const grades=["3年",...[...new Set(members.map(m=>m.grade||"").filter(g=>g&&g!=="3年"&&g!=="３年"&&allowedGrades.includes(g)))].sort((a,b)=>(gradeOrder[a]??99)-(gradeOrder[b]??99)),"全員"];
-  const baseMembers = members.filter(m=>allowedGrades.includes(m.grade||""));
+  const [gradeF,setGradeF]=useState("4年");
+  const baseMembers = useMemo(() =>
+    members
+      .filter(m => [1,2,3,4].includes(getGradeNumber(m.grade)))
+      .map(m => {
+        const n = getGradeNumber(m.grade);
+        return {...m, _gradeNum:n, _gradeKey:`${n}年`};
+      }),
+  [members]);
+  const gradeOptions = useMemo(() => {
+    const grouped = {};
+    baseMembers.forEach(m => {
+      if (!grouped[m._gradeKey]) grouped[m._gradeKey] = [];
+      grouped[m._gradeKey].push(m);
+    });
+    return Object.keys(grouped)
+      .sort((a,b)=>(getGradeNumber(b)??0)-(getGradeNumber(a)??0))
+      .map(key => {
+        const gens = [...new Set(
+          grouped[key]
+            .map(m=>String(m.generation||"").replace(/[^\d]/g,""))
+            .filter(Boolean)
+        )].sort((a,b)=>Number(b)-Number(a));
+        const primaryGen = gens[0] || getGenerationByGrade(key);
+        return {key, label:formatGenerationGrade(key, primaryGen)};
+      });
+  }, [baseMembers]);
+  useEffect(() => {
+    if (gradeF === "全員") return;
+    if (!gradeOptions.some(g => g.key === gradeF)) {
+      setGradeF(gradeOptions[0]?.key || "全員");
+    }
+  }, [gradeF, gradeOptions]);
   const gradeFiltered=gradeF==="全員"
     ? baseMembers
-    : baseMembers.filter(m=>(m.grade||"")===(gradeF==="3年"?"3年":gradeF)||(m.grade||"")===(gradeF==="3年"?"３年":gradeF));
+    : baseMembers.filter(m=>m._gradeKey===gradeF);
   const filtered=pos==="all"?gradeFiltered:gradeFiltered.filter(m=>m.position===pos);
   const sorted=[...filtered].sort((a,b)=>Number(a.number||99)-Number(b.number||99));
   return h(Fragment,{},
     // 学年フィルター
     h("div",{style:{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}},
-      grades.map(g=>h("button",{key:g,onClick:()=>setGradeF(g),
-        style:{padding:"5px 12px",border:"2px solid "+(gradeF===g?"#1D4ED8":"#eee"),borderRadius:20,
-          background:gradeF===g?"#1D4ED8":"#fff",color:gradeF===g?"#fff":"#666",
-          fontSize:12,fontWeight:gradeF===g?700:400,cursor:"pointer"}},g))),
+      [...gradeOptions, {key:"全員", label:"全員"}].map(g=>h("button",{key:g.key,onClick:()=>setGradeF(g.key),
+        style:{padding:"5px 12px",border:"2px solid "+(gradeF===g.key?"#1D4ED8":"#eee"),borderRadius:20,
+          background:gradeF===g.key?"#1D4ED8":"#fff",color:gradeF===g.key?"#fff":"#666",
+          fontSize:12,fontWeight:gradeF===g.key?700:400,cursor:"pointer"}},g.label))),
     // ポジションフィルター
     h("div",{style:{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}},
       [{k:"all",l:"全員"},{k:"FW",l:"FW"},{k:"MF",l:"MF"},{k:"DF",l:"DF"},{k:"GK",l:"GK"}].map(t=>
@@ -3854,7 +3962,7 @@ function MemberTab({members,liftings=[]}) {
           h("div",{style:{fontSize:16,fontWeight:800,color:"#1a1a2e",marginBottom:3}},m.name),
           h("div",{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}},
             h("span",{style:{fontSize:11,fontWeight:700,color:pc.bg,background:pc.bg+"22",borderRadius:6,padding:"2px 8px"}},m.position||"?"),
-            h("span",{style:{fontSize:11,color:"#aaa"}},m.grade||""),
+            h("span",{style:{fontSize:11,color:"#aaa"}},formatMemberGenerationGrade(m)||m.grade||""),
             lf&&h("span",{style:{fontSize:11,color:"#4CAF50",background:"#E8F5E9",borderRadius:6,padding:"2px 8px"}},"🏃 "+lf.count+"回"))));
     }));
 }
@@ -3883,7 +3991,7 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
       .sort((a,b)=>Number(a.number||999)-Number(b.number||999));
     if (!grouped.length) return [];
     return [h("optgroup",{key:gen,label:`${gen}期生`},
-      grouped.map(m=>h("option",{key:m.id,value:m.id},`${m.name} #${m.number||"-"} (${m.grade||""})`))
+      grouped.map(m=>h("option",{key:m.id,value:m.id},`${m.name} #${m.number||"-"} (${formatMemberGenerationGrade(m)||m.grade||""})`))
     )];
   });
 
@@ -3939,7 +4047,7 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
           h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.generation?`${child.generation}期生`:"-")),
         h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:"12px 14px"}},
           h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:4}},"学年"),
-          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.grade||"-")),
+          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?formatMemberGenerationGrade(child):"-")),
         h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:"12px 14px"}},
           h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:4}},"背番号"),
           h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.number||"-")))),
