@@ -149,7 +149,7 @@ async function subscribeWebPush(user) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     throw new Error("この端末ではWeb Pushに対応していません");
   }
-  const swUrl = "/sw.js?v=9";
+  const swUrl = "/sw.js?v=10";
   const reg =
     (await navigator.serviceWorker.getRegistration()) ||
     (await navigator.serviceWorker.register(swUrl));
@@ -4420,12 +4420,13 @@ render(h(App,{}), document.getElementById("app"));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=9").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=10").catch(() => {});
   });
 }
 </script>
 </body>
 </html>
+
 
 
 
