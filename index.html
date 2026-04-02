@@ -1692,7 +1692,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const ROLE_COLORS = { child:"#1D4ED8", adult:"#16A34A", coach:"#7C3AED" };
   const normalizeName = v => String(v||"").replace(/\s+/g," ").replace(/さん$/,"").trim();
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user || {};
-  const familyChoices = parseFamilyMembers(currentUserProfile.familyMembers || []);
+  const familyChoices = parseFamilyMembers(currentUserProfile.familyMembers || currentUserProfile.familyComposition || []);
   const luggageLabel = String(schedule.luggagePerson || "").trim();
   const luggageKey = normalizeName(luggageLabel);
   const [carpools, setCarpools] = useState([]);
@@ -4369,6 +4369,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
