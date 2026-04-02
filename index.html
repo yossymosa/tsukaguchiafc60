@@ -2453,7 +2453,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           return h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#DC2626"}},
             "未割り当ての子供: " + unassignedChildren.map(m=>m.name).join("、"));
         })()
-      )
+      ))
   );
 }
 
@@ -4369,6 +4369,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
