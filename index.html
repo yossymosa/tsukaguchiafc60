@@ -1967,16 +1967,48 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     const list = [];
     const seen = new Set();
     carpools.forEach(cp => {
-      parseFamilyMembers(cp.familyMembers || []).forEach(name => {
-        const riderId = "x:" + String(cp.userId || "") + ":" + encodeURIComponent(String(name || "").trim());
+      const userId = String(cp.userId || "");
+      const userName = String(cp.userName || "").trim();
+      const available = String(cp.available || "").trim();
+      if (available && userName) {
+        const riderId = "a:u:" + userId;
         if (seen.has(riderId)) return;
         seen.add(riderId);
         list.push({
           id: riderId,
-          name: String(name || "").trim(),
-          label: `${String(name || "").trim()}（${cp.userName || "家族"}）`,
-          type: "family"
+          name: userName,
+          label: `${userName}（大人）`,
+          type: "adult",
+          ownerUserId: userId
         });
+      }
+      parseFamilyMembers(cp.familyMembers || []).forEach(name => {
+        const n = String(name || "").trim();
+        if (!n) return;
+        const riderId = "a:f:" + userId + ":" + encodeURIComponent(n);
+        if (seen.has(riderId)) return;
+        seen.add(riderId);
+        list.push({
+          id: riderId,
+          name: n,
+          label: `${n}（${cp.userName || "家族"}）`,
+          type: "adult",
+          ownerUserId: userId
+        });
+      });
+    });
+    parseFamilyMembers(schedule.coach || "").forEach(name => {
+      const n = String(name || "").trim();
+      if (!n) return;
+      const riderId = "a:c:" + encodeURIComponent(n);
+      if (seen.has(riderId)) return;
+      seen.add(riderId);
+      list.push({
+        id: riderId,
+        name: n,
+        label: `${n}（コーチ）`,
+        type: "coach",
+        ownerUserId: ""
       });
     });
     return list;
@@ -1992,20 +2024,21 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const riderIds = riderCandidates.map(r => r.id);
   const riderById = {};
   riderCandidates.forEach(r => { riderById[r.id] = r; });
-  const seatCountForRow = row =>
+  const passengerSeatCountForRow = row =>
     row.kind === "dispatch"
       ? Math.max(0, Number(row?.car?.capacity || 0) - 1)
       : Math.max(0, Number(row?.car?.capacity || 0));
+  const totalSeatCountForRow = row => passengerSeatCountForRow(row) + 1;
   const seatKeyFor = (row, idx) => `${row.kind}:${String(row?.car?.userId || "")}:${idx}`;
   const seatKeysForSelected = selectedFleetRows.flatMap(row =>
-    Array.from({length: seatCountForRow(row)}, (_, idx) => seatKeyFor(row, idx))
+    Array.from({length: totalSeatCountForRow(row)}, (_, idx) => seatKeyFor(row, idx))
   );
   const seatKeysByTarget = {};
   selectedFleetRows.forEach(row => {
     const token = row.kind === "dispatch"
       ? ("d:" + String(row.ci))
       : ("f:" + String(row.car.userId || ""));
-    seatKeysByTarget[token] = Array.from({length: seatCountForRow(row)}, (_, idx) => seatKeyFor(row, idx));
+    seatKeysByTarget[token] = Array.from({length: totalSeatCountForRow(row)}, (_, idx) => seatKeyFor(row, idx));
   });
   const targetTokenBySeatKey = seatKey => {
     const parts = String(seatKey || "").split(":");
