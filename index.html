@@ -2042,7 +2042,11 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   );
   const goingPeopleNameSet = new Set();
   carpools.forEach(cp => {
+    const available = String(cp.available || "").trim();
+    const familyPlan = String(cp.familyPlan || "").trim();
+    const isGoingAnswer = ["可", "不可", "家族で行く"].includes(available) || familyPlan === "行く";
     const family = parseFamilyMembers(cp.familyMembers || cp.familyComposition || []);
+    if (!isGoingAnswer && family.length === 0) return;
     family.forEach(name => {
       const v = String(name || "").trim();
       if (v) goingPeopleNameSet.add(v);
@@ -2446,12 +2450,25 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                       ? driverOptionIds.map(id => riderOptionMap[id]).filter(Boolean)
                       : riderOptions;
                     const riderRole = riderOptionMap[currentValue]?.role || "";
-                    return h("div",{key:"seat-"+key,style:{background:"#fff",border:"1px solid #E2E8F0",borderRadius:10,padding:8}},
+                    const selectedSeat = !!currentValue;
+                    const selectedSeatBg =
+                      riderRole === "adult" ? "#ECFDF3" :
+                      riderRole === "child" ? "#EFF6FF" :
+                      riderRole === "coach" ? "#F5F3FF" : "#F8FAFC";
+                    const selectedSeatBorder =
+                      riderRole === "adult" ? "#86EFAC" :
+                      riderRole === "child" ? "#93C5FD" :
+                      riderRole === "coach" ? "#C4B5FD" : "#CBD5E1";
+                    return h("div",{key:"seat-"+key,style:{background:selectedSeat?selectedSeatBg:"#fff",border:"1px solid " + (selectedSeat?selectedSeatBorder:"#E2E8F0"),borderRadius:10,padding:8,opacity:selectedSeat?0.92:1,transition:"all .18s ease"}},
                       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
                         h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"1px 7px"}},
                           seatShortLabel(seatIdx)),
-                        currentValue && h("span",{style:{fontSize:10,fontWeight:800,color:"#fff",background:ROLE_COLORS[riderRole]||"#64748B",borderRadius:999,padding:"1px 7px"}},
-                          roleShortLabel(riderRole))
+                        h("div",{style:{display:"flex",alignItems:"center",gap:4}},
+                          currentValue && h("span",{style:{fontSize:10,fontWeight:800,color:"#fff",background:ROLE_COLORS[riderRole]||"#64748B",borderRadius:999,padding:"1px 7px"}},
+                            roleShortLabel(riderRole)),
+                          currentValue && h("span",{style:{fontSize:10,fontWeight:700,color:"#334155",background:"#E2E8F0",borderRadius:999,padding:"1px 7px"}},
+                            "選択済")
+                        )
                       ),
                       h("select",{
                         value:currentValue,
@@ -2463,7 +2480,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                           }
                           setSeatAssignments(prev=>({...prev,[key]:nextId}));
                         },
-                        style:{...css.inp,padding:"6px 8px",fontSize:12,width:"100%",margin:0}
+                        style:{...css.inp,padding:"6px 8px",fontSize:12,width:"100%",margin:0,background:selectedSeat?"#FFFFFF":"#fff"}
                       },
                         h("option",{value:""},"未設定"),
                         options.map(opt=>h("option",{
@@ -4436,6 +4453,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
