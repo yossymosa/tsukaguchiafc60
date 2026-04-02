@@ -1,22 +1,29 @@
-const CACHE_NAME = "tsukaguchi-afc-v8";
+const CACHE_NAME = "tsukaguchi-afc-v10";
 const APP_SHELL = ["/", "/index.html", "/manifest.json", "/icon-512.png"];
 
-self.addEventListener("install", event => {
+self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting())
   );
 });
 
-self.addEventListener("activate", event => {
+self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))
-    ).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+      )
+      .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener("fetch", event => {
+self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+
   const url = new URL(event.request.url);
   const isHtmlRequest =
     event.request.mode === "navigate" ||
@@ -25,25 +32,25 @@ self.addEventListener("fetch", event => {
   if (isHtmlRequest) {
     event.respondWith(
       fetch(event.request)
-        .then(response => {
+        .then((response) => {
           const copy = response.clone();
           if (url.origin === self.location.origin) {
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)).catch(() => {});
           }
           return response;
         })
-        .catch(() => caches.match(event.request).then(cached => cached || caches.match("/index.html")))
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/index.html")))
     );
     return;
   }
 
   event.respondWith(
-    caches.match(event.request).then(cached => {
+    caches.match(event.request).then((cached) => {
       if (cached) return cached;
-      return fetch(event.request).then(response => {
+      return fetch(event.request).then((response) => {
         const copy = response.clone();
         if (event.request.url.startsWith(self.location.origin)) {
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy)).catch(() => {});
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)).catch(() => {});
         }
         return response;
       });
@@ -51,7 +58,7 @@ self.addEventListener("fetch", event => {
   );
 });
 
-self.addEventListener("push", event => {
+self.addEventListener("push", (event) => {
   const data = (() => {
     try {
       return event.data ? event.data.json() : {};
@@ -59,6 +66,7 @@ self.addEventListener("push", event => {
       return {};
     }
   })();
+
   const title = data.title || "塚口AFC Jr";
   const options = {
     body: data.body || "",
@@ -68,18 +76,20 @@ self.addEventListener("push", event => {
       url: data.url || "/",
     },
   };
+
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-self.addEventListener("notificationclick", event => {
+self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = (event.notification.data && event.notification.data.url) || "/";
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const client of list) {
         if ("focus" in client) return client.focus();
       }
       if (clients.openWindow) return clients.openWindow(targetUrl);
+      return null;
     })
   );
 });
