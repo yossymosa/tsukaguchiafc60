@@ -2358,17 +2358,27 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
 
       h("div",{style:{marginBottom:12,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8}},"配車候補リスト（先に使う車を選択）"),
-        fleetRows.map((row,idx)=>{
+        [...fleetRows]
+          .sort((a,b)=>{
+            const aL = isLuggageCar(a?.car?.userName);
+            const bL = isLuggageCar(b?.car?.userName);
+            if (aL === bL) return 0;
+            return aL ? -1 : 1; // 荷物車を先頭表示
+          })
+          .map((row,idx)=>{
           const car = row.car;
           const carId = String(car.userId || "");
           const selected = selectedFleetSet.has(carId);
           const summary = rowSeatSummary(row);
+          const luggage = isLuggageCar(car.userName);
           return h("div",{key:"fleet-"+(car.userId||idx),style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"6px 4px",borderBottom:idx<fleetRows.length-1?"1px dashed #E2E8F0":"none"}},
             h("div",{style:{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}},
               h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
-                (car.userName||"-") + (isLuggageCar(car.userName)?"（荷物車）":"")),
+                (car.userName||"-")),
               h("span",{style:{fontSize:10,fontWeight:800,color:row.kind==="dispatch"?"#1D4ED8":"#B45309",background:row.kind==="dispatch"?"#DBEAFE":"#FEF3C7",borderRadius:999,padding:"2px 6px",flexShrink:0}},
-                row.kind==="dispatch"?"配車":"家族車")
+                row.kind==="dispatch"?"配車":"家族車"),
+              luggage && h("span",{style:{fontSize:10,fontWeight:800,color:"#92400E",background:"#FFEDD5",borderRadius:999,padding:"2px 6px",flexShrink:0}},
+                "荷物車")
             ),
             h("div",{style:{fontSize:11,color:"#475569",textAlign:"right",whiteSpace:"nowrap"}},
               `定員${summary.cap} / 空席${summary.free}`),
@@ -4426,6 +4436,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
