@@ -1691,6 +1691,13 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
 function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const ROLE_COLORS = { child:"#1D4ED8", adult:"#16A34A", coach:"#7C3AED" };
   const normalizeName = v => String(v||"").replace(/\s+/g," ").replace(/さん$/,"").trim();
+  const mergeNameList = (...lists) =>
+    [...new Set(
+      lists
+        .flat()
+        .map(v => String(v || "").trim())
+        .filter(Boolean)
+    )];
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user || {};
   const profileFamilyChoices = parseFamilyMembers(currentUserProfile.familyMembers || currentUserProfile.familyComposition || []);
   const luggageLabel = String(schedule.luggagePerson || "").trim();
@@ -1701,6 +1708,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const [reloadTick, setReloadTick] = useState(0);
   const [my, setMy] = useState({available:"", capacity:"", note:"", familyPlan:"", familyMembers:[]});
   const [familyDraft, setFamilyDraft] = useState("");
+  const [familyChoicePool, setFamilyChoicePool] = useState(() => mergeNameList(profileFamilyChoices));
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [attend, setAttend] = useState({});
@@ -1838,6 +1846,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         setCarpools(cr.carpools||[]);
         const mine=(cr.carpools||[]).find(c=>String(c.userId)===String(user.id));
         if(mine){
+          const mineFamilyMembers = parseFamilyMembers(mine.familyMembers||[]);
           const availableRaw = String(mine.available || "").trim();
           const legacyFamilyPlan = String(mine.familyPlan || "").trim();
           const available =
@@ -1851,8 +1860,9 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             capacity:String(mine.capacity ?? ""),
             note:mine.note||"",
             familyPlan:available==="家族で行く" ? "行く" : (legacyFamilyPlan || "行かない"),
-            familyMembers:parseFamilyMembers(mine.familyMembers||[])
+            familyMembers:mineFamilyMembers
           });
+          setFamilyChoicePool(prev => mergeNameList(prev, mineFamilyMembers));
         }
         const map={};
         (ar.attend||[]).forEach(a=>{map[a.memberId]=a.status;});
@@ -2167,16 +2177,18 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       : `自動割り当てしました（${assigned}名）`);
   };
   const linkedChild = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
-  const familyChoices = [...new Set(
-    [
-      ...profileFamilyChoices,
-      ...parseFamilyMembers(my.familyMembers || []),
-      ...(linkedChild ? [String(linkedChild.name || "").trim()] : [])
-    ].map(v => String(v || "").trim()).filter(Boolean)
-  )];
+  useEffect(() => {
+    setFamilyChoicePool(prev => mergeNameList(prev, profileFamilyChoices));
+  }, [profileFamilyChoices.join("|")]);
+  useEffect(() => {
+    if (!linkedChild) return;
+    setFamilyChoicePool(prev => mergeNameList(prev, [linkedChild.name]));
+  }, [linkedChild ? String(linkedChild.name || "") : ""]);
+  const familyChoices = familyChoicePool;
   const addFamilyDraft = () => {
     const name = String(familyDraft || "").trim();
     if (!name) return;
+    setFamilyChoicePool(prev => mergeNameList(prev, [name]));
     setMy(p => {
       const cur = parseFamilyMembers(p.familyMembers || []);
       if (cur.includes(name)) return p;
@@ -4397,6 +4409,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
