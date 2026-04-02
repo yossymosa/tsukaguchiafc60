@@ -1784,7 +1784,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       "・『家族で行く』を選んだ場合は、空きがある場合の受け入れ人数（0〜）を入力してください。",
       "・『不可』を選んだ場合でも、行く家族メンバーは選択できます（子供は配車対象のまま）。",
       "・高速利用の車は、運転手 + 同乗大人1名以上（合計大人2名）が必要です。",
-      "・運転手/同乗者は『その試合に行く人』から選択してください。",
+      "・運転手/各席は『その試合に行く人』から選択してください。",
       "・同じ人を複数の席に重複割り当てはできません。",
       "・『家族で行く』を選んだ家庭の子供は、配車対象外になります。",
       "・『家族で行く』で空き人数を入力した場合、他の子供を家族車に割り当てできます。",
@@ -2196,6 +2196,20 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     });
     setFamilyDraft("");
   };
+  const seatLayoutRows = totalSeats => {
+    const all = Array.from({length: Math.max(1, totalSeats)}, (_, i) => i);
+    if (all.length <= 3) return [all];
+    const passenger = all.slice(1);
+    const rowSize = all.length >= 7 ? 3 : 2;
+    const rows = [[0]];
+    for (let i = 0; i < passenger.length; i += rowSize) {
+      rows.push(passenger.slice(i, i + rowSize));
+    }
+    return rows;
+  };
+  const seatShortLabel = seatIdx => (seatIdx === 0 ? "D" : String(seatIdx));
+  const roleShortLabel = role =>
+    role === "child" ? "子" : role === "coach" ? "コ" : role === "adult" ? "大" : "";
 
   if(loading) return h("div",{style:{textAlign:"center",padding:20,color:"#aaa",fontSize:13}},"読み込み中...");
 
@@ -2375,7 +2389,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       ),
 
       selectedFleetRows.length>0 && h("div",{style:{marginBottom:12,padding:10,background:"#EFF6FF",borderRadius:10,border:"1px solid #BFDBFE"}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#1E3A8A",marginBottom:8}},"選択した車（運転手・同乗者）"),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#1E3A8A",marginBottom:8}},"選択した車（シート配置）"),
         selectedFleetRows.map((row,idx)=>{
           const car = row.car;
           const carId = String(car.userId || "");
@@ -2385,13 +2399,12 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           const highwayOk = hasEnoughAdultsForHighwayRow(row);
           const familyDriverIds = [
             findPersonOptionId(car.userName || ""),
-            ...parseFamilyMembers(car.familyMembers || car.familyComposition || [])
-              .map(findPersonOptionId)
+            ...parseFamilyMembers(car.familyMembers || car.familyComposition || []).map(findPersonOptionId)
           ].filter(Boolean);
           const uniqDriverIds = [...new Set(familyDriverIds)];
           const fallbackDriverIds = riderOptions.filter(opt=>opt.role!=="child").map(opt=>opt.id);
           const driverOptionIds = uniqDriverIds.length > 0 ? uniqDriverIds : fallbackDriverIds;
-          const rowAssigned = getRowAssignedIds(row);
+          const seatRows = seatLayoutRows(totalSeats);
           return h("div",{key:"selected-car-"+carId,style:{marginBottom:idx<selectedFleetRows.length-1?12:0,padding:10,background:"#fff",borderRadius:10,border:"1px solid " + (highwayOk ? "#DBEAFE" : "#FCA5A5")}},
             h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}},
               h("div",{style:{display:"flex",alignItems:"center",gap:6,minWidth:0}},
@@ -2408,77 +2421,81 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                 style:{border:"none",borderRadius:999,padding:"6px 12px",background:meta.highway?"#F97316":"#E2E8F0",color:meta.highway?"#fff":"#334155",fontSize:11,fontWeight:700,cursor:"pointer"}
               }, meta.highway ? "高速利用: ON" : "高速利用: OFF")
             ),
-            h("div",{style:{display:"grid",gridTemplateColumns:"1fr",gap:8}},
-              Array.from({length: totalSeats}, (_, seatIdx)=>{
-                const key = seatKeyFor(row, seatIdx);
-                const currentValue = String(seatAssignments[key] || "");
-                const usedElsewhere = new Set(
-                  Object.entries(seatAssignments || {})
-                    .filter(([k, v]) => k !== key && !!v)
-                    .map(([, v]) => String(v || ""))
-                );
-                const options = seatIdx === 0
-                  ? driverOptionIds.map(id => riderOptionMap[id]).filter(Boolean)
-                  : riderOptions;
-                const riderRole = riderOptionMap[currentValue]?.role || "";
-                return h("div",{key:"seat-"+key},
-                  h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
-                    h("div",{style:{fontSize:11,fontWeight:700,color:"#475569"}},seatIdx===0 ? "運転手" : `同乗者${seatIdx}`),
-                    currentValue&&h("span",{style:{fontSize:10,fontWeight:700,color:"#fff",background:ROLE_COLORS[riderRole]||"#64748B",borderRadius:999,padding:"2px 8px"}},
-                      riderRole==="child"?"子供":riderRole==="coach"?"コーチ":"大人")
-                  ),
-                  h("select",{
-                    value:currentValue,
-                    onChange:e=>{
-                      const nextId = String(e.target.value || "");
-                      if (nextId && usedElsewhere.has(nextId)) {
-                        alert("その人は別の席に割り当て済みです。");
-                        return;
-                      }
-                      setSeatAssignments(prev=>({...prev,[key]:nextId}));
-                    },
-                    style:{...css.inp,padding:"7px 9px",fontSize:12,width:"100%"}
-                  },
-                    h("option",{value:""},"未設定"),
-                    options.map(opt=>h("option",{
-                      key:`seat-opt-${key}-${opt.id}`,
-                      value:opt.id,
-                      disabled:usedElsewhere.has(opt.id)
-                    },`${opt.label} (${opt.role==="child"?"子供":opt.role==="coach"?"コーチ":"大人"})`))
-                  )
-                );
-              })
+            h("div",{style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:14,padding:10}},
+              seatRows.map((seatRow, rowIdx2)=>
+                h("div",{key:`seat-row-${carId}-${rowIdx2}`,style:{display:"grid",gridTemplateColumns:`repeat(${seatRow.length}, minmax(0, 1fr))`,gap:8,marginBottom:rowIdx2<seatRows.length-1?8:0}},
+                  seatRow.map(seatIdx=>{
+                    const key = seatKeyFor(row, seatIdx);
+                    const currentValue = String(seatAssignments[key] || "");
+                    const usedElsewhere = new Set(
+                      Object.entries(seatAssignments || {})
+                        .filter(([k, v]) => k !== key && !!v)
+                        .map(([, v]) => String(v || ""))
+                    );
+                    const options = seatIdx === 0
+                      ? driverOptionIds.map(id => riderOptionMap[id]).filter(Boolean)
+                      : riderOptions;
+                    const riderRole = riderOptionMap[currentValue]?.role || "";
+                    return h("div",{key:"seat-"+key,style:{background:"#fff",border:"1px solid #E2E8F0",borderRadius:10,padding:8}},
+                      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
+                        h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"1px 7px"}},
+                          seatShortLabel(seatIdx)),
+                        currentValue && h("span",{style:{fontSize:10,fontWeight:800,color:"#fff",background:ROLE_COLORS[riderRole]||"#64748B",borderRadius:999,padding:"1px 7px"}},
+                          roleShortLabel(riderRole))
+                      ),
+                      h("select",{
+                        value:currentValue,
+                        onChange:e=>{
+                          const nextId = String(e.target.value || "");
+                          if (nextId && usedElsewhere.has(nextId)) {
+                            alert("その人は別の席に割り当て済みです。");
+                            return;
+                          }
+                          setSeatAssignments(prev=>({...prev,[key]:nextId}));
+                        },
+                        style:{...css.inp,padding:"6px 8px",fontSize:12,width:"100%",margin:0}
+                      },
+                        h("option",{value:""},"未設定"),
+                        options.map(opt=>h("option",{
+                          key:`seat-opt-${key}-${opt.id}`,
+                          value:opt.id,
+                          disabled:usedElsewhere.has(opt.id)
+                        },opt.label))
+                      )
+                    );
+                  })
+                )
+              )
             ),
             meta.highway && !highwayOk && h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#DC2626"}},
-              "高速を使う場合は大人2名以上（運転手を含む）を選んでください。"),
-            rowAssigned.length===0 && h("div",{style:{marginTop:8,fontSize:11,color:"#94A3B8"}},"まだ割り当てがありません")
+              "高速利用は大人2名以上が必要です。")
           );
         }),
         h("div",{style:{marginTop:8,fontSize:11,color:"#64748B"}},
-          h("span",{style:{display:"inline-block",background:ROLE_COLORS.adult,color:"#fff",borderRadius:6,padding:"2px 7px",marginRight:6}},"大人"),
-          h("span",{style:{display:"inline-block",background:ROLE_COLORS.child,color:"#fff",borderRadius:6,padding:"2px 7px",marginRight:6}},"子供"),
-          h("span",{style:{display:"inline-block",background:ROLE_COLORS.coach,color:"#fff",borderRadius:6,padding:"2px 7px"}},"コーチ")
+          h("span",{style:{display:"inline-block",background:"#EEF2FF",color:"#334155",borderRadius:6,padding:"2px 7px",marginRight:6,fontWeight:700}},"D=運転手"),
+          h("span",{style:{display:"inline-block",background:ROLE_COLORS.adult,color:"#fff",borderRadius:6,padding:"2px 7px",marginRight:6}},"大"),
+          h("span",{style:{display:"inline-block",background:ROLE_COLORS.child,color:"#fff",borderRadius:6,padding:"2px 7px",marginRight:6}},"子"),
+          h("span",{style:{display:"inline-block",background:ROLE_COLORS.coach,color:"#fff",borderRadius:6,padding:"2px 7px"}},"コ")
         )
       ),
 
       h("div",{style:{marginTop:14,padding:12,background:"#EEF2FF",borderRadius:12,border:"1px solid #DBEAFE"}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#4F46E5",marginBottom:8}},"🚗 最終割り当て"),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#4F46E5",marginBottom:8}},"🚗 最終割り当て（簡易）"),
         selectedFleetRows.length===0
           ? h("div",{style:{fontSize:12,color:"#64748B"}},"車が未選択です")
           : selectedFleetRows.map(row=>{
               const car = row.car;
               const totalSeats = totalSeatsForRow(row);
               const summary = rowSeatSummary(row);
-              const riderLines = Array.from({length: totalSeats}, (_, seatIdx)=>{
+              const assignedNames = Array.from({length: totalSeats}, (_, seatIdx)=>{
                 const rid = String(seatAssignments[seatKeyFor(row, seatIdx)] || "");
-                const label = riderOptionMap[rid]?.label || "未設定";
-                return `${seatIdx===0?"運転手":`同乗者${seatIdx}`}: ${label}`;
-              });
+                return riderOptionMap[rid]?.label || "";
+              }).filter(Boolean);
               return h("div",{key:"summary-"+seatRowKey(row),style:{marginBottom:8,padding:"8px 10px",background:"#fff",borderRadius:10,border:isLuggageCar(car.userName)?"1px solid #F59E0B":"1px solid #E2E8F0"}},
-                h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:4}},
+                h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:3}},
                   (car.userName||"-")+" の車"+(isLuggageCar(car.userName)?"（荷物車）":"")),
-                h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},riderLines.join(" / ")),
-                h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.7}},`座席: ${summary.used}/${summary.cap}（残${summary.free}）`)
+                h("div",{style:{fontSize:12,color:"#334155"}},
+                  (assignedNames.length ? assignedNames.join(" / ") : "未設定") + `  ・ 空席${summary.free}`)
               );
             }),
         (() => {
@@ -2491,7 +2508,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           const unassignedChildren = participants.filter(m => !assignedChildIds.has(String(m.id)));
           if (unassignedChildren.length === 0) return null;
           return h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#DC2626"}},
-            "未割り当ての子供: " + unassignedChildren.map(m=>m.name).join("、"));
+            "未割り当て: " + unassignedChildren.map(m=>m.name).join("、"));
         })()
       ))
   );
@@ -4409,6 +4426,8 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
+
 
 
 
