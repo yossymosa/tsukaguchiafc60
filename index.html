@@ -1692,7 +1692,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const ROLE_COLORS = { child:"#1D4ED8", adult:"#16A34A", coach:"#7C3AED" };
   const normalizeName = v => String(v||"").replace(/\s+/g," ").replace(/さん$/,"").trim();
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user || {};
-  const familyChoices = parseFamilyMembers(currentUserProfile.familyMembers || currentUserProfile.familyComposition || []);
+  const profileFamilyChoices = parseFamilyMembers(currentUserProfile.familyMembers || currentUserProfile.familyComposition || []);
   const luggageLabel = String(schedule.luggagePerson || "").trim();
   const luggageKey = normalizeName(luggageLabel);
   const [carpools, setCarpools] = useState([]);
@@ -1700,6 +1700,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const [loadError, setLoadError] = useState("");
   const [reloadTick, setReloadTick] = useState(0);
   const [my, setMy] = useState({available:"", capacity:"", note:"", familyPlan:"", familyMembers:[]});
+  const [familyDraft, setFamilyDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [attend, setAttend] = useState({});
@@ -1715,11 +1716,6 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const [carMeta, setCarMeta] = useState({});
   const [planLoaded, setPlanLoaded] = useState(false);
   const [selectedFleetUserIds, setSelectedFleetUserIds] = useState([]);
-  const adultUserOptions = [...new Set(
-    (users || [])
-      .map(u => String(u.name || "").trim())
-      .filter(Boolean)
-  )].sort((a,b)=>a.localeCompare(b,"ja"));
   const getMeta = userId => ({
     highway: false,
     driver: "",
@@ -2170,6 +2166,24 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       ? `自動割り当てしました（${assigned}名割当 / ${left}名未割当）`
       : `自動割り当てしました（${assigned}名）`);
   };
+  const linkedChild = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
+  const familyChoices = [...new Set(
+    [
+      ...profileFamilyChoices,
+      ...parseFamilyMembers(my.familyMembers || []),
+      ...(linkedChild ? [String(linkedChild.name || "").trim()] : [])
+    ].map(v => String(v || "").trim()).filter(Boolean)
+  )];
+  const addFamilyDraft = () => {
+    const name = String(familyDraft || "").trim();
+    if (!name) return;
+    setMy(p => {
+      const cur = parseFamilyMembers(p.familyMembers || []);
+      if (cur.includes(name)) return p;
+      return { ...p, familyMembers: [...cur, name] };
+    });
+    setFamilyDraft("");
+  };
 
   if(loading) return h("div",{style:{textAlign:"center",padding:20,color:"#aaa",fontSize:13}},"読み込み中...");
 
@@ -2237,8 +2251,8 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",marginBottom:8}},
           "行く人（家族）を選択"),
         familyChoices.length===0
-          ? h("div",{style:{fontSize:11,color:"#F59E0B",fontWeight:700}},"先に設定タブで家族構成を登録してください")
-          : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+          ? h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700,marginBottom:8}},"家族名を追加してください")
+          : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
               familyChoices.map(name=>{
                 const checked=(my.familyMembers||[]).includes(name);
                 return h("button",{
@@ -2255,7 +2269,21 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                   style:{border:`1px solid ${checked?"#1D4ED8":"#CBD5E1"}`,background:checked?"#DBEAFE":"#fff",color:checked?"#1D4ED8":"#334155",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}
                 },(checked?"✓ ":"")+name);
               })
-            )
+            ),
+        h("div",{style:{display:"flex",gap:6,marginTop:6}},
+          h("input",{
+            value:familyDraft,
+            onChange:e=>setFamilyDraft(e.target.value),
+            onKeyDown:e=>{ if(e.key==="Enter"){ e.preventDefault(); addFamilyDraft(); } },
+            placeholder:"家族名を追加（例: 父）",
+            style:{...css.inp,margin:0,flex:1,padding:"8px 10px"}
+          }),
+          h("button",{
+            onClick:addFamilyDraft,
+            style:{border:"1px solid #1D4ED8",background:"#DBEAFE",color:"#1D4ED8",borderRadius:10,padding:"0 12px",fontSize:12,fontWeight:700,cursor:"pointer"}
+          },"追加")
+        ),
+        h("div",{style:{fontSize:11,color:"#94A3B8",marginTop:6}},"設定タブがなくても、ここから家族を登録して選択できます")
       ),
       h("div",{style:{marginBottom:14}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"備考（任意）"),
@@ -4369,6 +4397,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
