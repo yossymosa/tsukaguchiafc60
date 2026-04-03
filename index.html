@@ -1749,6 +1749,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const [saved,  setSaved]  = useState(false);
   const [planSaving, setPlanSaving] = useState(false);
   const [confirmedPlan, setConfirmedPlan] = useState(null);
+  const [familyExtraOpen, setFamilyExtraOpen] = useState({});
   const [attend, setAttend] = useState({});
   // 車ごとの座席割り当て { "kind:userId:slot": riderId }
   const [seatAssignments, setSeatAssignments] = useState({});
@@ -2222,6 +2223,28 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     ].filter(Boolean);
     return [...new Set(ids)];
   };
+  const findRiderOptionIdByName = name => {
+    const target = normalizeName(name);
+    if (!target) return "";
+    const hit = riderOptions.find(opt => normalizeName(opt.name) === target);
+    return hit ? hit.id : "";
+  };
+  const getFixedFamilyRiderIds = car => {
+    const ids = [];
+    const preferredDriver = getPreferredDriverIds(car)[0] || "";
+    if (preferredDriver) ids.push(preferredDriver);
+    getFamilyDisplayNamesForCar(car).forEach(name => {
+      const rid = findRiderOptionIdByName(name);
+      if (rid && !ids.includes(rid)) ids.push(rid);
+    });
+    const profile = userById[String(car?.userId || "")] || {};
+    const ownChildId = String(profile.memberId || "").trim();
+    const ownChildRid = ownChildId ? `member:${ownChildId}` : "";
+    if (ownChildRid && riderOptionMap[ownChildRid] && !ids.includes(ownChildRid)) {
+      ids.push(ownChildRid);
+    }
+    return ids.filter(id => !!riderOptionMap[id]);
+  };
   const getRowAssignedIds = row => {
     const totalSeats = totalSeatsForRow(row);
     const ids = [];
@@ -2277,6 +2300,17 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             used.add(defaultDriverId);
             changed = true;
           }
+        }
+        if (row.kind === "family") {
+          const fixedIds = getFixedFamilyRiderIds(row.car).slice(0, totalSeats);
+          fixedIds.forEach((rid, seatIdx) => {
+            const sKey = seatKeyFor(row, seatIdx);
+            if (!next[sKey] && !used.has(rid)) {
+              next[sKey] = rid;
+              used.add(rid);
+              changed = true;
+            }
+          });
         }
         const profile = userById[String(row?.car?.userId || "")] || {};
         const ownChildId = String(profile.memberId || "").trim();
@@ -2657,6 +2691,19 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           const fallbackDriverIds = riderOptions.filter(opt=>opt.role!=="child").map(opt=>opt.id);
           const driverOptionIds = uniqDriverIds.length > 0 ? uniqDriverIds : fallbackDriverIds;
           const seatRows = seatLayoutRows(totalSeats);
+          const rowKeyStr = seatRowKey(row);
+          const fixedFamilyIds = row.kind === "family"
+            ? getFixedFamilyRiderIds(car).slice(0, totalSeats)
+            : [];
+          const fixedSeatCount = fixedFamilyIds.length;
+          const extraSeatIndices = row.kind === "family"
+            ? Array.from({length: Math.max(0, totalSeats - fixedSeatCount)}, (_, i) => i + fixedSeatCount)
+            : [];
+          const assignedExtraCount = extraSeatIndices.filter(seatIdx => !!String(seatAssignments[seatKeyFor(row, seatIdx)] || "")).length;
+          const visibleExtraCount = row.kind === "family"
+            ? Math.max(assignedExtraCount, Number(familyExtraOpen[rowKeyStr] || 0))
+            : 0;
+          const visibleExtraSeatIndices = extraSeatIndices.slice(0, visibleExtraCount);
           return h("div",{key:"selected-car-"+carId,style:{marginBottom:idx<selectedFleetRows.length-1?12:0,padding:10,background:"#fff",borderRadius:10,border:"1px solid " + (highwayOk ? "#DBEAFE" : "#FCA5A5")}},
             h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}},
               h("div",{style:{display:"flex",alignItems:"center",gap:6,minWidth:0}},
@@ -2674,72 +2721,138 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
               }, meta.highway ? "高速利用: ON" : "高速利用: OFF")
             ),
             h("div",{style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:14,padding:10}},
-              seatRows.map((seatRow, rowIdx2)=>
-                h("div",{key:`seat-row-${carId}-${rowIdx2}`,style:{display:"grid",gridTemplateColumns:`repeat(${seatRow.length}, minmax(0, 1fr))`,gap:8,marginBottom:rowIdx2<seatRows.length-1?8:0}},
-                  seatRow.map(seatIdx=>{
-                    const key = seatKeyFor(row, seatIdx);
-                    const currentValue = String(seatAssignments[key] || "");
-                    const usedElsewhere = new Set(
-                      Object.entries(seatAssignments || {})
-                        .filter(([k, v]) => k !== key && !!v)
-                        .map(([, v]) => String(v || ""))
-                    );
-                    const options = seatIdx === 0
-                      ? driverOptionIds.map(id => riderOptionMap[id]).filter(Boolean)
-                      : riderOptions;
-                    const filteredOptions = isLuggageCar(car.userName)
-                      ? options
-                      : options.filter(opt => {
-                          if (!opt || !opt.id) return false;
-                          if (opt.id.startsWith("member:")) {
-                            return !luggageRideChildIdSet.has(opt.id);
-                          }
-                          return !luggageRideNameKeySet.has(normalizeName(opt.name || ""));
-                        });
-                    const riderRole = riderOptionMap[currentValue]?.role || "";
-                    const selectedSeat = !!currentValue;
-                    const selectedSeatBg =
-                      riderRole === "adult" ? "#ECFDF3" :
-                      riderRole === "child" ? "#EFF6FF" :
-                      riderRole === "coach" ? "#F5F3FF" : "#F8FAFC";
-                    const selectedSeatBorder =
-                      riderRole === "adult" ? "#86EFAC" :
-                      riderRole === "child" ? "#93C5FD" :
-                      riderRole === "coach" ? "#C4B5FD" : "#CBD5E1";
-                    return h("div",{key:"seat-"+key,style:{background:selectedSeat?selectedSeatBg:"#fff",border:"1px solid " + (selectedSeat?selectedSeatBorder:"#E2E8F0"),borderRadius:10,padding:8,opacity:selectedSeat?0.92:1,transition:"all .18s ease"}},
-                      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
-                        h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"1px 7px"}},
-                          seatShortLabel(seatIdx)),
-                        h("div",{style:{display:"flex",alignItems:"center",gap:4}},
-                          currentValue && h("span",{style:{fontSize:10,fontWeight:800,color:"#fff",background:ROLE_COLORS[riderRole]||"#64748B",borderRadius:999,padding:"1px 7px"}},
-                            roleShortLabel(riderRole)),
-                          currentValue && h("span",{style:{fontSize:10,fontWeight:700,color:"#334155",background:"#E2E8F0",borderRadius:999,padding:"1px 7px"}},
-                            "選択済")
-                        )
-                      ),
-                      h("select",{
-                        value:currentValue,
-                        onChange:e=>{
-                          const nextId = String(e.target.value || "");
-                          if (nextId && usedElsewhere.has(nextId)) {
-                            alert("その人は別の席に割り当て済みです。");
-                            return;
-                          }
-                          setSeatAssignments(prev=>({...prev,[key]:nextId}));
-                        },
-                        style:{...css.inp,padding:"6px 8px",fontSize:12,width:"100%",margin:0,background:selectedSeat?"#FFFFFF":"#fff"}
-                      },
-                        h("option",{value:""},"未設定"),
-                        filteredOptions.map(opt=>h("option",{
-                          key:`seat-opt-${key}-${opt.id}`,
-                          value:opt.id,
-                          disabled:usedElsewhere.has(opt.id)
-                        },opt.label))
+              row.kind === "family"
+                ? h(Fragment,{},
+                    h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8}},"家族枠（自動割り当て）"),
+                    fixedFamilyIds.length===0
+                      ? h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:8}},"行く家族が未設定です")
+                      : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
+                          fixedFamilyIds.map((rid, seatIdx)=>{
+                            const label = getAssignedLabel(String(seatAssignments[seatKeyFor(row, seatIdx)] || rid)) || "未設定";
+                            return h("span",{key:`fixed-family-${rowKeyStr}-${seatIdx}`,style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#0F172A",background:"#E0E7FF",border:"1px solid #C7D2FE",borderRadius:999,padding:"4px 10px"}},
+                              h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"1px 6px"}},seatShortLabel(seatIdx)),
+                              label
+                            );
+                          })
+                        ),
+                    extraSeatIndices.length>0 && h("div",{style:{marginTop:4}},
+                      h("button",{
+                        onClick:()=>setFamilyExtraOpen(prev=>{
+                          const cur = Number(prev[rowKeyStr] || 0);
+                          return {...prev, [rowKeyStr]: Math.min(extraSeatIndices.length, cur + 1)};
+                        }),
+                        disabled:visibleExtraCount>=extraSeatIndices.length,
+                        style:{border:"1px solid #1D4ED8",background:"#DBEAFE",color:"#1D4ED8",borderRadius:999,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:visibleExtraCount>=extraSeatIndices.length?"not-allowed":"pointer",opacity:visibleExtraCount>=extraSeatIndices.length?0.7:1}
+                      }, visibleExtraCount>=extraSeatIndices.length ? "追加枠なし" : "+ 同乗者を追加"),
+                      visibleExtraSeatIndices.length>0 && h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8,marginTop:8}},
+                        visibleExtraSeatIndices.map(seatIdx=>{
+                          const key = seatKeyFor(row, seatIdx);
+                          const currentValue = String(seatAssignments[key] || "");
+                          const usedElsewhere = new Set(
+                            Object.entries(seatAssignments || {})
+                              .filter(([k, v]) => k !== key && !!v)
+                              .map(([, v]) => String(v || ""))
+                          );
+                          const options = riderOptions;
+                          const filteredOptions = isLuggageCar(car.userName)
+                            ? options
+                            : options.filter(opt => {
+                                if (!opt || !opt.id) return false;
+                                if (opt.id.startsWith("member:")) return !luggageRideChildIdSet.has(opt.id);
+                                return !luggageRideNameKeySet.has(normalizeName(opt.name || ""));
+                              });
+                          return h("div",{key:`extra-seat-${key}`,style:{background:"#fff",border:"1px solid #E2E8F0",borderRadius:10,padding:8}},
+                            h("div",{style:{fontSize:10,fontWeight:800,color:"#334155",marginBottom:4}},`+ ${seatShortLabel(seatIdx)}`),
+                            h("select",{
+                              value:currentValue,
+                              onChange:e=>{
+                                const nextId = String(e.target.value || "");
+                                if (nextId && usedElsewhere.has(nextId)) {
+                                  alert("その人は別の席に割り当て済みです。");
+                                  return;
+                                }
+                                setSeatAssignments(prev=>({...prev,[key]:nextId}));
+                              },
+                              style:{...css.inp,padding:"6px 8px",fontSize:12,width:"100%",margin:0}
+                            },
+                              h("option",{value:""},"未設定"),
+                              filteredOptions.map(opt=>h("option",{
+                                key:`seat-opt-${key}-${opt.id}`,
+                                value:opt.id,
+                                disabled:usedElsewhere.has(opt.id)
+                              },opt.label))
+                            )
+                          );
+                        })
                       )
-                    );
-                  })
-                )
-              )
+                    )
+                  )
+                : seatRows.map((seatRow, rowIdx2)=>
+                    h("div",{key:`seat-row-${carId}-${rowIdx2}`,style:{display:"grid",gridTemplateColumns:`repeat(${seatRow.length}, minmax(0, 1fr))`,gap:8,marginBottom:rowIdx2<seatRows.length-1?8:0}},
+                      seatRow.map(seatIdx=>{
+                        const key = seatKeyFor(row, seatIdx);
+                        const currentValue = String(seatAssignments[key] || "");
+                        const usedElsewhere = new Set(
+                          Object.entries(seatAssignments || {})
+                            .filter(([k, v]) => k !== key && !!v)
+                            .map(([, v]) => String(v || ""))
+                        );
+                        const options = seatIdx === 0
+                          ? driverOptionIds.map(id => riderOptionMap[id]).filter(Boolean)
+                          : riderOptions;
+                        const filteredOptions = isLuggageCar(car.userName)
+                          ? options
+                          : options.filter(opt => {
+                              if (!opt || !opt.id) return false;
+                              if (opt.id.startsWith("member:")) {
+                                return !luggageRideChildIdSet.has(opt.id);
+                              }
+                              return !luggageRideNameKeySet.has(normalizeName(opt.name || ""));
+                            });
+                        const riderRole = riderOptionMap[currentValue]?.role || "";
+                        const selectedSeat = !!currentValue;
+                        const selectedSeatBg =
+                          riderRole === "adult" ? "#ECFDF3" :
+                          riderRole === "child" ? "#EFF6FF" :
+                          riderRole === "coach" ? "#F5F3FF" : "#F8FAFC";
+                        const selectedSeatBorder =
+                          riderRole === "adult" ? "#86EFAC" :
+                          riderRole === "child" ? "#93C5FD" :
+                          riderRole === "coach" ? "#C4B5FD" : "#CBD5E1";
+                        return h("div",{key:"seat-"+key,style:{background:selectedSeat?selectedSeatBg:"#fff",border:"1px solid " + (selectedSeat?selectedSeatBorder:"#E2E8F0"),borderRadius:10,padding:8,opacity:selectedSeat?0.92:1,transition:"all .18s ease"}},
+                          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
+                            h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"1px 7px"}},
+                              seatShortLabel(seatIdx)),
+                            h("div",{style:{display:"flex",alignItems:"center",gap:4}},
+                              currentValue && h("span",{style:{fontSize:10,fontWeight:800,color:"#fff",background:ROLE_COLORS[riderRole]||"#64748B",borderRadius:999,padding:"1px 7px"}},
+                                roleShortLabel(riderRole)),
+                              currentValue && h("span",{style:{fontSize:10,fontWeight:700,color:"#334155",background:"#E2E8F0",borderRadius:999,padding:"1px 7px"}},
+                                "選択済")
+                            )
+                          ),
+                          h("select",{
+                            value:currentValue,
+                            onChange:e=>{
+                              const nextId = String(e.target.value || "");
+                              if (nextId && usedElsewhere.has(nextId)) {
+                                alert("その人は別の席に割り当て済みです。");
+                                return;
+                              }
+                              setSeatAssignments(prev=>({...prev,[key]:nextId}));
+                            },
+                            style:{...css.inp,padding:"6px 8px",fontSize:12,width:"100%",margin:0,background:selectedSeat?"#FFFFFF":"#fff"}
+                          },
+                            h("option",{value:""},"未設定"),
+                            filteredOptions.map(opt=>h("option",{
+                              key:`seat-opt-${key}-${opt.id}`,
+                              value:opt.id,
+                              disabled:usedElsewhere.has(opt.id)
+                            },opt.label))
+                          )
+                        );
+                      })
+                    )
+                  )
             ),
             meta.highway && !highwayOk && h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#DC2626"}},
               "高速利用は大人2名以上が必要です。")
@@ -2761,15 +2874,29 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
               const car = row.car;
               const totalSeats = totalSeatsForRow(row);
               const summary = rowSeatSummary(row);
-              const assignedNames = Array.from({length: totalSeats}, (_, seatIdx)=>{
+              const seatChips = Array.from({length: totalSeats}, (_, seatIdx)=>{
                 const rid = String(seatAssignments[seatKeyFor(row, seatIdx)] || "");
-                return getAssignedLabel(rid);
-              }).filter(Boolean);
+                const name = getAssignedLabel(rid) || "未設定";
+                const role = riderOptionMap[rid]?.role || "";
+                const bg = role === "adult" ? "#ECFDF3" : role === "child" ? "#EFF6FF" : role === "coach" ? "#F5F3FF" : "#F8FAFC";
+                const bd = role === "adult" ? "#86EFAC" : role === "child" ? "#93C5FD" : role === "coach" ? "#C4B5FD" : "#E2E8F0";
+                return h("span",{key:`summary-chip-${seatRowKey(row)}-${seatIdx}`,style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#334155",background:bg,border:`1px solid ${bd}`,borderRadius:999,padding:"4px 9px"}},
+                  h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"1px 6px"}},seatShortLabel(seatIdx)),
+                  name
+                );
+              });
               return h("div",{key:"summary-"+seatRowKey(row),style:{marginBottom:8,padding:"8px 10px",background:"#fff",borderRadius:10,border:isLuggageCar(car.userName)?"1px solid #F59E0B":"1px solid #E2E8F0"}},
-                h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:3}},
-                  (car.userName||"-")+" の車"+(isLuggageCar(car.userName)?"（荷物車）":"")),
-                h("div",{style:{fontSize:12,color:"#334155"}},
-                  (assignedNames.length ? assignedNames.join(" / ") : "未設定") + `  ・ 空席${summary.free}`)
+                h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6}},
+                  h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
+                    (car.userName||"-")+" の車"),
+                  h("div",{style:{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}},
+                    h("span",{style:{fontSize:10,fontWeight:800,color:row.kind==="dispatch"?"#1D4ED8":"#B45309",background:row.kind==="dispatch"?"#DBEAFE":"#FEF3C7",borderRadius:999,padding:"2px 6px"}},
+                      row.kind==="dispatch"?"配車":"家族車"),
+                    isLuggageCar(car.userName) && h("span",{style:{fontSize:10,fontWeight:800,color:"#92400E",background:"#FFEDD5",borderRadius:999,padding:"2px 6px"}},"荷物車"),
+                    h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"2px 6px"}},`空席${summary.free}`)
+                  )
+                ),
+                h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},seatChips)
               );
             }),
         (() => {
@@ -2839,15 +2966,29 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             const car = row.car;
             const totalSeats = totalSeatsForRow(row);
             const summary = rowSeatSummary(row);
-            const assignedNames = Array.from({length: totalSeats}, (_, seatIdx)=>{
+            const seatChips = Array.from({length: totalSeats}, (_, seatIdx)=>{
               const rid = String(seatAssignments[seatKeyFor(row, seatIdx)] || "");
-              return getAssignedLabel(rid);
-            }).filter(Boolean);
+              const name = getAssignedLabel(rid) || "未設定";
+              const role = riderOptionMap[rid]?.role || "";
+              const bg = role === "adult" ? "#ECFDF3" : role === "child" ? "#EFF6FF" : role === "coach" ? "#F5F3FF" : "#F8FAFC";
+              const bd = role === "adult" ? "#86EFAC" : role === "child" ? "#93C5FD" : role === "coach" ? "#C4B5FD" : "#E2E8F0";
+              return h("span",{key:`member-summary-chip-${seatRowKey(row)}-${seatIdx}`,style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#334155",background:bg,border:`1px solid ${bd}`,borderRadius:999,padding:"4px 9px"}},
+                h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"1px 6px"}},seatShortLabel(seatIdx)),
+                name
+              );
+            });
             return h("div",{key:"member-summary-"+seatRowKey(row),style:{marginBottom:8,padding:"8px 10px",background:"#F8FAFC",borderRadius:10,border:isLuggageCar(car.userName)?"1px solid #F59E0B":"1px solid #E2E8F0"}},
-              h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:3}},
-                (car.userName||"-")+" の車"+(isLuggageCar(car.userName)?"（荷物車）":"")),
-              h("div",{style:{fontSize:12,color:"#334155"}},
-                (assignedNames.length ? assignedNames.join(" / ") : "未設定") + `  ・ 空席${summary.free}`)
+              h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6}},
+                h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
+                  (car.userName||"-")+" の車"),
+                h("div",{style:{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}},
+                  h("span",{style:{fontSize:10,fontWeight:800,color:row.kind==="dispatch"?"#1D4ED8":"#B45309",background:row.kind==="dispatch"?"#DBEAFE":"#FEF3C7",borderRadius:999,padding:"2px 6px"}},
+                    row.kind==="dispatch"?"配車":"家族車"),
+                  isLuggageCar(car.userName) && h("span",{style:{fontSize:10,fontWeight:800,color:"#92400E",background:"#FFEDD5",borderRadius:999,padding:"2px 6px"}},"荷物車"),
+                  h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"2px 6px"}},`空席${summary.free}`)
+                )
+              ),
+              h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},seatChips)
             );
           })
     )
@@ -3287,31 +3428,12 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const [to,setTo]=useState("");
   const [oppFilter,setOppFilter]=useState("all"); // "all" or opponent name
   useEffect(()=>{ if(initialDashTab) setDashTab(initialDashTab); },[initialDashTab]);
-  const activeThirdGen = useMemo(() => {
-    const gens = (members || [])
-      .map(m => {
-        const gen = Number(String(m.generation || "").replace(/[^\d]/g, ""));
-        const gradeNum = getGradeNumber(resolveGrade(m) || m.grade);
-        return { gen, gradeNum };
-      })
-      .filter(x => x.gen && x.gradeNum === 3)
-      .map(x => x.gen);
-    if (gens.length) return Math.max(...gens);
-    const dates = [
-      ...(results || []).map(r => nd(r.date)),
-      ...(schedules || []).map(s => nd(s.date)),
-    ].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
-    if (dates.length) {
-      const latest = dates[dates.length - 1];
-      const y = Number(latest.slice(0,4));
-      const m = Number(latest.slice(5,7));
-      const fy = m >= 4 ? y : y - 1;
-      return fy - 1965;
-    }
-    return getCurrentThirdGeneration();
-  }, [members, results, schedules]);
-  const grade3FiscalStart = activeThirdGen + 1965;
-  const grade4FiscalStart = grade3FiscalStart - 1;
+  const currentFiscalStart = useMemo(() => {
+    const now = new Date();
+    return now.getMonth() + 1 >= 4 ? now.getFullYear() : now.getFullYear() - 1;
+  }, []);
+  const grade3FiscalStart = currentFiscalStart - 1;
+  const grade4FiscalStart = currentFiscalStart;
   const getResultType=row=>{
     const linked=findLinkedScheduleForResult(row, schedules);
     return normalizeType(row.type || linked?.type || "");
@@ -3336,8 +3458,9 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     if(periodF==="custom") return {f:from, t:to};
     return {f:"", t:""};
   },[periodF,from,to,grade3FiscalStart,grade4FiscalStart]);
-  const periodGrade3Label = formatGenerationGrade("3年", String(activeThirdGen));
-  const periodGrade4Label = formatGenerationGrade("4年", String(activeThirdGen - 1));
+  const toFiscalLabel = (year, gradeText) => `${String(year).slice(-2)}年度（${gradeText}）`;
+  const periodGrade3Label = toFiscalLabel(grade3FiscalStart, "3年生");
+  const periodGrade4Label = toFiscalLabel(grade4FiscalStart, "4年生");
   const filtered=useMemo(()=>results.filter(r=>{
     if(typeF!=="all"&&!typeMatch(r,typeF)) return false;
     const d=nd(r.date);
@@ -3447,7 +3570,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
         [{k:"all",l:"すべて"},{k:"official",l:"公式戦"},{k:"cup",l:"カップ戦"},{k:"training",l:"トレマ"}].map(t=>h("button",{key:t.k,onClick:()=>setTypeF(t.k),style:{padding:"6px 12px",border:`2px solid ${typeF===t.k?"#1D4ED8":"#eee"}`,borderRadius:20,background:typeF===t.k?"#1D4ED8":"#fff",color:typeF===t.k?"#fff":"#666",fontSize:12,fontWeight:typeF===t.k?700:400,cursor:"pointer"}},t.l))),
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8,marginTop:4}},"期間"),
       h("div",{style:{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}},
-        [{k:"alltime",l:"全期間"},{k:"grade4",l:periodGrade4Label},{k:"grade3",l:periodGrade3Label},{k:"month",l:"今月"},{k:"lastmonth",l:"先月"},{k:"custom",l:"期間指定"}].map(t=>h("button",{key:t.k,onClick:()=>setPeriodF(t.k),style:{padding:"6px 12px",border:`2px solid ${periodF===t.k?"#2196F3":"#eee"}`,borderRadius:20,background:periodF===t.k?"#2196F3":"#fff",color:periodF===t.k?"#fff":"#666",fontSize:12,fontWeight:periodF===t.k?700:400,cursor:"pointer"}},t.l))),
+        [{k:"alltime",l:"全期間"},{k:"grade3",l:periodGrade3Label},{k:"grade4",l:periodGrade4Label},{k:"month",l:"今月"},{k:"lastmonth",l:"先月"},{k:"custom",l:"期間指定"}].map(t=>h("button",{key:t.k,onClick:()=>setPeriodF(t.k),style:{padding:"6px 12px",border:`2px solid ${periodF===t.k?"#2196F3":"#eee"}`,borderRadius:20,background:periodF===t.k?"#2196F3":"#fff",color:periodF===t.k?"#fff":"#666",fontSize:12,fontWeight:periodF===t.k?700:400,cursor:"pointer"}},t.l))),
       periodF==="custom"&&h("div",{style:{display:"flex",gap:8,alignItems:"center",marginTop:4}},
         h("input",{type:"date",value:from,onChange:e=>setFrom(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}}),
         h("span",{style:{color:"#ccc",flexShrink:0}},"〜"),
@@ -4404,7 +4527,7 @@ function MemberTab({members,liftings=[]}) {
 function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile}) {
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
   const child = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
-  const familyListView = parseFamilyMembers(currentUserProfile.familyMembers || currentUserProfile.familyComposition || []);
+  const familyListView = parseFamilyMembers(currentUserProfile.familyMembers || []);
   const [editing,setEditing] = useState(false);
   const [name,setName] = useState(currentUserProfile.name || "");
   const [memberId,setMemberId] = useState(currentUserProfile.memberId || "");
@@ -4415,8 +4538,8 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
     const latest = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
     setName(latest.name || "");
     setMemberId(latest.memberId || "");
-    setFamilyText(parseFamilyMembers(latest.familyMembers || latest.familyComposition || []).join("\n"));
-  },[user.id,user.name,user.memberId,JSON.stringify((users||[]).map(u=>[u.id,u.familyMembers,u.familyComposition]))]);
+    setFamilyText(parseFamilyMembers(latest.familyMembers || []).join("\n"));
+  },[user.id,user.name,user.memberId,JSON.stringify((users||[]).map(u=>[u.id,u.familyMembers]))]);
 
   const generations = [...new Set(members.map(m=>String(m.generation||"").trim()).filter(Boolean))].sort((a,b)=>Number(b)-Number(a));
   const memberOptions = generations.flatMap(gen => {
@@ -4457,7 +4580,7 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"家族構成（1行1名）"),
           h("textarea",{value:familyText,onChange:e=>setFamilyText(e.target.value),rows:4,placeholder:"例:\n父\n母\n妹",style:{...css.inp,resize:"none"}})),
         h("div",{style:{display:"flex",gap:10}},
-          h("button",{onClick:()=>{setEditing(false);setName(currentUserProfile.name||"");setMemberId(currentUserProfile.memberId||"");setFamilyText(parseFamilyMembers(currentUserProfile.familyMembers||currentUserProfile.familyComposition||[]).join("\n"));},style:css.bG},"キャンセル"),
+          h("button",{onClick:()=>{setEditing(false);setName(currentUserProfile.name||"");setMemberId(currentUserProfile.memberId||"");setFamilyText(parseFamilyMembers(currentUserProfile.familyMembers||[]).join("\n"));},style:css.bG},"キャンセル"),
           h("button",{onClick:save,disabled:saving||!name||!memberId,style:{...css.bS,opacity:(!name||!memberId)?0.5:1}},saving?"保存中...":"保存する")))
       : h(Fragment,{},
         h("div",{style:{fontSize:12,color:"#888",marginBottom:8}},"メールアドレス"),
@@ -4760,28 +4883,12 @@ render(h(App,{}), document.getElementById("app"));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=10").catch(() => {});
+      navigator.serviceWorker.register("/sw.js?v=10").catch(() => {});
   });
 }
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
