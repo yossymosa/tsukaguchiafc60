@@ -1795,11 +1795,11 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     alert([
       "【配車ルール】",
       "・最初に「配車できますか？」で『可 / 不可 / 家族で行く』を選んでください。",
-      "・各家庭で「行く人（家族）」を入力してください。",
+      "・各家庭で「行く人（家族）」を先に選択してください（不可でも必須）。",
       "・管理者はまず配車候補リストから使う車を選んでください。",
       "・『可』を選んだ場合は、何人乗せられるか（運転手を含む）を入力してください。",
       "・『家族で行く』を選んだ場合は、空きがある場合の受け入れ人数（0〜）を入力してください。",
-      "・『不可』を選んだ場合でも、行く家族メンバーは選択できます（子供は配車対象のまま）。",
+      "・荷物車の担当者は、家族同伴の有無に関わらず乗車可能人数を入力してください。",
       "・高速利用の車は、運転手 + 同乗大人1名以上（合計大人2名）が必要です。",
       "・運転手/各席は『その試合に行く人』から選択してください。",
       "・同じ人を複数の席に重複割り当てはできません。",
@@ -1876,7 +1876,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             available,
             capacity:String(mine.capacity ?? ""),
             note:mine.note||"",
-            familyPlan:available==="家族で行く" ? "行く" : (legacyFamilyPlan || "行かない"),
+            familyPlan: legacyFamilyPlan || (mineFamilyMembers.length > 0 ? "行く" : "行かない"),
             familyMembers:mineFamilyMembers
           });
           setFamilyChoicePool(prev => mergeNameList(prev, mineFamilyMembers));
@@ -1905,10 +1905,13 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
 
   const save=async()=>{
     const normalizedAvailable = isCurrentLuggageCar
-      ? (my.familyPlan === "行く" ? "家族で行く" : (my.familyPlan === "行かない" ? "不可" : ""))
+      ? "可"
       : my.available;
     if(!normalizedAvailable){
-      return alert(isCurrentLuggageCar ? "荷物車として、家族で行くかどうかを選択してください" : "可否を選択してください");
+      return alert("可否を選択してください");
+    }
+    if(isCurrentLuggageCar && !my.familyPlan){
+      return alert("荷物車として、家族で行くかどうかを選択してください");
     }
     const capNum = Number(my.capacity || 0);
     if(normalizedAvailable==="可" && !(capNum>0)){
@@ -1919,6 +1922,14 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     }
     setSaving(true);
     const selectedFamilyMembers = parseFamilyMembers(my.familyMembers || []);
+    if(!isCurrentLuggageCar && selectedFamilyMembers.length===0){
+      setSaving(false);
+      return alert("配車可否に関わらず、行く人（家族）を選択してください");
+    }
+    if(isCurrentLuggageCar && my.familyPlan==="行く" && selectedFamilyMembers.length===0){
+      setSaving(false);
+      return alert("荷物車で家族と行く場合は、行く家族を選択してください");
+    }
     const isFamilyRide = normalizedAvailable === "家族で行く";
     const payload = {
       ...my,
@@ -1926,7 +1937,9 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       capacity: (normalizedAvailable === "可" || normalizedAvailable === "家族で行く")
         ? String(my.capacity ?? "")
         : "",
-      familyPlan: isFamilyRide ? "行く" : "行かない",
+      familyPlan: isCurrentLuggageCar
+        ? (my.familyPlan || "行かない")
+        : (selectedFamilyMembers.length > 0 ? "行く" : "行かない"),
       familyMembers: selectedFamilyMembers
     };
     await api("saveCarpool",{scheduleId:schedule.id,userId:user.id,userName:user.name,...payload});
@@ -1944,7 +1957,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const attendingChildren = members
     .filter(m=>attend[m.id]==="○")
     .sort((a,b)=>Number(a.number)-Number(b.number));
-  // 家族移動の判定（配車対象外）
+  // 家族移動の判定（参考情報）
   const familyOwnRideByMemberId = {};
   const userById = {};
   (users || []).forEach(u => { userById[String(u.id || "")] = u; });
@@ -2042,8 +2055,8 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     selectedDispatchRows.map(row => String(row.ci)).join("|"),
     selectedFamilyRideCars.map(car => String(car.userId || "")).join("|")
   ]);
-  // 配車対象の参加者（家族移動で対象外の子供を除外）
-  const participants = attendingChildren.filter(m => !familyOwnRideMemberIds.has(String(m.id)));
+  // 配車対象の参加者（出席した子供を全員表示）
+  const participants = attendingChildren;
   const seatRowKey = row => `${row.kind}:${String(row?.car?.userId || "")}`;
   const seatKeyFor = (row, slotIndex) => `${seatRowKey(row)}:${slotIndex}`;
   const totalSeatsForRow = row => {
@@ -2064,18 +2077,19 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     attendingChildren.map(m => normalizeName(m.name))
   );
   const luggageRideNameKeySet = new Set();
+  const luggageRideChildIdSet = new Set();
   const goingPeopleNameSet = new Set();
   carpools.forEach(cp => {
     const available = String(cp.available || "").trim();
     const familyPlan = String(cp.familyPlan || "").trim();
+    const rawFamily = parseFamilyMembers(cp.familyMembers || cp.familyComposition || []);
+    const hasGoingFamily = rawFamily.length > 0 || familyPlan === "行く";
     const luggageCar = isLuggageCar(cp.userName || "");
     const includeSelf = luggageCar
-      ? familyPlan === "行く"
-      : (["可", "不可", "家族で行く"].includes(available) || familyPlan === "行く");
-    const includeFamily = luggageCar
-      ? familyPlan === "行く"
-      : (available === "家族で行く" || familyPlan === "行く");
-    const family = parseFamilyMembers(cp.familyMembers || cp.familyComposition || [])
+      ? true
+      : (available === "可" || available === "家族で行く");
+    const includeFamily = hasGoingFamily;
+    const family = rawFamily
       .map(name => formatFamilyDisplayName(name, cp.userName || ""))
       .filter(Boolean);
     if (includeFamily) {
@@ -2083,9 +2097,17 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     }
     const userName = String(cp.userName || "").trim();
     if (includeSelf && userName) goingPeopleNameSet.add(userName);
-    if (luggageCar && includeFamily) {
+    if (luggageCar) {
       if (userName) luggageRideNameKeySet.add(normalizeName(userName));
-      family.forEach(name => luggageRideNameKeySet.add(normalizeName(name)));
+      if (includeFamily) {
+        family.forEach(name => luggageRideNameKeySet.add(normalizeName(name)));
+        const rawFamilyNameKeySet = new Set(rawFamily.map(normalizeName).filter(Boolean));
+        attendingChildren.forEach(m => {
+          if (rawFamilyNameKeySet.has(normalizeName(m.name))) {
+            luggageRideChildIdSet.add(`member:${m.id}`);
+          }
+        });
+      }
     }
   });
   scheduleCoachNames.forEach(name => goingPeopleNameSet.add(name));
@@ -2099,7 +2121,6 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     .map(name => {
       const key = normalizeName(name);
       if (!name || attendingChildNameKeySet.has(key)) return null;
-      if (luggageRideNameKeySet.has(key)) return null;
       const isCoach = coachNameKeySet.has(key) || /コーチ|先生/.test(name);
       return {
         id: `person:${name}`,
@@ -2168,6 +2189,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       const used = new Set(Object.values(next).map(v => String(v || "")).filter(Boolean));
       selectedFleetRows.forEach(row => {
         const dKey = seatKeyFor(row, 0);
+        const totalSeats = totalSeatsForRow(row);
         if (!next[dKey]) {
           const defaultDriverId =
             findPersonOptionId(row?.car?.userName || "") ||
@@ -2177,6 +2199,20 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             next[dKey] = defaultDriverId;
             used.add(defaultDriverId);
             changed = true;
+          }
+        }
+        const profile = userById[String(row?.car?.userId || "")] || {};
+        const ownChildId = String(profile.memberId || "").trim();
+        const ownChildSeatId = ownChildId ? `member:${ownChildId}` : "";
+        if (ownChildSeatId && riderOptionMap[ownChildSeatId] && !used.has(ownChildSeatId)) {
+          for (let seatIdx = 1; seatIdx < totalSeats; seatIdx += 1) {
+            const sKey = seatKeyFor(row, seatIdx);
+            if (!next[sKey]) {
+              next[sKey] = ownChildSeatId;
+              used.add(ownChildSeatId);
+              changed = true;
+              break;
+            }
           }
         }
       });
@@ -2231,7 +2267,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     setMy(p => {
       const cur = parseFamilyMembers(p.familyMembers || []);
       if (cur.includes(name)) return p;
-      return { ...p, familyMembers: [...cur, name] };
+      return { ...p, familyMembers: [...cur, name], familyPlan: "行く" };
     });
     setFamilyDraft("");
   };
@@ -2289,17 +2325,17 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                       if (v === "行く") {
                         return {
                           ...p,
-                          available:"家族で行く",
+                          available:"可",
                           familyPlan:"行く",
-                          capacity:(p.capacity==="" ? "0" : String(p.capacity ?? "0")),
+                          capacity:(p.capacity==="" ? "1" : String(p.capacity ?? "1")),
                           familyMembers: parseFamilyMembers(p.familyMembers || [])
                         };
                       }
                       return {
                         ...p,
-                        available:"不可",
+                        available:"可",
                         familyPlan:"行かない",
-                        capacity:"",
+                        capacity:(p.capacity==="" ? "1" : String(p.capacity ?? "1")),
                         familyMembers:[]
                       };
                     }),
@@ -2312,11 +2348,12 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
               h("div",{style:{display:"flex",gap:8}},
                 [["可","#4CAF50"],["不可","#F44336"],["家族で行く","#2563EB"]].map(([v,col])=>
                   h("button",{key:v,onClick:()=>setMy(p=>{
+                      const nextFamily = parseFamilyMembers(p.familyMembers || []);
                       const next = {
                         ...p,
                         available:v,
-                        familyPlan: v === "家族で行く" ? "行く" : "行かない",
-                        familyMembers: parseFamilyMembers(p.familyMembers || [])
+                        familyPlan: nextFamily.length > 0 ? "行く" : "行かない",
+                        familyMembers: nextFamily
                       };
                       if (v === "可" && Number(p.capacity || 0) <= 0) next.capacity = "";
                       if (v === "不可") next.capacity = "";
@@ -2326,17 +2363,6 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                       borderRadius:12,background:my.available===v?col:"#fff",
                       color:my.available===v?"#fff":"#aaa",fontSize:14,fontWeight:700,cursor:"pointer"}},v))))
       ),
-      (((!isCurrentLuggageCar) && (my.available==="可" || my.available==="家族で行く")) || (isCurrentLuggageCar && my.familyPlan==="行く"))&&h("div",{style:{marginBottom:12}},
-        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:4}},
-          (!isCurrentLuggageCar && my.available==="可")
-            ? "何人乗せられますか？（運転手を含む）"
-            : "空きがある場合何人載せれますか（事情があり載せれない場合は0を選んでください）"),
-        h("div",{style:{display:"flex",gap:8}},
-          ((isCurrentLuggageCar || my.available==="家族で行く") ? [0,1,2,3,4,5,6] : [1,2,3,4,5,6]).map(n=>
-            h("button",{key:n,onClick:()=>setMy(p=>({...p,capacity:String(n)})),
-              style:{flex:1,padding:"10px 0",border:`2px solid ${my.capacity===String(n)?"#2196F3":"#eee"}`,
-                borderRadius:10,background:my.capacity===String(n)?"#2196F3":"#fff",
-                color:my.capacity===String(n)?"#fff":"#aaa",fontSize:14,fontWeight:700,cursor:"pointer"}},n)))),
       (((!isCurrentLuggageCar) && !!my.available) || (isCurrentLuggageCar && my.familyPlan==="行く")) && h("div",{style:{marginBottom:14,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
         h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",marginBottom:8}},
           isCurrentLuggageCar ? "行く家族を選択" : "行く人（家族）を選択"),
@@ -2354,7 +2380,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                     return {
                       ...p,
                       familyMembers:next,
-                      familyPlan:isCurrentLuggageCar ? "行く" : (p.available==="家族で行く" ? "行く" : "行かない")
+                      familyPlan: next.length > 0 ? "行く" : "行かない"
                     };
                   }),
                   style:{border:`1px solid ${checked?"#1D4ED8":"#CBD5E1"}`,background:checked?"#DBEAFE":"#fff",color:checked?"#1D4ED8":"#334155",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}
@@ -2376,6 +2402,17 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         ),
         h("div",{style:{fontSize:11,color:"#94A3B8",marginTop:6}},"設定タブがなくても、ここから家族を登録して選択できます")
       ),
+      (((!isCurrentLuggageCar) && (my.available==="可" || my.available==="家族で行く")) || (isCurrentLuggageCar && !!my.familyPlan))&&h("div",{style:{marginBottom:12}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:4}},
+          (isCurrentLuggageCar || my.available==="可")
+            ? "何人乗せられますか？（運転手を含む）"
+            : "空きがある場合何人載せれますか（事情があり載せれない場合は0を選んでください）"),
+        h("div",{style:{display:"flex",gap:8}},
+          ((isCurrentLuggageCar || my.available==="可") ? [1,2,3,4,5,6] : [0,1,2,3,4,5,6]).map(n=>
+            h("button",{key:n,onClick:()=>setMy(p=>({...p,capacity:String(n)})),
+              style:{flex:1,padding:"10px 0",border:`2px solid ${my.capacity===String(n)?"#2196F3":"#eee"}`,
+                borderRadius:10,background:my.capacity===String(n)?"#2196F3":"#fff",
+                color:my.capacity===String(n)?"#fff":"#aaa",fontSize:14,fontWeight:700,cursor:"pointer"}},n)))),
       h("div",{style:{marginBottom:14}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"備考（任意）"),
         h("textarea",{value:my.note,onChange:e=>setMy(p=>({...p,note:e.target.value})),
@@ -2510,6 +2547,15 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                     const options = seatIdx === 0
                       ? driverOptionIds.map(id => riderOptionMap[id]).filter(Boolean)
                       : riderOptions;
+                    const filteredOptions = isLuggageCar(car.userName)
+                      ? options
+                      : options.filter(opt => {
+                          if (!opt || !opt.id) return false;
+                          if (opt.id.startsWith("member:")) {
+                            return !luggageRideChildIdSet.has(opt.id);
+                          }
+                          return !luggageRideNameKeySet.has(normalizeName(opt.name || ""));
+                        });
                     const riderRole = riderOptionMap[currentValue]?.role || "";
                     const selectedSeat = !!currentValue;
                     const selectedSeatBg =
@@ -2544,7 +2590,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                         style:{...css.inp,padding:"6px 8px",fontSize:12,width:"100%",margin:0,background:selectedSeat?"#FFFFFF":"#fff"}
                       },
                         h("option",{value:""},"未設定"),
-                        options.map(opt=>h("option",{
+                        filteredOptions.map(opt=>h("option",{
                           key:`seat-opt-${key}-${opt.id}`,
                           value:opt.id,
                           disabled:usedElsewhere.has(opt.id)
@@ -4514,6 +4560,8 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
+
 
 
 
