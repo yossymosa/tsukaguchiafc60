@@ -2275,6 +2275,16 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     }
     return ids.filter(id => !!riderOptionMap[id]);
   };
+  const shouldApplyFixedRiders = row =>
+    !!row && !!row.car && (row.kind === "family" || isLuggageCar(row.car.userName || ""));
+  const getFixedSeatIdsForRow = row => {
+    if (!shouldApplyFixedRiders(row)) return [];
+    const cap = Math.max(0, Number(row?.car?.capacity || 0));
+    const totalSeats = row?.kind === "dispatch"
+      ? Math.max(1, cap)
+      : Math.max(1, getFixedFamilyRiderIds(row?.car || {}).length + cap);
+    return getFixedFamilyRiderIds(row?.car || {}).slice(0, totalSeats);
+  };
   const totalSeatsForRow = row => {
     const cap = Math.max(0, Number(row?.car?.capacity || 0));
     if (row?.kind === "dispatch") return Math.max(1, cap); // 定員は運転手含む
@@ -2282,12 +2292,19 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     // 家族車のcapacityは「家族固定枠とは別の受け入れ人数」
     return Math.max(1, fixedFamilySeatCount + cap);
   };
+  const getSeatAssignedRid = (row, seatIdx, sourceAssignments = seatAssignments) => {
+    const key = seatKeyFor(row, seatIdx);
+    const manual = String((sourceAssignments || {})[key] || "");
+    if (manual) return manual;
+    const fixedIds = getFixedSeatIdsForRow(row);
+    return String(fixedIds[seatIdx] || "");
+  };
   const selectedFleetRowsKey = selectedFleetRows.map(row => `${seatRowKey(row)}:${totalSeatsForRow(row)}`).join("|");
   const getRowAssignedIds = row => {
     const totalSeats = totalSeatsForRow(row);
     const ids = [];
     for (let i = 0; i < totalSeats; i += 1) {
-      const rid = String(seatAssignments[seatKeyFor(row, i)] || "");
+      const rid = getSeatAssignedRid(row, i);
       if (rid) ids.push(rid);
     }
     return ids;
@@ -2339,8 +2356,8 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             changed = true;
           }
         }
-        if (row.kind === "family") {
-          const fixedIds = getFixedFamilyRiderIds(row.car).slice(0, totalSeats);
+        const fixedIds = getFixedSeatIdsForRow(row).slice(0, totalSeats);
+        if (fixedIds.length > 0) {
           fixedIds.forEach((rid, seatIdx) => {
             const sKey = seatKeyFor(row, seatIdx);
             if (!next[sKey] && !used.has(rid)) {
@@ -2374,7 +2391,14 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       return;
     }
     const childIds = participants.map(m => `member:${m.id}`);
-    const used = new Set(Object.values(seatAssignments || {}).map(v => String(v || "")).filter(Boolean));
+    const used = new Set();
+    selectedFleetRows.forEach(row => {
+      const totalSeats = totalSeatsForRow(row);
+      for (let slot = 0; slot < totalSeats; slot += 1) {
+        const rid = getSeatAssignedRid(row, slot, seatAssignments || {});
+        if (rid) used.add(rid);
+      }
+    });
     const queue = childIds.filter(id => !used.has(id));
     if (queue.length === 0) {
       alert("自動割り当てできる子供がいません。");
@@ -2388,7 +2412,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         const totalSeats = totalSeatsForRow(row);
         for (let slot = 1; slot < totalSeats; slot += 1) {
           const key = seatKeyFor(row, slot);
-          if (!next[key] && queue.length > 0) {
+          if (!getSeatAssignedRid(row, slot, next) && queue.length > 0) {
             next[key] = queue.shift();
             assigned += 1;
           }
@@ -2406,10 +2430,19 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       alert("配車候補リストから使う車を選択してください。");
       return;
     }
+    const mergedSeatAssignments = { ...(seatAssignments || {}) };
+    selectedFleetRows.forEach(row => {
+      const totalSeats = totalSeatsForRow(row);
+      for (let seatIdx = 0; seatIdx < totalSeats; seatIdx += 1) {
+        const key = seatKeyFor(row, seatIdx);
+        const rid = getSeatAssignedRid(row, seatIdx, mergedSeatAssignments);
+        if (rid) mergedSeatAssignments[key] = rid;
+      }
+    });
     const payload = {
       confirmed: true,
       selectedFleetUserIds: selectedFleetUserIds.map(v=>String(v||"")).filter(Boolean),
-      seatAssignments: seatAssignments || {},
+      seatAssignments: mergedSeatAssignments,
       carMeta: carMeta || {},
       riderLabelMap: Object.fromEntries(riderOptions.map(opt => [opt.id, opt.label])),
     };
@@ -2920,7 +2953,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
               const totalSeats = totalSeatsForRow(row);
               const summary = rowSeatSummary(row);
               const seatChips = Array.from({length: totalSeats}, (_, seatIdx)=>{
-                const rid = String(seatAssignments[seatKeyFor(row, seatIdx)] || "");
+                const rid = getSeatAssignedRid(row, seatIdx);
                 const name = getAssignedLabel(rid) || "未設定";
                 const role = riderOptionMap[rid]?.role || "";
                 const bg = role === "adult" ? "#ECFDF3" : role === "child" ? "#EFF6FF" : role === "coach" ? "#F5F3FF" : "#F8FAFC";
@@ -2945,16 +2978,19 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
               );
             }),
         (() => {
-          const assignedIds = new Set(
-            Object.values(seatAssignments || {})
-              .map(v => String(v || ""))
-              .filter(Boolean)
-          );
+          const assignedAll = [];
+          selectedFleetRows.forEach(row => {
+            const totalSeats = totalSeatsForRow(row);
+            for (let seatIdx = 0; seatIdx < totalSeats; seatIdx += 1) {
+              const rid = getSeatAssignedRid(row, seatIdx);
+              if (rid) assignedAll.push(rid);
+            }
+          });
+          const assignedIds = new Set(assignedAll);
           const assignedChildIds = new Set(
-            Object.values(seatAssignments || {})
-              .map(v => String(v || ""))
-              .filter(v => v.startsWith("member:"))
-              .map(v => v.replace(/^member:/, ""))
+            assignedAll
+              .filter(v => String(v || "").startsWith("member:"))
+              .map(v => String(v || "").replace(/^member:/, ""))
           );
           const unassignedChildren = participants.filter(m => !assignedChildIds.has(String(m.id)));
           if (unassignedChildren.length > 0) {
@@ -3012,7 +3048,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             const totalSeats = totalSeatsForRow(row);
             const summary = rowSeatSummary(row);
             const seatChips = Array.from({length: totalSeats}, (_, seatIdx)=>{
-              const rid = String(seatAssignments[seatKeyFor(row, seatIdx)] || "");
+              const rid = getSeatAssignedRid(row, seatIdx);
               const name = getAssignedLabel(rid) || "未設定";
               const role = riderOptionMap[rid]?.role || "";
               const bg = role === "adult" ? "#ECFDF3" : role === "child" ? "#EFF6FF" : role === "coach" ? "#F5F3FF" : "#F8FAFC";
