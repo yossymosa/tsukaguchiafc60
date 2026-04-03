@@ -1956,8 +1956,8 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       return alert("荷物車として、家族で行くかどうかを選択してください");
     }
     const capNum = Number(my.capacity || 0);
-    if(normalizedAvailable==="可" && !(capNum>0)){
-      return alert("何人乗せられるか（運転手を含む）を入力してください");
+    if(normalizedAvailable==="可" && (my.capacity==="" || Number.isNaN(capNum) || capNum<0)){
+      return alert("何人乗せられるか（運転手を含む）を0以上で入力してください");
     }
     if(normalizedAvailable==="家族で行く" && (my.capacity==="" || Number.isNaN(capNum) || capNum<0)){
       return alert("家族で行く場合の受け入れ人数（0以上）を選択してください");
@@ -2029,8 +2029,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const familyRideCars = effectiveCarpools.filter(cp => {
     const available = String(cp?.available || "").trim();
     const familyPlan = String(cp?.familyPlan || "").trim() === "行く";
-    const cap = Math.max(0, Number(cp?.capacity || 0));
-    return cap > 0 && (available === "家族で行く" || (!available && familyPlan));
+    return (available === "家族で行く" || (!available && familyPlan));
   });
   const familySeatSummaryByUserId = userId => {
     const cp = familyRideCars.find(x => String(x.userId || "") === String(userId || ""));
@@ -2050,8 +2049,17 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     ...familyRideCars.map(car => ({ kind: "family", ci: null, car }))
   ];
   const allFleetUserIds = fleetRows.map(row => String(row.car.userId || ""));
+  const mandatoryFleetUserIds = new Set(
+    fleetRows
+      .filter(row => row.kind === "family" || isLuggageCar(row?.car?.userName))
+      .map(row => String(row?.car?.userId || ""))
+      .filter(Boolean)
+  );
   const selectedFleetSet = new Set((selectedFleetUserIds || []).map(v=>String(v || "")));
-  const selectedFleetRows = fleetRows.filter(row => selectedFleetSet.has(String(row.car.userId || "")));
+  const selectedFleetRows = fleetRows.filter(row => {
+    const uid = String(row?.car?.userId || "");
+    return selectedFleetSet.has(uid) || mandatoryFleetUserIds.has(uid);
+  });
   const selectedDispatchRows = selectedFleetRows.filter(row => row.kind === "dispatch");
   const selectedFamilyRows = selectedFleetRows.filter(row => row.kind === "family");
   const selectedFamilyRideCars = selectedFamilyRows.map(row => row.car);
@@ -2061,10 +2069,12 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     setSelectedFleetUserIds(prev => {
       const prevList = Array.isArray(prev) ? prev.map(v => String(v || "")) : [];
       const kept = prevList.filter(id => allFleetUserIds.includes(id));
-      if (kept.length > 0) return kept;
-      return allFleetUserIds;
+      if (kept.length > 0) {
+        return [...new Set([...kept, ...Array.from(mandatoryFleetUserIds)])];
+      }
+      return [...new Set([...allFleetUserIds, ...Array.from(mandatoryFleetUserIds)])];
     });
-  }, [allFleetUserIds.join("|")]);
+  }, [allFleetUserIds.join("|"), Array.from(mandatoryFleetUserIds).join("|")]);
   useEffect(() => {
     if (allFleetUserIds.length > 0 && selectedFleetUserIds.length === 0) return;
     const allowedDispatch = new Set(selectedDispatchRows.map(row => row.ci));
@@ -2524,7 +2534,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             ? "何人乗せられますか？（運転手を含む）"
             : "空きがある場合何人載せれますか（事情があり載せれない場合は0を選んでください）"),
         h("div",{style:{display:"flex",gap:8}},
-          ((isCurrentLuggageCar || my.available==="可") ? [1,2,3,4,5,6] : [0,1,2,3,4,5,6]).map(n=>
+          [0,1,2,3,4,5,6].map(n=>
             h("button",{key:n,onClick:()=>setMy(p=>({...p,capacity:String(n)})),
               style:{flex:1,padding:"10px 0",border:`2px solid ${my.capacity===String(n)?"#2196F3":"#eee"}`,
                 borderRadius:10,background:my.capacity===String(n)?"#2196F3":"#fff",
@@ -2602,7 +2612,8 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           .map((row,idx)=>{
           const car = row.car;
           const carId = String(car.userId || "");
-          const selected = selectedFleetSet.has(carId);
+          const mandatory = mandatoryFleetUserIds.has(carId);
+          const selected = selectedFleetSet.has(carId) || mandatory;
           const summary = rowSeatSummary(row);
           const luggage = isLuggageCar(car.userName);
           return h("div",{key:"fleet-"+(car.userId||idx),style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"6px 4px",borderBottom:idx<fleetRows.length-1?"1px dashed #E2E8F0":"none"}},
@@ -2618,6 +2629,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
               `定員${summary.cap} / 空席${summary.free}`),
             h("button",{
               onClick:()=>setSelectedFleetUserIds(prev=>{
+                if (mandatory) return prev;
                 const cur = Array.isArray(prev) ? prev.map(v=>String(v||"")) : [];
                 return cur.includes(carId) ? cur.filter(v => v !== carId) : [...cur, carId];
               }),
@@ -2625,9 +2637,9 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                 border:"1px solid " + (selected ? "#1D4ED8" : "#CBD5E1"),
                 background:selected ? "#DBEAFE" : "#fff",
                 color:selected ? "#1D4ED8" : "#475569",
-                borderRadius:999,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"
+                borderRadius:999,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:mandatory?"not-allowed":"pointer",opacity:mandatory?0.9:1
               }
-            }, selected ? "選択中" : "選択")
+            }, mandatory ? "必須" : (selected ? "選択中" : "選択"))
           );
         })
       ),
@@ -4754,6 +4766,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
