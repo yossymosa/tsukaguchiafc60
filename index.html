@@ -2131,6 +2131,10 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     const rawFamily = parseFamilyMembers(cp.familyMembers || cp.familyComposition || []);
     const hasGoingFamily = rawFamily.length > 0 || familyPlan === "行く";
     const luggageCar = isLuggageCar(cp.userName || "");
+    const hasParentAlias = rawFamily.some(name => {
+      const n = normalizeName(name);
+      return n === "父" || n === "母" || /父$|母$/.test(n);
+    });
     const includeSelf = luggageCar
       ? true
       : (available === "可" || available === "家族で行く");
@@ -2142,7 +2146,9 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       family.forEach(name => goingPeopleNameSet.add(name));
     }
     const userName = String(cp.userName || "").trim();
-    if (includeSelf && userName) goingPeopleNameSet.add(userName);
+    if (includeSelf && userName && !(includeFamily && hasParentAlias)) {
+      goingPeopleNameSet.add(userName);
+    }
     if (luggageCar) {
       if (userName) luggageRideNameKeySet.add(normalizeName(userName));
       if (includeFamily) {
@@ -2189,6 +2195,22 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     if (!target) return "";
     const hit = nonChildRiderOptions.find(opt => normalizeName(opt.name) === target);
     return hit ? hit.id : "";
+  };
+  const getFamilyDisplayNamesForCar = car => {
+    const raw = parseFamilyMembers(car?.familyMembers || car?.familyComposition || []);
+    return raw
+      .map(name => formatFamilyDisplayName(name, car?.userName || ""))
+      .filter(Boolean);
+  };
+  const getPreferredDriverIds = car => {
+    const familyDisplay = getFamilyDisplayNamesForCar(car);
+    const parentDisplay = familyDisplay.filter(name => /父$|母$/.test(normalizeName(name)));
+    const ids = [
+      ...parentDisplay.map(findPersonOptionId),
+      ...familyDisplay.map(findPersonOptionId),
+      findPersonOptionId(car?.userName || "")
+    ].filter(Boolean);
+    return [...new Set(ids)];
   };
   const getRowAssignedIds = row => {
     const totalSeats = totalSeatsForRow(row);
@@ -2237,11 +2259,10 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         const dKey = seatKeyFor(row, 0);
         const totalSeats = totalSeatsForRow(row);
         if (!next[dKey]) {
-          const defaultDriverId =
-            findPersonOptionId(row?.car?.userName || "") ||
-            riderOptions.find(opt => opt.role !== "child")?.id ||
-            "";
-          if (defaultDriverId && !used.has(defaultDriverId)) {
+          const preferredIds = getPreferredDriverIds(row?.car || {});
+          const fallbackIds = riderOptions.filter(opt => opt.role !== "child").map(opt => opt.id);
+          const defaultDriverId = [...preferredIds, ...fallbackIds].find(id => id && !used.has(id)) || "";
+          if (defaultDriverId) {
             next[dKey] = defaultDriverId;
             used.add(defaultDriverId);
             changed = true;
@@ -2620,11 +2641,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           const summary = rowSeatSummary(row);
           const meta = getMeta(car.userId);
           const highwayOk = hasEnoughAdultsForHighwayRow(row);
-          const familyDriverIds = [
-            findPersonOptionId(car.userName || ""),
-            ...parseFamilyMembers(car.familyMembers || car.familyComposition || []).map(findPersonOptionId)
-          ].filter(Boolean);
-          const uniqDriverIds = [...new Set(familyDriverIds)];
+          const uniqDriverIds = getPreferredDriverIds(car);
           const fallbackDriverIds = riderOptions.filter(opt=>opt.role!=="child").map(opt=>opt.id);
           const driverOptionIds = uniqDriverIds.length > 0 ? uniqDriverIds : fallbackDriverIds;
           const seatRows = seatLayoutRows(totalSeats);
@@ -2744,6 +2761,11 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
               );
             }),
         (() => {
+          const assignedIds = new Set(
+            Object.values(seatAssignments || {})
+              .map(v => String(v || ""))
+              .filter(Boolean)
+          );
           const assignedChildIds = new Set(
             Object.values(seatAssignments || {})
               .map(v => String(v || ""))
@@ -2751,9 +2773,24 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
               .map(v => v.replace(/^member:/, ""))
           );
           const unassignedChildren = participants.filter(m => !assignedChildIds.has(String(m.id)));
-          if (unassignedChildren.length === 0) return null;
-          return h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#DC2626"}},
-            "未割り当て: " + unassignedChildren.map(m=>m.name).join("、"));
+          if (unassignedChildren.length > 0) {
+            return h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#DC2626"}},
+              "未割り当て: " + unassignedChildren.map(m=>m.name).join("、"));
+          }
+          const remainingPeople = riderOptions.filter(opt => !assignedIds.has(String(opt.id || "")));
+          if (remainingPeople.length === 0) {
+            return h("div",{style:{marginTop:8,fontSize:11,fontWeight:800,color:"#16A34A"}},
+              "割り当てる人はいません（全員割り当て済み）");
+          }
+          const seatTotal = selectedFleetRows.reduce((sum, row) => sum + totalSeatsForRow(row), 0);
+          const seatUsed = selectedFleetRows.reduce((sum, row) => sum + getRowAssignedIds(row).length, 0);
+          const emptySeatCount = Math.max(0, seatTotal - seatUsed);
+          if (emptySeatCount === 0) {
+            return h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#64748B"}},
+              `全席割り当て済み（未割当候補 ${remainingPeople.length}名）`);
+          }
+          return h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#2563EB"}},
+            `未割当候補 ${remainingPeople.length}名 / 空席 ${emptySeatCount}`);
         })()
       ),
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:12}},
@@ -4717,6 +4754,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
