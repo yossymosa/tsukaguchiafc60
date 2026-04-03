@@ -1282,12 +1282,23 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
     return (parts[0] || String(name)) + "さん";
   };
   const cleanTime = v => {
-    const s = String(v || "").trim();
-    if (!s) return "";
-    if (s.includes("1899-12-30")) return "";
-    if (/^00:00(:00)?$/.test(s)) return "";
-    const m = s.match(/(\d{2}:\d{2})/);
-    return m ? m[1] : s;
+    const raw = String(v || "").trim();
+    if (!raw) return "";
+    const s = toHalfWidthDigits(raw).replace(/：/g, ":");
+    if (/1899[\/\-]12[\/\-]30/.test(s) || /1899年12月30日/.test(s)) return "";
+    if (/^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}$/.test(s)) return "";
+    const hmOnly = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (hmOnly) return `${String(Number(hmOnly[1])).padStart(2, "0")}:${hmOnly[2]}`;
+    const isoTime = s.match(/T(\d{1,2}):(\d{2})(?::\d{2})?/);
+    if (isoTime) return `${String(Number(isoTime[1])).padStart(2, "0")}:${isoTime[2]}`;
+    const plainTime = s.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+    if (plainTime) return `${String(Number(plainTime[1])).padStart(2, "0")}:${plainTime[2]}`;
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) {
+      if (d.getFullYear() === 1899 && d.getMonth() === 11 && d.getDate() === 30) return "";
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    }
+    return "";
   };
   const normalizePerson = name => String(toSurname(name || "")).replace(/\s+/g, "").trim();
   const dutyCountMap = {};
@@ -1583,7 +1594,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
     !isEventSchedule && ([cleanTime(form.gatherTime), cleanTime(form.upTime), cleanTime(form.matchTime)].some(Boolean)) && h("div", { style: { background: "linear-gradient(135deg,#1D4ED8,#0F172A)", borderRadius: 12, padding: 14, marginBottom: 12 } },
       [["集合", cleanTime(form.gatherTime)], ["アップ", cleanTime(form.upTime)], ["試合開始", cleanTime(form.matchTime)]].filter(([, v]) => v).map(([l, v]) =>
         h("div", { key: l, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4, color: "#fff" } },
-          h("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.7", width: 60 } }, l),
+          h("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.7)", width: 60 } }, l),
           h("div", { style: { fontSize: 15, fontWeight: 900 } }, v)
         )
       )
@@ -4108,6 +4119,12 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
       attachmentUrl:n.attachmentUrl||"",
       attachmentName:n.attachmentName||"",
     }));
+  const attachmentPreviewUrl = url => String(url || "").replace("/view?usp=sharing", "/preview").replace("/view", "/preview");
+  const isPdfAttachment = item => {
+    const url = String(item?.attachmentUrl || "");
+    const name = String(item?.attachmentName || "");
+    return /\.pdf($|[?#])/i.test(url) || /\.pdf($|[?#])/i.test(name);
+  };
 
   const uploadAttachment = async (file) => {
     if(!file) return {attachmentUrl:"",attachmentName:""};
@@ -4199,9 +4216,16 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
       ),
       opened ? h("div",{style:{padding:"0 14px 14px",borderTop:"1px solid #F1F5F9"}},
         h("div",{style:{fontSize:13,color:"#334155",lineHeight:1.8,whiteSpace:"pre-wrap",marginTop:10}},item.content||"（内容なし）"),
-        item.attachmentUrl ? h("a",{href:item.attachmentUrl,target:"_blank",rel:"noopener noreferrer",
-          style:{display:"inline-flex",alignItems:"center",marginTop:10,padding:"6px 10px",borderRadius:8,background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:700,textDecoration:"none"}},
-          "📎 " + (item.attachmentName || "添付資料を開く")
+        item.attachmentUrl ? h("div",{style:{marginTop:10}},
+          h("a",{href:item.attachmentUrl,target:"_blank",rel:"noopener noreferrer",
+            style:{display:"inline-flex",alignItems:"center",padding:"6px 10px",borderRadius:8,background:"#DBEAFE",color:"#1D4ED8",fontSize:12,fontWeight:700,textDecoration:"none",wordBreak:"break-all"}},
+            "📎 " + (item.attachmentName || "添付資料を開く")
+          ),
+          isPdfAttachment(item) && attachmentPreviewUrl(item.attachmentUrl) ? h("iframe",{
+            src: attachmentPreviewUrl(item.attachmentUrl),
+            title: item.attachmentName || item.title || "添付PDF",
+            style:{width:"100%",height:360,border:"none",borderRadius:10,background:"#fff",marginTop:8}
+          }) : null
         ) : null,
         (item.date||item.author) ? h("div",{style:{fontSize:11,color:"#94A3B8",marginTop:10}},
           (item.date?fmt(item.date).short:"") + (item.author?` / ${item.author}`:"")
