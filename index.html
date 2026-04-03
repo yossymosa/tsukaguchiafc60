@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxDpDM06zUWnsfsLI_RlBpS_c3ioPMes5HMXPAO-SnMUlrEqw_XCNRtt-vQU2gSMy-I/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxaaEJwrSmHkglQqT8x_n1yCBxlrTWaJO3U56ujx1ySmHIK8eiaQBNnB5FM_9imNium/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -1691,6 +1691,26 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
 function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const ROLE_COLORS = { child:"#1D4ED8", adult:"#16A34A", coach:"#7C3AED" };
   const normalizeName = v => String(v||"").replace(/\s+/g," ").replace(/さん$/,"").trim();
+  const dedupeCarpoolRows = rows => {
+    const byUser = {};
+    (rows || []).forEach(row => {
+      const uid = String(row?.userId || "").trim();
+      if (!uid) return;
+      byUser[uid] = row;
+    });
+    return Object.values(byUser);
+  };
+  const formatDateTimeJa = value => {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${y}/${m}/${day} ${hh}:${mm}`;
+  };
   const getSurname = name => {
     const base = normalizeName(name);
     if (!base) return "";
@@ -1727,6 +1747,8 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const [familyChoicePool, setFamilyChoicePool] = useState(() => mergeNameList(profileFamilyChoices));
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
+  const [planSaving, setPlanSaving] = useState(false);
+  const [confirmedPlan, setConfirmedPlan] = useState(null);
   const [attend, setAttend] = useState({});
   // 車ごとの座席割り当て { "kind:userId:slot": riderId }
   const [seatAssignments, setSeatAssignments] = useState({});
@@ -1846,6 +1868,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     let cancelled=false;
     setLoading(true);
     setLoadError("");
+    setConfirmedPlan(null);
     const timeoutId = setTimeout(() => {
       if (cancelled) return;
       setLoadError("配車データの取得に時間がかかっています。再読み込みしてください。");
@@ -1853,15 +1876,19 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     }, 12000);
     Promise.allSettled([
       api("getCarpool",{scheduleId:schedule.id}),
-      api("getAttend",{scheduleId:schedule.id})
+      api("getAttend",{scheduleId:schedule.id}),
+      api("getCarpoolPlan",{scheduleId:schedule.id})
     ]).then(results=>{
       if(cancelled) return;
-      const [carpoolRes, attendRes] = results;
+      const [carpoolRes, attendRes, planRes] = results;
       const cr = carpoolRes.status === "fulfilled" ? (carpoolRes.value || {}) : { carpools: [] };
       const ar = attendRes.status === "fulfilled" ? (attendRes.value || {}) : { attend: [] };
+      const pr = planRes.status === "fulfilled" ? (planRes.value || {}) : { plan: null };
       try {
-        setCarpools(cr.carpools||[]);
-        const mine=(cr.carpools||[]).find(c=>String(c.userId)===String(user.id));
+        const dedupedCarpools = dedupeCarpoolRows(cr.carpools||[]);
+        setCarpools(dedupedCarpools);
+        const mineRows = dedupedCarpools.filter(c=>String(c.userId||"").trim()===String(user.id||"").trim());
+        const mine = mineRows.length ? mineRows[mineRows.length - 1] : null;
         if(mine){
           const mineFamilyMembers = parseFamilyMembers(mine.familyMembers||[]);
           const availableRaw = String(mine.available || "").trim();
@@ -1881,10 +1908,25 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           });
           setFamilyChoicePool(prev => mergeNameList(prev, mineFamilyMembers));
         }
+        const planObj = (pr.plan && typeof pr.plan === "object") ? pr.plan : null;
+        if (planObj && planObj.confirmed) {
+          setConfirmedPlan(planObj);
+          if (planObj.seatAssignments && typeof planObj.seatAssignments === "object") {
+            setSeatAssignments(planObj.seatAssignments);
+          }
+          if (planObj.carMeta && typeof planObj.carMeta === "object") {
+            setCarMeta(planObj.carMeta);
+          }
+          if (Array.isArray(planObj.selectedFleetUserIds)) {
+            setSelectedFleetUserIds(planObj.selectedFleetUserIds.map(v=>String(v||"")).filter(Boolean));
+          }
+        } else {
+          setConfirmedPlan(null);
+        }
         const map={};
         (ar.attend||[]).forEach(a=>{map[a.memberId]=a.status;});
         setAttend(map);
-        if (carpoolRes.status !== "fulfilled" || attendRes.status !== "fulfilled") {
+        if (carpoolRes.status !== "fulfilled" || attendRes.status !== "fulfilled" || planRes.status !== "fulfilled") {
           setLoadError("一部の配車データ取得に失敗しました。再読み込みで更新できます。");
         }
       } finally {
@@ -1943,14 +1985,18 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       familyMembers: selectedFamilyMembers
     };
     await api("saveCarpool",{scheduleId:schedule.id,userId:user.id,userName:user.name,...payload});
-    const next=[...carpools.filter(c=>c.userId!==user.id),{scheduleId:schedule.id,userId:user.id,userName:user.name,...payload}];
-    setCarpools(next);
+    const next=[
+      ...carpools.filter(c=>String(c.userId||"").trim()!==String(user.id||"").trim()),
+      {scheduleId:schedule.id,userId:user.id,userName:user.name,...payload}
+    ];
+    setCarpools(dedupeCarpoolRows(next));
     setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2000);
   };
 
-  const total=carpools.filter(c=>c.available==="可").reduce((a,c)=>a+Number(c.capacity||0),0);
+  const effectiveCarpools = dedupeCarpoolRows(carpools);
+  const total=effectiveCarpools.filter(c=>c.available==="可").reduce((a,c)=>a+Number(c.capacity||0),0);
   // 配車可の車リスト（定員は運転手を含む）
-  const cars=carpools.filter(c=>c.available==="可"&&Number(c.capacity||0)>0);
+  const cars=effectiveCarpools.filter(c=>c.available==="可"&&Number(c.capacity||0)>0);
   const carIndexByUserId = {};
   cars.forEach((c, i) => { carIndexByUserId[String(c.userId || "")] = i; });
   // 出席する子供全体（出欠○）
@@ -1961,7 +2007,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const familyOwnRideByMemberId = {};
   const userById = {};
   (users || []).forEach(u => { userById[String(u.id || "")] = u; });
-  carpools.forEach(cp => {
+  effectiveCarpools.forEach(cp => {
     const profile = userById[String(cp.userId || "")] || {};
     const memberId = String(profile.memberId || "").trim();
     if (!memberId) return;
@@ -1980,7 +2026,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     }
   });
   const familyOwnRideMemberIds = new Set(Object.keys(familyOwnRideByMemberId));
-  const familyRideCars = carpools.filter(cp => {
+  const familyRideCars = effectiveCarpools.filter(cp => {
     const available = String(cp?.available || "").trim();
     const familyPlan = String(cp?.familyPlan || "").trim() === "行く";
     const cap = Math.max(0, Number(cp?.capacity || 0));
@@ -2079,7 +2125,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const luggageRideNameKeySet = new Set();
   const luggageRideChildIdSet = new Set();
   const goingPeopleNameSet = new Set();
-  carpools.forEach(cp => {
+  effectiveCarpools.forEach(cp => {
     const available = String(cp.available || "").trim();
     const familyPlan = String(cp.familyPlan || "").trim();
     const rawFamily = parseFamilyMembers(cp.familyMembers || cp.familyComposition || []);
@@ -2250,6 +2296,55 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     alert(left > 0
       ? `自動割り当てしました（${assigned}名割当 / ${left}名未割当）`
       : `自動割り当てしました（${assigned}名）`);
+  };
+  const confirmCarpoolPlan = async () => {
+    if (!isAdmin) return;
+    if (selectedFleetRows.length === 0) {
+      alert("配車候補リストから使う車を選択してください。");
+      return;
+    }
+    const payload = {
+      confirmed: true,
+      selectedFleetUserIds: selectedFleetUserIds.map(v=>String(v||"")).filter(Boolean),
+      seatAssignments: seatAssignments || {},
+      carMeta: carMeta || {},
+      riderLabelMap: Object.fromEntries(riderOptions.map(opt => [opt.id, opt.label])),
+    };
+    setPlanSaving(true);
+    try {
+      const res = await api("saveCarpoolPlan", {
+        scheduleId: schedule.id,
+        userId: user.id,
+        userName: user.name,
+        plan: payload
+      });
+      const savedAt = String(res.savedAt || new Date().toISOString());
+      setConfirmedPlan({
+        ...payload,
+        confirmed: true,
+        confirmedAt: savedAt,
+        updatedAt: savedAt,
+        confirmedByName: user.name,
+        updatedByName: user.name,
+        updatedBy: user.id
+      });
+      alert("配車を確定しました。メンバーにも表示されます。");
+    } catch (e) {
+      alert("配車確定エラー: " + (e.message || e));
+    } finally {
+      setPlanSaving(false);
+    }
+  };
+  const confirmedAtLabel = formatDateTimeJa(
+    confirmedPlan?.confirmedAt || confirmedPlan?.updatedAt || ""
+  );
+  const confirmedByLabel = String(confirmedPlan?.confirmedByName || confirmedPlan?.updatedByName || "");
+  const getAssignedLabel = rid => {
+    const id = String(rid || "");
+    if (!id) return "";
+    return riderOptionMap[id]?.label
+      || (confirmedPlan?.riderLabelMap ? String(confirmedPlan.riderLabelMap[id] || "") : "")
+      || "";
   };
   const linkedChild = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
   useEffect(() => {
@@ -2432,24 +2527,40 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"集計"),
         h("div",{style:{fontSize:13,fontWeight:700,color:"#4CAF50"}},"合計 "+total+"人")),
-      carpools.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:12}},"まだ回答がありません"),
-      carpools.map(cp=>
-        (() => {
-          const fam = parseFamilyMembers(cp.familyMembers || []);
-          return h("div",{key:cp.userId,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,
-            padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
-            h("div",{style:{flex:1}},
-              h("div",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},cp.userName||"不明"),
-              (fam.length>0 || cp.familyPlan || String(cp.available || "")==="家族で行く") && h("div",{style:{fontSize:11,color:"#64748B",marginTop:2}},
-                "行く人: " + (fam.length ? fam.join("、") : "未入力"))
-            ),
-          h("div",{style:{fontSize:12,fontWeight:700,
-            color:cp.available==="可"?"#4CAF50":cp.available==="不可"?"#F44336":cp.available==="家族で行く"?"#2563EB":"#FF9800"}},cp.available),
-          cp.available==="可"&&h("div",{style:{fontSize:12,color:"#2196F3",fontWeight:700}},cp.capacity+"人"),
-          cp.available==="家族で行く"&&h("div",{style:{fontSize:12,color:"#2563EB",fontWeight:700}},`空き${Number(cp.capacity||0)}人`),
-          cp.note&&h("div",{style:{fontSize:11,color:"#aaa",flex:1,textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},cp.note));
-        })()),
-      !isAdmin&&carpools.length===0&&h("div",{})),
+      effectiveCarpools.length===0
+        ? h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:12}},"まだ回答がありません")
+        : h("div",{style:{overflowX:"auto"}},
+            h("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:560}},
+              h("thead",{},
+                h("tr",{style:{background:"#F8FAFC"}},
+                  ["名前","可否","人数","行く人（家族）","備考"].map(col=>
+                    h("th",{key:"th-"+col,style:{textAlign:"left",padding:"8px 10px",borderBottom:"1px solid #E2E8F0",color:"#64748B",fontWeight:800,fontSize:11,whiteSpace:"nowrap"}},col))
+                )
+              ),
+              h("tbody",{},
+                [...effectiveCarpools]
+                  .sort((a,b)=>String(a.userName||"").localeCompare(String(b.userName||""),"ja"))
+                  .map(cp=>{
+                    const fam = parseFamilyMembers(cp.familyMembers || [])
+                      .map(name => formatFamilyDisplayName(name, cp.userName || ""));
+                    const availColor = cp.available==="可" ? "#16A34A" : cp.available==="不可" ? "#DC2626" : "#2563EB";
+                    const capLabel = cp.available==="可"
+                      ? `${Number(cp.capacity||0)}人`
+                      : (cp.available==="家族で行く" ? `空き${Number(cp.capacity||0)}人` : "-");
+                    return h("tr",{key:"cp-row-"+String(cp.userId||"")},
+                      h("td",{style:{padding:"8px 10px",borderBottom:"1px solid #F1F5F9",fontWeight:700,color:"#0F172A",whiteSpace:"nowrap"}},cp.userName||"-"),
+                      h("td",{style:{padding:"8px 10px",borderBottom:"1px solid #F1F5F9",fontWeight:800,color:availColor,whiteSpace:"nowrap"}},cp.available||"-"),
+                      h("td",{style:{padding:"8px 10px",borderBottom:"1px solid #F1F5F9",fontWeight:700,color:"#334155",whiteSpace:"nowrap"}},capLabel),
+                      h("td",{style:{padding:"8px 10px",borderBottom:"1px solid #F1F5F9",color:"#334155",maxWidth:240,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},
+                        fam.length ? fam.join("、") : "未入力"),
+                      h("td",{style:{padding:"8px 10px",borderBottom:"1px solid #F1F5F9",color:"#64748B",maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},
+                        cp.note || "-")
+                    );
+                  })
+              )
+            )
+          )
+    ),
 
     // 配車割り当て（adminのみ）
     isAdmin&&fleetRows.length>0&&attendingChildren.length>0&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -2623,7 +2734,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
               const summary = rowSeatSummary(row);
               const assignedNames = Array.from({length: totalSeats}, (_, seatIdx)=>{
                 const rid = String(seatAssignments[seatKeyFor(row, seatIdx)] || "");
-                return riderOptionMap[rid]?.label || "";
+                return getAssignedLabel(rid);
               }).filter(Boolean);
               return h("div",{key:"summary-"+seatRowKey(row),style:{marginBottom:8,padding:"8px 10px",background:"#fff",borderRadius:10,border:isLuggageCar(car.userName)?"1px solid #F59E0B":"1px solid #E2E8F0"}},
                 h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:3}},
@@ -2644,7 +2755,53 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           return h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:"#DC2626"}},
             "未割り当て: " + unassignedChildren.map(m=>m.name).join("、"));
         })()
-      ))
+      ),
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:12}},
+        h("div",{style:{fontSize:11,color:"#64748B"}},
+          confirmedPlan?.confirmed
+            ? `確定済: ${confirmedAtLabel || "-"} ${confirmedByLabel ? " / " + confirmedByLabel : ""}`
+            : "未確定（確定するとメンバーにも表示されます）"),
+        h("button",{
+          onClick:confirmCarpoolPlan,
+          disabled:planSaving || selectedFleetRows.length===0,
+          style:{
+            border:"1px solid #1D4ED8",
+            background:planSaving ? "#BFDBFE" : "#1D4ED8",
+            color:"#fff",
+            borderRadius:10,
+            padding:"8px 12px",
+            fontSize:12,
+            fontWeight:800,
+            cursor:(planSaving || selectedFleetRows.length===0) ? "not-allowed" : "pointer",
+            opacity:(planSaving || selectedFleetRows.length===0) ? 0.7 : 1
+          }
+        }, planSaving ? "確定中..." : "この内容で配車確定")
+      )
+    ),
+    (!isAdmin && confirmedPlan?.confirmed) && h("div",{style:{background:"#fff",borderRadius:16,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#4F46E5",letterSpacing:1}},"🚗 確定した配車"),
+        h("div",{style:{fontSize:11,color:"#64748B"}},
+          `${confirmedAtLabel || "-"}${confirmedByLabel ? " / " + confirmedByLabel : ""}`)
+      ),
+      selectedFleetRows.length===0
+        ? h("div",{style:{fontSize:12,color:"#64748B"}},"配車データ準備中です")
+        : selectedFleetRows.map(row=>{
+            const car = row.car;
+            const totalSeats = totalSeatsForRow(row);
+            const summary = rowSeatSummary(row);
+            const assignedNames = Array.from({length: totalSeats}, (_, seatIdx)=>{
+              const rid = String(seatAssignments[seatKeyFor(row, seatIdx)] || "");
+              return getAssignedLabel(rid);
+            }).filter(Boolean);
+            return h("div",{key:"member-summary-"+seatRowKey(row),style:{marginBottom:8,padding:"8px 10px",background:"#F8FAFC",borderRadius:10,border:isLuggageCar(car.userName)?"1px solid #F59E0B":"1px solid #E2E8F0"}},
+              h("div",{style:{fontSize:12,fontWeight:800,color:"#1a1a2e",marginBottom:3}},
+                (car.userName||"-")+" の車"+(isLuggageCar(car.userName)?"（荷物車）":"")),
+              h("div",{style:{fontSize:12,color:"#334155"}},
+                (assignedNames.length ? assignedNames.join(" / ") : "未設定") + `  ・ 空席${summary.free}`)
+            );
+          })
+    )
   );
 }
 
@@ -4560,6 +4717,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
+
 
 
 
