@@ -1738,6 +1738,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const profileFamilyChoices = parseFamilyMembers(currentUserProfile.familyMembers || currentUserProfile.familyComposition || []);
   const luggageLabel = String(schedule.luggagePerson || "").trim();
   const luggageKey = normalizeName(luggageLabel);
+  const luggageSurnameKey = getSurname(luggageLabel);
   const [carpools, setCarpools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -1802,8 +1803,11 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     return String(m.coach || "").trim();
   };
   const isLuggageCar = carUserName => {
-    if (!luggageKey) return false;
-    return normalizeName(carUserName) === luggageKey;
+    const userNameKey = normalizeName(carUserName);
+    const userSurnameKey = getSurname(carUserName);
+    if (luggageKey && userNameKey && luggageKey === userNameKey) return true;
+    if (luggageSurnameKey && userSurnameKey && luggageSurnameKey === userSurnameKey) return true;
+    return false;
   };
   const isCurrentLuggageCar = isLuggageCar(currentUserProfile.name || user.name || "");
   // 高速利用時は「運転手 + 同乗大人1名以上（合計大人2名）」を必須にする
@@ -1997,7 +2001,15 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const effectiveCarpools = dedupeCarpoolRows(carpools);
   const total=effectiveCarpools.filter(c=>c.available==="可").reduce((a,c)=>a+Number(c.capacity||0),0);
   // 配車可の車リスト（定員は運転手を含む）
-  const cars=effectiveCarpools.filter(c=>c.available==="可"&&Number(c.capacity||0)>0);
+  const cars=effectiveCarpools.filter(c=>{
+    const available = String(c.available || "").trim();
+    const cap = Number(c.capacity || 0);
+    const luggage = isLuggageCar(c.userName || "");
+    if (luggage) {
+      return (available === "可" || !!String(c.familyPlan || "").trim()) && !Number.isNaN(cap) && cap >= 0;
+    }
+    return available === "可" && cap > 0;
+  });
   const carIndexByUserId = {};
   cars.forEach((c, i) => { carIndexByUserId[String(c.userId || "")] = i; });
   // 出席する子供全体（出欠○）
@@ -2116,11 +2128,6 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const participants = attendingChildren;
   const seatRowKey = row => `${row.kind}:${String(row?.car?.userId || "")}`;
   const seatKeyFor = (row, slotIndex) => `${seatRowKey(row)}:${slotIndex}`;
-  const totalSeatsForRow = row => {
-    const cap = Math.max(0, Number(row?.car?.capacity || 0));
-    if (row?.kind === "dispatch") return Math.max(1, cap); // 定員は運転手含む
-    return Math.max(1, cap + 1); // 家族車は受入枠 + 運転手枠
-  };
   const scheduleCoachNames = String(schedule.coach || "")
     .split(/[、,\n\/]/)
     .map(v => String(v || "").trim())
@@ -2200,7 +2207,6 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const riderOptionMap = {};
   riderOptions.forEach(opt => { riderOptionMap[opt.id] = opt; });
   const riderOptionsKey = riderOptions.map(o => o.id).join("|");
-  const selectedFleetRowsKey = selectedFleetRows.map(row => `${seatRowKey(row)}:${totalSeatsForRow(row)}`).join("|");
   const findPersonOptionId = name => {
     const target = normalizeName(name);
     if (!target) return "";
@@ -2245,6 +2251,14 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     }
     return ids.filter(id => !!riderOptionMap[id]);
   };
+  const totalSeatsForRow = row => {
+    const cap = Math.max(0, Number(row?.car?.capacity || 0));
+    if (row?.kind === "dispatch") return Math.max(1, cap); // 定員は運転手含む
+    const fixedFamilySeatCount = getFixedFamilyRiderIds(row?.car || {}).length;
+    // 家族車のcapacityは「家族固定枠とは別の受け入れ人数」
+    return Math.max(1, fixedFamilySeatCount + cap);
+  };
+  const selectedFleetRowsKey = selectedFleetRows.map(row => `${seatRowKey(row)}:${totalSeatsForRow(row)}`).join("|");
   const getRowAssignedIds = row => {
     const totalSeats = totalSeatsForRow(row);
     const ids = [];
@@ -2608,13 +2622,20 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                   .map(cp=>{
                     const fam = parseFamilyMembers(cp.familyMembers || [])
                       .map(name => formatFamilyDisplayName(name, cp.userName || ""));
-                    const availColor = cp.available==="可" ? "#16A34A" : cp.available==="不可" ? "#DC2626" : "#2563EB";
-                    const capLabel = cp.available==="可"
+                    const isLuggage = isLuggageCar(cp.userName || "");
+                    const familyPlan = String(cp.familyPlan || "").trim();
+                    const availLabel = isLuggage
+                      ? (familyPlan === "行く" ? "可（荷物車・家族同伴）" : "可（荷物車）")
+                      : (cp.available || "-");
+                    const availColor = isLuggage
+                      ? "#92400E"
+                      : (cp.available==="可" ? "#16A34A" : cp.available==="不可" ? "#DC2626" : "#2563EB");
+                    const capLabel = isLuggage || cp.available==="可"
                       ? `${Number(cp.capacity||0)}人`
                       : (cp.available==="家族で行く" ? `空き${Number(cp.capacity||0)}人` : "-");
                     return h("tr",{key:"cp-row-"+String(cp.userId||"")},
                       h("td",{style:{padding:"8px 10px",borderBottom:"1px solid #F1F5F9",fontWeight:700,color:"#0F172A",whiteSpace:"nowrap"}},cp.userName||"-"),
-                      h("td",{style:{padding:"8px 10px",borderBottom:"1px solid #F1F5F9",fontWeight:800,color:availColor,whiteSpace:"nowrap"}},cp.available||"-"),
+                      h("td",{style:{padding:"8px 10px",borderBottom:"1px solid #F1F5F9",fontWeight:800,color:availColor,whiteSpace:"nowrap"}},availLabel),
                       h("td",{style:{padding:"8px 10px",borderBottom:"1px solid #F1F5F9",fontWeight:700,color:"#334155",whiteSpace:"nowrap"}},capLabel),
                       h("td",{style:{padding:"8px 10px",borderBottom:"1px solid #F1F5F9",color:"#334155",maxWidth:240,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},
                         fam.length ? fam.join("、") : "未入力"),
