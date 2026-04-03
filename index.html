@@ -1890,7 +1890,16 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       const ar = attendRes.status === "fulfilled" ? (attendRes.value || {}) : { attend: [] };
       const pr = planRes.status === "fulfilled" ? (planRes.value || {}) : { plan: null };
       try {
-        const dedupedCarpools = dedupeCarpoolRows(cr.carpools||[]);
+        const dedupedCarpools = dedupeCarpoolRows(cr.carpools||[]).map(cp => {
+          if (!isLuggageCar(cp?.userName || "")) return cp;
+          const familyPlan = String(cp?.familyPlan || "").trim();
+          const available = String(cp?.available || "").trim();
+          if (familyPlan === "行く" && available !== "家族で行く") {
+            return { ...cp, available: "家族で行く" };
+          }
+          if (!available) return { ...cp, available: "可" };
+          return cp;
+        });
         setCarpools(dedupedCarpools);
         const mineRows = dedupedCarpools.filter(c=>String(c.userId||"").trim()===String(user.id||"").trim());
         const mine = mineRows.length ? mineRows[mineRows.length - 1] : null;
@@ -1898,12 +1907,16 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           const mineFamilyMembers = parseFamilyMembers(mine.familyMembers||[]);
           const availableRaw = String(mine.available || "").trim();
           const legacyFamilyPlan = String(mine.familyPlan || "").trim();
-          const available =
+          const availableBase =
             availableRaw === "未定"
               ? ""
               : ((!availableRaw && legacyFamilyPlan === "行く")
                 ? "家族で行く"
                 : availableRaw);
+          const available =
+            isCurrentLuggageCar && legacyFamilyPlan === "行く"
+              ? "家族で行く"
+              : availableBase;
           setMy({
             available,
             capacity:String(mine.capacity ?? ""),
@@ -1952,7 +1965,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
 
   const save=async()=>{
     const normalizedAvailable = isCurrentLuggageCar
-      ? "可"
+      ? (my.familyPlan === "行く" ? "家族で行く" : "可")
       : my.available;
     if(!normalizedAvailable){
       return alert("可否を選択してください");
@@ -1998,17 +2011,28 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2000);
   };
 
-  const effectiveCarpools = dedupeCarpoolRows(carpools);
-  const total=effectiveCarpools.filter(c=>c.available==="可").reduce((a,c)=>a+Number(c.capacity||0),0);
+  const effectiveCarpools = dedupeCarpoolRows(carpools).map(cp => {
+    if (!isLuggageCar(cp?.userName || "")) return cp;
+    const familyPlan = String(cp?.familyPlan || "").trim();
+    const available = String(cp?.available || "").trim();
+    if (familyPlan === "行く" && available !== "家族で行く") {
+      return { ...cp, available: "家族で行く" };
+    }
+    if (!available) return { ...cp, available: "可" };
+    return cp;
+  });
+  const total=effectiveCarpools
+    .filter(c=>["可","家族で行く"].includes(String(c.available||"").trim()))
+    .reduce((a,c)=>a+Math.max(0, Number(c.capacity||0)),0);
   // 配車可の車リスト（定員は運転手を含む）
   const cars=effectiveCarpools.filter(c=>{
     const available = String(c.available || "").trim();
     const cap = Number(c.capacity || 0);
     const luggage = isLuggageCar(c.userName || "");
-    if (luggage) {
-      return (available === "可" || !!String(c.familyPlan || "").trim()) && !Number.isNaN(cap) && cap >= 0;
-    }
-    return available === "可" && cap > 0;
+    if (available !== "可") return false;
+    if (Number.isNaN(cap) || cap < 0) return false;
+    if (luggage) return true;
+    return cap > 0;
   });
   const carIndexByUserId = {};
   cars.forEach((c, i) => { carIndexByUserId[String(c.userId || "")] = i; });
@@ -2499,7 +2523,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
                       if (v === "行く") {
                         return {
                           ...p,
-                          available:"可",
+                          available:"家族で行く",
                           familyPlan:"行く",
                           capacity:(p.capacity==="" ? "1" : String(p.capacity ?? "1")),
                           familyMembers: parseFamilyMembers(p.familyMembers || [])
