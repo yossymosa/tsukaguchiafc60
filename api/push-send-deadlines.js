@@ -8,12 +8,25 @@ function isAuthorized(req) {
   return auth === `Bearer ${secret}` || querySecret === secret;
 }
 
-function buildPayload(schedules) {
-  const lines = schedules.slice(0, 3).map(s => `・${s.title || "予定"} (${s.deadline})`);
+function buildPayload(pendingItems) {
+  const items = Array.isArray(pendingItems) ? pendingItems : [];
+  const lines = items.slice(0, 3).map((item) => {
+    const kindLabel = String(item.kind || "") === "carpool" ? "\u914d\u8eca" : "\u51fa\u6b20";
+    const deadline = String(item.deadline || "");
+    return `\u30fb[${kindLabel}] ${item.scheduleTitle || "\u4e88\u5b9a"} (${deadline})`;
+  });
+  const first = items[0] || {};
+  const oneKind = items.length === 1 ? String(first.kind || "") : "";
+  const title =
+    oneKind === "carpool"
+      ? "\u914d\u8eca\u306e\u672a\u56de\u7b54\u7de0\u5207\u304c\u660e\u65e5\u3067\u3059"
+      : oneKind === "attend"
+        ? "\u51fa\u6b20\u306e\u672a\u56de\u7b54\u7de0\u5207\u304c\u660e\u65e5\u3067\u3059"
+        : "\u672a\u56de\u7b54\u306e\u7de0\u5207\u304c\u660e\u65e5\u3067\u3059";
   return {
-    title: "出欠締切が明日です",
+    title,
     body: lines.join("\n"),
-    url: "/?source=push",
+    url: first.url || "/?source=push&tab=cal",
   };
 }
 
@@ -44,17 +57,18 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: gasJson.error || "failed to fetch GAS targets" });
   }
 
-  const schedules = gasJson.schedules || [];
   const targets = gasJson.targets || [];
-  if (!schedules.length || !targets.length) {
+  if (!targets.length) {
     return res.status(200).json({ sent: 0, skipped: true });
   }
 
-  const payload = JSON.stringify(buildPayload(schedules));
   let sent = 0;
   const expired = [];
 
-  await Promise.all(targets.map(async target => {
+  await Promise.all(targets.map(async (target) => {
+    const pending = Array.isArray(target.pending) ? target.pending : [];
+    if (!pending.length) return;
+    const payload = JSON.stringify(buildPayload(pending));
     try {
       await webpush.sendNotification(target.subscription, payload);
       sent += 1;
@@ -67,7 +81,7 @@ module.exports = async function handler(req, res) {
   }));
 
   if (expired.length) {
-    await Promise.all(expired.map(endpoint =>
+    await Promise.all(expired.map((endpoint) =>
       fetch(gasUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,5 +90,5 @@ module.exports = async function handler(req, res) {
     ));
   }
 
-  return res.status(200).json({ sent, schedules: schedules.length, expired: expired.length });
+  return res.status(200).json({ sent, users: targets.length, expired: expired.length });
 };
