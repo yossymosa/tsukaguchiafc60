@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycby0ApynzZtRBbpI6R2mbHOgeHh4JZNoL-lTcWb_VipryqKgxna_PtnLuoNtFC3fBbUArg/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzxf-IpOhTnctV0_E3PGcVAI0AkbMWs11XwVfy1NhrfyzgQYXnTvRXSrtC-97byS7_n/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -340,19 +340,25 @@ async function showLocalNotification(title, options={}) {
   new Notification(title, options);
 }
 
-async function maybeNotifyDeadlines(schedules) {
+async function maybeNotifyDeadlines(pendingNotices=[]) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const list = (pendingNotices || []).filter(n => {
+    const tt = String(n?.targetType || "").toLowerCase();
+    return tt === "pending_attend" || tt === "pending_carpool";
+  });
   const today = todayLocal();
-  for (const s of schedules) {
-    if (!s.deadline) continue;
-    const d = nd(s.deadline);
+  for (const n of list) {
+    const d = nd(n.deadline || n.targetDeadline || "");
     if (!d) continue;
     const days = Math.round((new Date(d + "T00:00:00") - new Date(today + "T00:00:00")) / (1000 * 60 * 60 * 24));
     if (days !== 1) continue;
-    const key = `afc_deadline_notice_${s.id}_${s.deadline}`;
+    const sid = String(n.targetId || n.scheduleId || "");
+    const key = `afc_deadline_notice_${sid}_${String(n.targetType || "")}_${d}`;
     if (localStorage.getItem(key)) continue;
-    await showLocalNotification("出欠締切が近づいています", {
-      body: `${s.title || "予定"} の締切は明日です（${d}）`,
+    const kind = String(n.targetType || "").toLowerCase() === "pending_carpool" ? "配車" : "出欠";
+    const title = String(n.targetType || "").toLowerCase() === "pending_carpool" ? "配車締切が近づいています" : "出欠締切が近づいています";
+    await showLocalNotification(title, {
+      body: `${n.scheduleTitle || n.title || "予定"} の${kind}締切は明日です（${d}）`,
       icon: "/icon-512.png",
       badge: "/icon-512.png",
     });
@@ -1047,7 +1053,7 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 }
 
 // ── ホームタブ ─────────────────────────────────────────────────
-function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,onOpenDashTab,onOpenTab}) {
+function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoToMatch,onGoToDay,onOpenDashTab,onOpenTab}) {
   const [todayKey,setTodayKey]=useState(()=>todayLocal());
   const parseNewsTs = v => {
     const d = new Date(String(v || ""));
@@ -1096,8 +1102,20 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
     const title = String(n.title || "");
     const content = String(n.content || "");
     const targetUrl = String(n.targetUrl || "").trim();
+    if (tt === "pending_attend" || tt === "pending_carpool") {
+      const s = findScheduleFromNotice(n);
+      const nextDayTab = tt === "pending_carpool" ? "carpool" : "attend";
+      if (s && onGoToDay) {
+        onGoToDay(s, nextDayTab);
+        return;
+      }
+      if (onOpenTab) {
+        onOpenTab("cal");
+        return;
+      }
+    }
     const isScheduleNotice =
-      tt === "schedule" || tt === "deadline" ||
+      tt === "schedule" || tt === "deadline" || tt.startsWith("pending_") ||
       title.includes("予定") || title.includes("締切") || content.includes("締切");
     if (isScheduleNotice) {
       const s = findScheduleFromNotice(n);
@@ -1124,6 +1142,19 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
         window.open(targetUrl, "_blank", "noopener,noreferrer");
         return;
       }
+      const sidMatch = targetUrl.match(/[?&]scheduleId=([^&]+)/i);
+      const tabMatch = targetUrl.match(/[?&]dayTab=([^&]+)/i);
+      const sid = sidMatch ? decodeURIComponent(sidMatch[1]) : "";
+      const dayTab = tabMatch ? decodeURIComponent(tabMatch[1]) : "";
+      if ((sid || dayTab) && onGoToDay) {
+        const s = sid
+          ? schedules.find(x => String(x.id || "").trim() === String(sid).trim())
+          : null;
+        if (s) {
+          onGoToDay(s, dayTab || "detail");
+          return;
+        }
+      }
       if (targetUrl.includes("tab=cal") && onOpenTab) { onOpenTab("cal"); return; }
       if (targetUrl.includes("tab=match") && onOpenTab) { onOpenTab("match"); return; }
       if (targetUrl.includes("tab=dash") && onOpenTab) { onOpenTab("dash"); return; }
@@ -1145,6 +1176,15 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
     .filter(n=>n.category!=="コーチメモ")
     .sort((a,b)=>parseNewsTs(b.date)-parseNewsTs(a.date))
     .slice(0,3);
+  const pendingList=(pendingNotices||[])
+    .filter(n=>String(n?.targetType||"").toLowerCase().startsWith("pending_"))
+    .sort((a,b)=>{
+      const da = String(a.deadline || a.targetDeadline || "");
+      const db = String(b.deadline || b.targetDeadline || "");
+      return da.localeCompare(db);
+    })
+    .slice(0,5);
+  const noticeItems=[...pendingList, ...recentNews].slice(0,5);
   // 次の試合を探す
   const today=todayKey;
   const nextSch=schedules.filter(s=>nd(s.date)>=today).sort((a,b)=>nd(a.date).localeCompare(nd(b.date)))[0];
@@ -1163,19 +1203,25 @@ function HomeTab({results,schedules,news,members,isAdmin,onGoToMatch,onGoToDay,o
     // ② お知らせ
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"お知らせ"),
-      recentNews.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"お知らせはありません"),
-      recentNews.map(n=>{
+      noticeItems.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"お知らせはありません"),
+      noticeItems.map(n=>{
+        const tt = String(n.targetType||"").toLowerCase();
+        const isPendingNotice = tt==="pending_attend" || tt==="pending_carpool";
         const titleText = String(n.title||"");
         const contentText = String(n.content||"");
         const isScheduleAddedNotice = titleText.includes("新しい予定が追加されました") || contentText.includes("新しい予定が追加されました") || titleText.includes("予定が追加されました") || contentText.includes("予定が追加されました");
         const summaryRaw = isScheduleAddedNotice
           ? contentText.replace("新しい予定が追加されました","").replace("予定が追加されました","").replace(/^[:：\s-]+/,"").trim()
           : contentText.trim();
-        const summary = summaryRaw || (isScheduleAddedNotice ? "予定が追加されました" : "");
-        const displayTitle = isScheduleAddedNotice ? "予定追加" : (titleText || "お知らせ");
-        const canClick = isScheduleAddedNotice || /youtube/i.test(titleText+" "+contentText) || String(n.targetType||"").trim() || String(n.targetUrl||"").trim();
-        const showNew = isFreshNews(n.date);
-        return h("div",{key:n.id,onClick:canClick?()=>openNotice(n):undefined,style:{background:"#fff",borderRadius:14,padding:"11px 12px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderLeft:isScheduleAddedNotice?"3px solid #1D4ED8":"3px solid #E2E8F0",cursor:canClick?"pointer":"default"}},
+        const summary = isPendingNotice
+          ? (summaryRaw || `${tt==="pending_carpool"?"配車":"出欠"}の回答が未完了です`)
+          : (summaryRaw || (isScheduleAddedNotice ? "予定が追加されました" : ""));
+        const displayTitle = isPendingNotice
+          ? (tt==="pending_carpool" ? "配車 未回答" : "出欠 未回答")
+          : (isScheduleAddedNotice ? "予定追加" : (titleText || "お知らせ"));
+        const canClick = isPendingNotice || isScheduleAddedNotice || /youtube/i.test(titleText+" "+contentText) || String(n.targetType||"").trim() || String(n.targetUrl||"").trim();
+        const showNew = isPendingNotice ? false : isFreshNews(n.date);
+        return h("div",{key:n.id,onClick:canClick?()=>openNotice(n):undefined,style:{background:"#fff",borderRadius:14,padding:"11px 12px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderLeft:isPendingNotice?"3px solid #F59E0B":(isScheduleAddedNotice?"3px solid #1D4ED8":"3px solid #E2E8F0"),cursor:canClick?"pointer":"default"}},
           h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5,gap:8}},
             h("div",{style:{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,flexWrap:"wrap"}},
               showNew && h("span",{style:{display:"inline-block",fontSize:9,fontWeight:800,color:"#fff",background:"#1D4ED8",borderRadius:999,padding:"2px 6px",lineHeight:1}},"NEW"),
@@ -1699,7 +1745,8 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
   );
 }
 // ── 配車セクション ────────────────────────────────────────────
-function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
+function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=[]}) {
+  const isReadOnly = !canWrite;
   const ROLE_COLORS = { child:"#1D4ED8", adult:"#16A34A", coach:"#7C3AED" };
   const normalizeName = v => String(v||"").replace(/\s+/g," ").replace(/さん$/,"").trim();
   const dedupeCarpoolRows = rows => {
@@ -1750,6 +1797,9 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const luggageLabel = String(schedule.luggagePerson || "").trim();
   const luggageKey = normalizeName(luggageLabel);
   const luggageSurnameKey = getSurname(luggageLabel);
+  const carpoolDeadline = String(schedule.carpoolDeadline || "").trim();
+  const today = todayLocal();
+  const isCarpoolPast = !!carpoolDeadline && carpoolDeadline < today;
   const [carpools, setCarpools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -1981,6 +2031,14 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   },[schedule.id, reloadTick]);
 
   const save=async()=>{
+    if (isCarpoolPast) {
+      alert("配車の締切を過ぎているため、回答を更新できません");
+      return;
+    }
+    if (isReadOnly) {
+      alert("閲覧専用アカウントでは配車回答を更新できません");
+      return;
+    }
     const normalizedAvailable = isCurrentLuggageCar
       ? (my.familyPlan === "行く" ? "家族で行く" : "可")
       : my.available;
@@ -2557,23 +2615,28 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       },"再読み込み")
     ),
     // 自分の回答
-    h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+    h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)",opacity:isReadOnly?0.72:1,pointerEvents:isReadOnly?"none":"auto"}},
+      isReadOnly&&h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:10,padding:"8px 10px",background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10}},
+        "閲覧専用アカウントのため配車回答は編集できません"),
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:12}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"🚗 配車回答"),
-        h("button",{
-          onClick:showCarpoolRule,
-          style:{
-            border:"1px solid #1D4ED8",
-            background:"#EFF6FF",
-            color:"#1D4ED8",
-            borderRadius:999,
-            padding:"4px 10px",
-            fontSize:11,
-            fontWeight:700,
-            cursor:"pointer",
-            whiteSpace:"nowrap"
-          }
-        },"配車ルールはこちら")),
+        h("div",{style:{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}},
+          carpoolDeadline&&h("div",{style:{fontSize:11,fontWeight:700,color:isCarpoolPast?"#F44336":"#FF9800",background:isCarpoolPast?"#FFEBEE":"#DBEAFE",borderRadius:8,padding:"3px 8px",whiteSpace:"nowrap"}},
+            isCarpoolPast?"⚠ 締切済 "+fmt(carpoolDeadline).short:"⏰ 締切 "+fmt(carpoolDeadline).short),
+          h("button",{
+            onClick:showCarpoolRule,
+            style:{
+              border:"1px solid #1D4ED8",
+              background:"#EFF6FF",
+              color:"#1D4ED8",
+              borderRadius:999,
+              padding:"4px 10px",
+              fontSize:11,
+              fontWeight:700,
+              cursor:"pointer",
+              whiteSpace:"nowrap"
+            }
+          },"配車ルールはこちら"))),
       h("div",{style:{marginBottom:12}},
         isCurrentLuggageCar
           ? h(Fragment,{},
@@ -2676,9 +2739,9 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"備考（任意）"),
         h("textarea",{value:my.note,onChange:e=>setMy(p=>({...p,note:e.target.value})),
           rows:2,placeholder:"例: 駅集合ならOK",style:{...css.inp,resize:"none"}})),
-      h("button",{onClick:save,disabled:saving,
-        style:{...css.bS,width:"100%",opacity:saving?0.6:1}},
-        saved?"✓ 保存済":saving?"保存中...":"回答する")),
+      h("button",{onClick:save,disabled:saving||isReadOnly||isCarpoolPast,
+        style:{...css.bS,width:"100%",opacity:(saving||isReadOnly||isCarpoolPast)?0.6:1,cursor:(isReadOnly||isCarpoolPast)?"not-allowed":"pointer"}},
+        isReadOnly?"閲覧専用":(isCarpoolPast?"締切済":(saved?"✓ 保存済":saving?"保存中...":"回答する")))),
 
     // 集計
     h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -3114,7 +3177,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
 }
 
 // ── 出欠セクション（DayPage内で使用） ────────────────────────
-function AttendSection({schedule, members, user, isAdmin}) {
+function AttendSection({schedule, members, user, isAdmin, canWrite=true}) {
   const isEventSchedule = normalizeType(schedule.type) === "event";
   const [attend, setAttend] = useState({});   // {memberId: status}
   const [eventAttend, setEventAttend] = useState([]);
@@ -3149,6 +3212,7 @@ function AttendSection({schedule, members, user, isAdmin}) {
   }, [schedule.id, isEventSchedule, user.id]);
 
   const save = async (memberId, status) => {
+    if (!canWrite) return;
     setSaving(memberId);
     const next = {...attend, [memberId]: status};
     setAttend(next);
@@ -3157,6 +3221,7 @@ function AttendSection({schedule, members, user, isAdmin}) {
     setSaving("");
   };
   const saveEventAttend = async () => {
+    if (!canWrite) return;
     setSaving("event");
     const payload = {
       scheduleId: schedule.id,
@@ -3253,8 +3318,8 @@ function AttendSection({schedule, members, user, isAdmin}) {
         ].map(item=>
           h("div",{key:item.key,style:{display:"flex",alignItems:"center",gap:10,marginBottom:item.key==="preschoolCount"?0:10}},
             h("div",{style:{width:74,fontSize:13,fontWeight:700,color:"#555"}},item.label),
-            h("input",{type:"number",min:"0",value:eventForm[item.key],onChange:e=>setEventForm(p=>({...p,[item.key]:e.target.value})),disabled:isPast,style:{...css.inp,flex:1,marginBottom:0}}))),
-        h("button",{onClick:saveEventAttend,disabled:saving==="event"||isPast,style:{...css.bS,width:"100%",marginTop:12,opacity:(saving==="event"||isPast)?0.6:1,cursor:isPast?"not-allowed":"pointer"}},saving==="event"?"保存中...":"💾 参加人数を保存")),
+            h("input",{type:"number",min:"0",value:eventForm[item.key],onChange:e=>setEventForm(p=>({...p,[item.key]:e.target.value})),disabled:isPast||!canWrite,style:{...css.inp,flex:1,marginBottom:0}}))),
+        h("button",{onClick:saveEventAttend,disabled:saving==="event"||isPast||!canWrite,style:{...css.bS,width:"100%",marginTop:12,opacity:(saving==="event"||isPast||!canWrite)?0.6:1,cursor:(isPast||!canWrite)?"not-allowed":"pointer"}},!canWrite?"閲覧専用":(saving==="event"?"保存中...":"💾 参加人数を保存"))),
       isAdmin&&h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:12}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"回答一覧"),
         eventAttend.length===0
@@ -3291,6 +3356,9 @@ function AttendSection({schedule, members, user, isAdmin}) {
         h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
           g.list.map(m=>h("span",{key:m.id,style:{fontSize:12,fontWeight:600,color:"#333",background:"#fff",borderRadius:6,padding:"3px 8px"}},m.name))))),
 
+    !isAdmin && !canWrite && h("div",{style:{marginBottom:10,padding:"10px 12px",background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10,fontSize:12,fontWeight:700,color:"#64748B"}},
+      "閲覧専用アカウントのため出欠は編集できません"),
+
     // 一般ユーザー：自分だけ
     !isAdmin && myMember && h("div",{},
       h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},myMember.name+"さんの出欠"),
@@ -3300,11 +3368,11 @@ function AttendSection({schedule, members, user, isAdmin}) {
           const st = ATTEND_STYLE[s];
           const active = cur === s;
           return h("button",{key:s,onClick:()=>!isPast&&save(myMemberId,s),
-            disabled:saving===myMemberId||isPast,
+            disabled:saving===myMemberId||isPast||!canWrite,
             style:{flex:1,padding:"12px 0",border:`2px solid ${active?st.bg:"#eee"}`,
               borderRadius:12,background:active?st.bg:"#fff",
               color:active?st.c:"#aaa",fontSize:16,fontWeight:700,
-              cursor:isPast?"not-allowed":"pointer",opacity:isPast&&!active?0.4:1}},
+              cursor:(isPast||!canWrite)?"not-allowed":"pointer",opacity:(isPast||!canWrite)&&!active?0.4:1}},
             s === "○" ? "○ 参加" : s === "×" ? "× 不参加" : "△ 未定");
         }))),
 
@@ -3900,7 +3968,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
   const [year,setYear]=useState(today.getFullYear());
   const [month,setMonth]=useState(today.getMonth());
   const [modal,setModal]=useState(false);
-  const [fs,setFs]=useState({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official"});
+  const [fs,setFs]=useState({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official",deadline:"",carpoolDeadline:""});
   const todayStr=today.toISOString().slice(0,10);
 
   // 過去の場所一覧（重複除去）
@@ -3924,7 +3992,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
     const dateVal=(!fs.allDay&&fs.timeFrom)?fs.date+"T"+fs.timeFrom:fs.date;
     const timeLabel=(!fs.allDay&&fs.timeFrom)?(fs.timeFrom+(fs.timeTo?" - "+fs.timeTo:"")):"";
     await onAddSchedule({...fs,title:titleVal,date:dateVal,timeLabel});
-    setFs({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official"});
+    setFs({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official",deadline:"",carpoolDeadline:""});
     setModal(false);
   };
 
@@ -4041,7 +4109,7 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"種類"),
         h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
           Object.entries(TC).map(([k,v])=>h("button",{key:k,
-            onClick:()=>setFs(p=>({...p,type:k,title:""})),
+            onClick:()=>setFs(p=>({...p,type:k,title:"",carpoolDeadline:(k==="practice"||k==="event")?"":p.carpoolDeadline})),
             style:{flex:1,padding:"9px 4px",border:"2px solid "+(fs.type===k?v.bg:"#eee"),
               borderRadius:10,background:fs.type===k?v.bg:"#fff",
               color:fs.type===k?"#fff":"#666",fontSize:11,fontWeight:600,cursor:"pointer",minWidth:60}},v.lb)))),
@@ -4088,6 +4156,12 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
                 color:fs.location===loc?"#fff":"#666",fontSize:12,cursor:"pointer"}},loc))),
         h("input",{value:fs.location,onChange:e=>setFs(p=>({...p,location:e.target.value})),
           placeholder:"市営グラウンド",style:css.inp})),
+      h("div",{style:{marginBottom:12}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"出欠締め切り日（任意）"),
+        h("input",{type:"date",value:fs.deadline||"",onChange:e=>setFs(p=>({...p,deadline:e.target.value})),style:{...css.inp,width:"100%"}})),
+      fs.type!=="practice"&&fs.type!=="event"&&h("div",{style:{marginBottom:20}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"配車締め切り日（任意）"),
+        h("input",{type:"date",value:fs.carpoolDeadline||"",onChange:e=>setFs(p=>({...p,carpoolDeadline:e.target.value})),style:{...css.inp,width:"100%"}})),
       h("div",{style:{display:"flex",gap:10}},
         h("button",{onClick:()=>setModal(false),style:css.bG},"キャンセル"),
         h("button",{onClick:saveSchedule,style:css.bS},"追加する"))),
@@ -4320,11 +4394,17 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
 }
 
 // ── その日の試合まとめページ ─────────────────────────────────────
-function DayPage({schedule,results,schedules,members,isAdmin,user,users=[],onGoToMatch,onAdd,onEdit,onDelete,onDeleteSchedule,onBack,onHome,onSaveMvp}) {
+function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users=[],initialTab="",onGoToMatch,onAdd,onEdit,onDelete,onDeleteSchedule,onBack,onHome,onSaveMvp}) {
   const isEventDay = normalizeType(schedule.type) === "event";
   const isPracticeDay = normalizeType(schedule.type) === "practice";
   const isSimpleDay = isEventDay || isPracticeDay;
-  const [dayTab,setDayTab]=useState(isSimpleDay ? "detail" : "matches"); // "matches"|"attend"
+  const resolveDayTab = raw => {
+    const fallback = isSimpleDay ? "detail" : "matches";
+    const v = String(raw || "").trim();
+    if (isSimpleDay) return (v === "detail" || v === "attend") ? v : fallback;
+    return ["matches","detail","attend","carpool"].includes(v) ? v : fallback;
+  };
+  const [dayTab,setDayTab]=useState(()=>resolveDayTab(initialTab)); // "matches"|"detail"|"attend"|"carpool"
   const tc=getTC(schedule.type);
   const dt=fmt(schedule.date);
   const dayR=results
@@ -4344,25 +4424,26 @@ function DayPage({schedule,results,schedules,members,isAdmin,user,users=[],onGoT
   const [rankSaving,setRankSaving]=useState(false);
   const [editSch,setEditSch]=useState(false);
   const [editSchSaving,setEditSchSaving]=useState(false);
-  const [schForm,setSchForm]=useState({date:schedule.date||"",title:schedule.title||"",location:schedule.location||"",type:schedule.type||"practice",deadline:schedule.deadline||""});
+  const [schForm,setSchForm]=useState({date:schedule.date||"",title:schedule.title||"",location:schedule.location||"",type:schedule.type||"practice",deadline:schedule.deadline||"",carpoolDeadline:schedule.carpoolDeadline||""});
   const [hpModal,setHpModal]=useState(false);
   const [hpText,setHpText]=useState("");
   const [aiPrompt,setAiPrompt]=useState("以下のポイントを考慮して、ホームページに載せる文章を作成して、試合結果の下に付け足して");
   const [aiLoading,setAiLoading]=useState(false);
   const [hpCopied,setHpCopied]=useState(false);
   useEffect(()=>{
-    setDayTab(isSimpleDay ? "detail" : "matches");
-  },[schedule.id,isSimpleDay]);
+    setDayTab(resolveDayTab(initialTab));
+  },[schedule.id,isSimpleDay,initialTab]);
   const saveEditSch=async()=>{
     setEditSchSaving(true);
     try{
       const nextType = normalizeType(schForm.type) || schForm.type;
-      await api("updateSchedule",{schedule:{...schForm,id:schedule.id,type:nextType,mvp:schedule.mvp||"",deadline:schForm.deadline||""}});
+      await api("updateSchedule",{schedule:{...schForm,id:schedule.id,type:nextType,mvp:schedule.mvp||"",deadline:schForm.deadline||"",carpoolDeadline:schForm.carpoolDeadline||""}});
       schedule.date = schForm.date;
       schedule.title = schForm.title;
       schedule.location = schForm.location;
       schedule.type = nextType;
       schedule.deadline = schForm.deadline || "";
+      schedule.carpoolDeadline = schForm.carpoolDeadline || "";
       setEditSch(false);
     }catch(e){
       alert("日程更新エラー: " + e.message);
@@ -4437,7 +4518,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,user,users=[],onGoT
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"種類"),
         h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
           [{k:"practice",l:"練習"},{k:"official",l:"公式戦"},{k:"training",l:"トレマ"},{k:"cup",l:"カップ戦"},{k:"event",l:"イベント"}].map(t=>
-            h("button",{key:t.k,onClick:()=>setSchForm(p=>({...p,type:t.k})),style:{padding:"7px 14px",border:`2px solid ${schForm.type===t.k?"#1D4ED8":"#eee"}`,borderRadius:20,background:schForm.type===t.k?"#1D4ED8":"#fff",color:schForm.type===t.k?"#fff":"#666",fontSize:12,fontWeight:700,cursor:"pointer"}},t.l)))),
+            h("button",{key:t.k,onClick:()=>setSchForm(p=>({...p,type:t.k,carpoolDeadline:(t.k==="practice"||t.k==="event")?"":p.carpoolDeadline})),style:{padding:"7px 14px",border:`2px solid ${schForm.type===t.k?"#1D4ED8":"#eee"}`,borderRadius:20,background:schForm.type===t.k?"#1D4ED8":"#fff",color:schForm.type===t.k?"#fff":"#666",fontSize:12,fontWeight:700,cursor:"pointer"}},t.l)))),
       h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"日付"),
         h("input",{type:"date",value:schForm.date,onChange:e=>setSchForm(p=>({...p,date:e.target.value})),style:{...css.inp,width:"100%"}})),
@@ -4450,6 +4531,9 @@ function DayPage({schedule,results,schedules,members,isAdmin,user,users=[],onGoT
       h("div",{style:{marginBottom:16}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"出欠締め切り日（任意）"),
         h("input",{type:"date",value:schForm.deadline||"",onChange:e=>setSchForm(p=>({...p,deadline:e.target.value})),style:{...css.inp,width:"100%"}})),
+      schForm.type!=="practice"&&schForm.type!=="event"&&h("div",{style:{marginBottom:16}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"配車締め切り日（任意）"),
+        h("input",{type:"date",value:schForm.carpoolDeadline||"",onChange:e=>setSchForm(p=>({...p,carpoolDeadline:e.target.value})),style:{...css.inp,width:"100%"}})),
       h("div",{style:{display:"flex",gap:10}},
         h("button",{onClick:()=>setEditSch(false),disabled:editSchSaving,style:{...css.bG,opacity:editSchSaving?0.5:1}},"キャンセル"),
         h("button",{onClick:saveEditSch,disabled:editSchSaving,style:{...css.bS,opacity:editSchSaving?0.7:1}},editSchSaving?"保存中...":"保存する")),
@@ -4546,15 +4630,15 @@ function DayPage({schedule,results,schedules,members,isAdmin,user,users=[],onGoT
 
       // 詳細タブ
       dayTab==="detail"&&h(DetailSection,{schedule,members,users,schedules,isAdmin,onSave:async(detail)=>{
-        await api("updateSchedule",{schedule:{...detail,id:schedule.id,mvp:schedule.mvp||"",deadline:schedule.deadline||""}});
+        await api("updateSchedule",{schedule:{...detail,id:schedule.id,mvp:schedule.mvp||"",deadline:schedule.deadline||"",carpoolDeadline:schedule.carpoolDeadline||""}});
         Object.assign(schedule,detail);
       }}),
 
       // 配車タブ
-      dayTab==="carpool"&&h(CarpoolSection,{schedule,user,isAdmin,members,users}),
+      dayTab==="carpool"&&h(CarpoolSection,{schedule,user,isAdmin,canWrite,members,users}),
 
       // 出欠タブ
-      dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin}),
+      dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin,canWrite}),
 
       // MVP入力欄（公式戦・カップ戦のみ・matchesタブ）
       dayTab==="matches"&&isTournamentTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -4768,26 +4852,37 @@ function App() {
   const [schedules,setSchedules]=useState([]);
   const [results,setResults]=useState([]);
   const [news,setNews]=useState([]);
+  const [pendingNotices,setPendingNotices]=useState([]);
   const [liftings,setLiftings]=useState([]);
   const [users,setUsers]=useState([]);
+  const [deepLink,setDeepLink]=useState(()=>{
+    const params = new URLSearchParams(location.search);
+    return {
+      scheduleId: String(params.get("scheduleId") || "").trim(),
+      dayTab: String(params.get("dayTab") || "").trim(),
+      tab: String(params.get("tab") || "").trim(),
+    };
+  });
   const [notificationPermission,setNotificationPermission]=useState(()=>("Notification" in window ? Notification.permission : "unsupported"));
   const [notificationEnabled,setNotificationEnabled]=useState(false);
   const [notificationBusy,setNotificationBusy]=useState(false);
   const isAdmin=user?.role==="admin";
+  const canWrite=user?.role!=="viewer";
 
   const load=useCallback(async(msg="読み込み中...")=>{
     setLoadMsg(msg);setLoading(true);
     try{
-      const d=await api("getAll");
+      const d=await api("getAll",{userId:user?.id||""});
       setMembers((d.members||[]).map(normalizeMember));
       setSchedules(d.schedules||[]);
       setResults(d.results||[]);
       setNews(d.news||[]); setLiftings(d.liftings||[]);
+      setPendingNotices(d.myPendingNotices||[]);
       setUsers(d.users||[]);
     }catch(e){alert("読み込みエラー: "+e.message);}
     setLoading(false);
-  },[]);
-  useEffect(()=>{if(user)load();},[user]);
+  },[user?.id]);
+  useEffect(()=>{if(user)load();},[user,load]);
   useEffect(()=>{
     if(!user || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       setNotificationEnabled(false);
@@ -4798,12 +4893,12 @@ function App() {
       .catch(()=>setNotificationEnabled(false));
   },[user,notificationPermission]);
   useEffect(()=>{
-    if(!user || schedules.length===0 || !("Notification" in window)) return;
+    if(!user || !("Notification" in window)) return;
     setNotificationPermission(Notification.permission);
     if(Notification.permission!=="granted") return;
-    maybeNotifyDeadlines(schedules).catch(()=>{});
+    maybeNotifyDeadlines(pendingNotices).catch(()=>{});
     maybeNotifyUpcomingEvents(schedules).catch(()=>{});
-  },[user,schedules]);
+  },[user,schedules,pendingNotices]);
   const handleEnableNotifications=async()=>{
     if(notificationBusy) return;
     setNotificationBusy(true);
@@ -4824,7 +4919,7 @@ function App() {
           return;
         }
         setNotificationEnabled(true);
-        setTimeout(()=>{ maybeNotifyDeadlines(schedules).catch(()=>{}); },0);
+        setTimeout(()=>{ maybeNotifyDeadlines(pendingNotices).catch(()=>{}); },0);
         setTimeout(()=>{ maybeNotifyUpcomingEvents(schedules).catch(()=>{}); },0);
         alert("通知をONにしました");
       }else if(p==="denied"){
@@ -4851,7 +4946,7 @@ function App() {
     };
     setPage({type:"matchDetail",match:r,schedule:linked});
   };
-  const goToDay  =(s)  =>setPage({type:"dayDetail",schedule:s});
+  const goToDay  =(s,dayTab="")  =>setPage({type:"dayDetail",schedule:s,dayTab:dayTab||""});
   const openDashTab = (nextTab) => {
     setDashInitialTab(nextTab || "result");
     setTab("dash");
@@ -4923,6 +5018,17 @@ function App() {
     saveUser({...user,...r.user});
     await load("更新中...");
   };
+  useEffect(()=>{
+    if(!user || !deepLink.scheduleId || schedules.length===0) return;
+    const target = schedules.find(s => String(s.id || "").trim() === String(deepLink.scheduleId).trim());
+    if (!target) return;
+    if (deepLink.tab) setTab(deepLink.tab);
+    setPage({type:"dayDetail",schedule:target,dayTab:deepLink.dayTab||""});
+    setDeepLink({scheduleId:"",dayTab:"",tab:""});
+    try {
+      window.history.replaceState(null, "", location.pathname);
+    } catch (e) {}
+  },[user,deepLink,schedules]);
 
   // ── ページルーティング ────────────────────────────────────────
   if(!user) return h(Login,{onLogin:saveUser});
@@ -4960,7 +5066,7 @@ function App() {
       setLoading(false);setEditResult(null);
     },onClose:()=>setEditResult(null)}),
     h(DayPage,{
-      schedule:page.schedule,results,schedules,members,isAdmin,user,users,
+      schedule:page.schedule,results,schedules,members,isAdmin,canWrite,user,users,initialTab:page.dayTab||"",
       onGoToMatch:(r,s)=>setPage({type:"matchDetail",match:r,schedule:s}),
       onAdd:s=>setPage({type:"addMatch",schedule:s}),
       onEdit:r=>setEditResult(r),
@@ -4983,7 +5089,7 @@ function App() {
     ...(isAdmin?[{k:"settings",i:"⚙️",l:"設定"}]:[]),
   ];
   const currentTabContent =
-    tab==="home" ? h(HomeTab,{results,schedules,news,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:setTab})
+    tab==="home" ? h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:setTab})
     : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule})
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
@@ -5019,17 +5125,3 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
