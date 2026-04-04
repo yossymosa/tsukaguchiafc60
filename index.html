@@ -1761,6 +1761,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
   const [saved,  setSaved]  = useState(false);
   const [planSaving, setPlanSaving] = useState(false);
   const [confirmedPlan, setConfirmedPlan] = useState(null);
+  const [planNote, setPlanNote] = useState("");
   const [familyExtraOpen, setFamilyExtraOpen] = useState({});
   const [attend, setAttend] = useState({});
   // 車ごとの座席割り当て { "kind:userId:slot": riderId }
@@ -1861,6 +1862,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             if (savedPlan.carMeta && typeof savedPlan.carMeta === "object") setCarMeta(savedPlan.carMeta);
             if (savedPlan.seatAssignments && typeof savedPlan.seatAssignments === "object") setSeatAssignments(savedPlan.seatAssignments);
             if (Array.isArray(savedPlan.selectedFleetUserIds)) setSelectedFleetUserIds(savedPlan.selectedFleetUserIds.map(v=>String(v||"")).filter(Boolean));
+            if (typeof savedPlan.planNote === "string") setPlanNote(savedPlan.planNote);
           }
       }
     } catch (e) {}
@@ -1875,10 +1877,11 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         pickupInfo,
         carMeta,
         seatAssignments,
-        selectedFleetUserIds
+        selectedFleetUserIds,
+        planNote
       }));
     } catch (e) {}
-  }, [schedule.id, assignment, familyRideAssign, pickupInfo, carMeta, seatAssignments, selectedFleetUserIds, planLoaded]);
+  }, [schedule.id, assignment, familyRideAssign, pickupInfo, carMeta, seatAssignments, selectedFleetUserIds, planNote, planLoaded]);
 
   useEffect(()=>{
     let cancelled=false;
@@ -1938,6 +1941,9 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
           setFamilyChoicePool(prev => mergeNameList(prev, mineFamilyMembers));
         }
         const planObj = (pr.plan && typeof pr.plan === "object") ? pr.plan : null;
+        if (planObj && typeof planObj.note === "string") {
+          setPlanNote(planObj.note);
+        }
         if (planObj && planObj.confirmed) {
           setConfirmedPlan(planObj);
           if (planObj.seatAssignments && typeof planObj.seatAssignments === "object") {
@@ -2461,6 +2467,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       seatAssignments: mergedSeatAssignments,
       carMeta: carMeta || {},
       riderLabelMap: Object.fromEntries(riderOptions.map(opt => [opt.id, opt.label])),
+      note: String(planNote || "").trim(),
     };
     setPlanSaving(true);
     try {
@@ -2655,7 +2662,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             ? "何人乗せられますか？（運転手を含む）"
             : "空きがある場合何人載せれますか（事情があり載せれない場合は0を選んでください）"),
         h("div",{style:{display:"flex",gap:8}},
-          [0,1,2,3,4,5,6].map(n=>
+          [0,1,2,3,4,5,6,7].map(n=>
             h("button",{key:n,onClick:()=>setMy(p=>({...p,capacity:String(n)})),
               style:{flex:1,padding:"10px 0",border:`2px solid ${my.capacity===String(n)?"#2196F3":"#eee"}`,
                 borderRadius:10,background:my.capacity===String(n)?"#2196F3":"#fff",
@@ -2667,12 +2674,6 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       h("button",{onClick:save,disabled:saving,
         style:{...css.bS,width:"100%",opacity:saving?0.6:1}},
         saved?"✓ 保存済":saving?"保存中...":"回答する")),
-
-    h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"📦 荷物車"),
-      h("div",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e"}},
-        luggageLabel ? ("荷物担当: " + luggageLabel) : "荷物担当は詳細タブで設定してください"),
-      luggageLabel && h("div",{style:{marginTop:4,fontSize:11,color:"#64748B"}},"配車割り当てでは、この担当者の車を荷物車として明示しています。")),
 
     // 集計
     h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -3029,6 +3030,17 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
             `未割当候補 ${remainingPeople.length}名 / 空席 ${emptySeatCount}`);
         })()
       ),
+      h("div",{style:{marginTop:12,padding:10,background:"#fff",borderRadius:10,border:"1px solid #E2E8F0"}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#475569",marginBottom:6}},"共有メモ（任意）"),
+        h("textarea",{
+          value:planNote,
+          onChange:e=>setPlanNote(e.target.value),
+          rows:3,
+          placeholder:"例: 駅ロータリー集合。遅れる場合は必ず連絡してください。",
+          style:{...css.inp,resize:"vertical",marginBottom:0}
+        }),
+        h("div",{style:{fontSize:10,color:"#94A3B8",marginTop:6}},"確定するとメンバーにも共有されます")
+      ),
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:12}},
         h("div",{style:{fontSize:11,color:"#64748B"}},
           confirmedPlan?.confirmed
@@ -3056,6 +3068,10 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
         h("div",{style:{fontSize:11,fontWeight:700,color:"#4F46E5",letterSpacing:1}},"🚗 確定した配車"),
         h("div",{style:{fontSize:11,color:"#64748B"}},
           `${confirmedAtLabel || "-"}${confirmedByLabel ? " / " + confirmedByLabel : ""}`)
+      ),
+      !!String(confirmedPlan?.note || "").trim() && h("div",{style:{marginBottom:10,padding:"8px 10px",background:"#EEF2FF",border:"1px solid #DBEAFE",borderRadius:10}},
+        h("div",{style:{fontSize:10,fontWeight:700,color:"#4F46E5",marginBottom:4}},"共有メモ"),
+        h("div",{style:{fontSize:12,color:"#334155",lineHeight:1.6,whiteSpace:"pre-wrap"}},String(confirmedPlan.note || "").trim())
       ),
       selectedFleetRows.length===0
         ? h("div",{style:{fontSize:12,color:"#64748B"}},"配車データ準備中です")
