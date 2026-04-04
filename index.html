@@ -2222,6 +2222,11 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
     }
   });
   scheduleCoachNames.forEach(name => goingPeopleNameSet.add(name));
+  const accountAdultNameKeySet = new Set(
+    effectiveCarpools
+      .map(cp => normalizeName(cp.userName || ""))
+      .filter(Boolean)
+  );
   const isParentName = name => {
     const key = normalizeName(name);
     return !!key && (key === "父" || key === "母" || /父$|母$/.test(key));
@@ -2237,7 +2242,7 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
       const key = normalizeName(name);
       if (!name || attendingChildNameKeySet.has(key)) return null;
       const isCoach = coachNameKeySet.has(key) || /コーチ|先生/.test(name);
-      const isAdult = isParentName(name);
+      const isAdult = isParentName(name) || accountAdultNameKeySet.has(key);
       return {
         id: `person:${name}`,
         name,
