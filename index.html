@@ -3156,12 +3156,45 @@ function AttendSection({schedule, members, user, isAdmin}) {
   const myMemberId = user.memberId || "";
   const myMember = myMemberId ? members.find(m => m.id === myMemberId) : null;
 
+  const TEAM_GENERATION = 60;
+  const targetGradeNum = getCurrentThirdGeneration() - TEAM_GENERATION + 3;
+  const parseGeneration = m => {
+    const n = Number(String(m?.generation || "").replace(/[^\d]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const getResolvedGradeNum = m => {
+    const n = getGradeNumber(resolveGrade(m) || m.grade || "");
+    return Number.isFinite(n) ? n : null;
+  };
+  const classifyAttendMember = m => {
+    const gen = parseGeneration(m);
+    if (gen) {
+      if (gen === TEAM_GENERATION) return "core";
+      if (gen > TEAM_GENERATION) return "accompany";
+      return "exclude"; // 上級生は除外
+    }
+    const gradeNum = getResolvedGradeNum(m);
+    if (gradeNum == null) return "accompany";
+    if (gradeNum > targetGradeNum) return "exclude";
+    if (gradeNum === targetGradeNum) return "core";
+    return "accompany";
+  };
+  const sortMembers = arr => arr.slice().sort((a,b)=>{
+    const na = Number(a.number || 999);
+    const nb = Number(b.number || 999);
+    if (na !== nb) return na - nb;
+    return String(a.name || "").localeCompare(String(b.name || ""), "ja");
+  });
+  const coreMembers = sortMembers(members.filter(m => classifyAttendMember(m) === "core"));
+  const accompanyMembers = sortMembers(members.filter(m => classifyAttendMember(m) === "accompany"));
+  const visibleAdminMembers = [...coreMembers, ...accompanyMembers];
+  const membersForSummary = isAdmin ? visibleAdminMembers : members;
+
   // 集計
-  const counts = ["○","×","△"].map(s => Object.values(attend).filter(v=>v===s).length);
+  const counts = ["○","×","△"].map(s => membersForSummary.filter(m => attend[m.id]===s).length);
   // 名前リスト
-  const nameList = (status) => members.filter(m => attend[m.id]===status)
-    .sort((a,b)=>Number(a.number)-Number(b.number));
-  const unresolved = members.filter(m => !attend[m.id] || attend[m.id]==="未");
+  const nameList = (status) => sortMembers(membersForSummary.filter(m => attend[m.id]===status));
+  const unresolved = sortMembers(membersForSummary.filter(m => !attend[m.id] || attend[m.id]==="未"));
 
   if (loading) return h("div",{style:{textAlign:"center",padding:16,color:"#aaa",fontSize:13}},"読み込み中...");
 
@@ -3258,37 +3291,45 @@ function AttendSection({schedule, members, user, isAdmin}) {
     !isAdmin && !myMember && h("div",{style:{color:"#aaa",fontSize:13,textAlign:"center",padding:"8px 0"}},
       "出欠登録にはメンバー紐づけが必要です（コーチに連絡）"),
 
-    // admin：全メンバーを編集可能
+    // admin：60期生＋帯同メンバー（上級生は表示しない）
     isAdmin && h("div",{},
-      (()=>{
-        const allMembers = members.slice().sort((a,b)=>{
-          const ga = String(a.grade || "");
-          const gb = String(b.grade || "");
-          if (ga !== gb) return ga.localeCompare(gb, "ja");
-          return Number(a.number || 999) - Number(b.number || 999);
-        });
-        if (!allMembers.length) {
-          return h("div",{style:{color:"#ccc",fontSize:13,padding:8}},"メンバーがありません");
-        }
-        return h("div",{},
-          allMembers.map(m => {
-            const cur = attend[m.id]||"未";
-            const isSaving = saving === m.id;
-            return h("div",{key:m.id,
-              style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
-              h("div",{style:{width:28,height:28,borderRadius:6,background:(PC[m.position]||{bg:"#999"}).bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
-              h("div",{style:{flex:1,minWidth:0}},
-                h("div",{style:{fontSize:13,fontWeight:600,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},m.name),
-                h("div",{style:{fontSize:11,color:"#9aa3b2"}},`${m.grade||"-"} / ${m.position||"-"}`)),
-              h("div",{style:{display:"flex",gap:4}},
-                ["○","×","△"].map(s => {
-                  const st = ATTEND_STYLE[s];
-                  const active = cur === s;
-                  return h("button",{key:s,onClick:()=>save(m.id,s),disabled:isSaving,
-                    style:{width:34,height:34,border:"none",borderRadius:8,background:active?st.bg:"#eee",color:active?st.c:"#aaa",fontSize:14,fontWeight:700,cursor:"pointer",opacity:isSaving?0.5:1}},s);
-                })));
-          }));
-      })()));
+      visibleAdminMembers.length===0&&h("div",{style:{color:"#ccc",fontSize:13,padding:8}},"表示対象メンバーがありません"),
+      coreMembers.length>0&&h("div",{style:{marginBottom:12}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"60期生"),
+        coreMembers.map(m=>{
+          const cur = attend[m.id]||"未";
+          const isSaving = saving === m.id;
+          return h("div",{key:m.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
+            h("div",{style:{width:28,height:28,borderRadius:6,background:(PC[m.position]||{bg:"#999"}).bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
+            h("div",{style:{flex:1,minWidth:0}},
+              h("div",{style:{fontSize:13,fontWeight:600,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},m.name),
+              h("div",{style:{fontSize:11,color:"#9aa3b2"}},formatMemberGenerationGrade(m)||m.grade||"-")),
+            h("div",{style:{display:"flex",gap:4}},
+              ["○","×","△"].map(s=>{
+                const st = ATTEND_STYLE[s];
+                const active = cur === s;
+                return h("button",{key:s,onClick:()=>save(m.id,s),disabled:isSaving,
+                  style:{width:34,height:34,border:"none",borderRadius:8,background:active?st.bg:"#eee",color:active?st.c:"#aaa",fontSize:14,fontWeight:700,cursor:"pointer",opacity:isSaving?0.5:1}},s);
+              })));
+        })),
+      accompanyMembers.length>0&&h("div",{style:{marginTop:8,padding:"12px 14px",background:"#E3F2FD",borderRadius:12}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#2196F3",marginBottom:10}},"帯同メンバー"),
+        accompanyMembers.map(m=>{
+          const cur = attend[m.id]||"未";
+          const isSaving = saving === m.id;
+          return h("div",{key:m.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"8px 12px",background:"#fff",borderRadius:10}},
+            h("div",{style:{width:28,height:28,borderRadius:6,background:(PC[m.position]||{bg:"#999"}).bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
+            h("div",{style:{flex:1,minWidth:0}},
+              h("div",{style:{fontSize:13,fontWeight:600,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},m.name),
+              h("div",{style:{fontSize:11,color:"#9aa3b2"}},formatMemberGenerationGrade(m)||m.grade||"-")),
+            h("div",{style:{display:"flex",gap:4}},
+              ["○","×","△"].map(s=>{
+                const st = ATTEND_STYLE[s];
+                const active = cur === s;
+                return h("button",{key:s,onClick:()=>save(m.id,s),disabled:isSaving,
+                  style:{width:34,height:34,border:"none",borderRadius:8,background:active?st.bg:"#eee",color:active?st.c:"#aaa",fontSize:14,fontWeight:700,cursor:"pointer",opacity:isSaving?0.5:1}},s);
+              })));
+        })));
 }
 
 // ── 試合結果編集モーダル ─────────────────────────────────────
