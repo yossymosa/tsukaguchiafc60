@@ -3095,20 +3095,11 @@ function CarpoolSection({schedule, user, isAdmin, members, users=[]}) {
 // ── 出欠セクション（DayPage内で使用） ────────────────────────
 function AttendSection({schedule, members, user, isAdmin}) {
   const isEventSchedule = normalizeType(schedule.type) === "event";
-  const isGrade2OrBelow = (grade) => {
-    const g = String(grade || "").trim();
-    return ["2年","２年","1年","１年","年長","年中","年少"].includes(g);
-  };
   const [attend, setAttend] = useState({});   // {memberId: status}
   const [eventAttend, setEventAttend] = useState([]);
   const [eventForm, setEventForm] = useState({adultCount:"0", childCount:"0", preschoolCount:"0"});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
-  const [accompanying, setAccompanying] = useState([]); // 帯同メンバーIDリスト
-  // 3年生メンバー
-  const grade3 = members.filter(m=>m.grade==="3年"||m.grade==="３年");
-  // 2年以下メンバー
-  const under2 = members.filter(m=>isGrade2OrBelow(m.grade));
 
   // スケジュールの出欠を読み込み
   useEffect(() => {
@@ -3170,7 +3161,7 @@ function AttendSection({schedule, members, user, isAdmin}) {
   // 名前リスト
   const nameList = (status) => members.filter(m => attend[m.id]===status)
     .sort((a,b)=>Number(a.number)-Number(b.number));
-  const unresolved = grade3.filter(m => !attend[m.id] || attend[m.id]==="未");
+  const unresolved = members.filter(m => !attend[m.id] || attend[m.id]==="未");
 
   if (loading) return h("div",{style:{textAlign:"center",padding:16,color:"#aaa",fontSize:13}},"読み込み中...");
 
@@ -3267,67 +3258,34 @@ function AttendSection({schedule, members, user, isAdmin}) {
     !isAdmin && !myMember && h("div",{style:{color:"#aaa",fontSize:13,textAlign:"center",padding:"8px 0"}},
       "出欠登録にはメンバー紐づけが必要です（コーチに連絡）"),
 
-    // admin：3年生一覧（デフォルト）＋帯同選択
+    // admin：全メンバーを編集可能
     isAdmin && h("div",{},
-      // 3年生の出欠
       (()=>{
-        const grade3 = members.filter(m=>["3年","３年"].includes(m.grade||""));
+        const allMembers = members.slice().sort((a,b)=>{
+          const ga = String(a.grade || "");
+          const gb = String(b.grade || "");
+          if (ga !== gb) return ga.localeCompare(gb, "ja");
+          return Number(a.number || 999) - Number(b.number || 999);
+        });
+        if (!allMembers.length) {
+          return h("div",{style:{color:"#ccc",fontSize:13,padding:8}},"メンバーがありません");
+        }
         return h("div",{},
-          grade3.length===0
-            ? h("div",{style:{color:"#ccc",fontSize:13,padding:8}},"3年生メンバーなし")
-            : ["FW","MF","DF","GK"].map(pos => {
-                const group = grade3.filter(m=>m.position===pos).sort((a,b)=>Number(a.number)-Number(b.number));
-                if (!group.length) return null;
-                return h("div",{key:pos,style:{marginBottom:14}},
-                  h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},pos),
-                  group.map(m => {
-                    const cur = attend[m.id]||"未";
-                    const isSaving = saving === m.id;
-                    return h("div",{key:m.id,
-                      style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,
-                        padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
-                      h("div",{style:{width:28,height:28,borderRadius:6,
-                        background:(PC[m.position]||{bg:"#999"}).bg,
-                        display:"flex",alignItems:"center",justifyContent:"center",
-                        color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
-                      h("div",{style:{flex:1,fontSize:13,fontWeight:600,color:"#1a1a2e"}},m.name),
-                      h("div",{style:{display:"flex",gap:4}},
-                        ["○","×","△"].map(s => {
-                          const st = ATTEND_STYLE[s];
-                          const active = cur === s;
-                          return h("button",{key:s,onClick:()=>save(m.id,s),
-                            disabled:isSaving,
-                            style:{width:34,height:34,border:"none",borderRadius:8,
-                              background:active?st.bg:"#eee",
-                              color:active?st.c:"#aaa",
-                              fontSize:14,fontWeight:700,cursor:"pointer",
-                              opacity:isSaving?0.5:1}},s);
-                        })));
-                  }));
-              }));
-      })(),
-      // 帯同選択（2年生以下）
-      (()=>{
-        const under2 = members.filter(m=>isGrade2OrBelow(m.grade)).sort((a,b)=>Number(a.number)-Number(b.number));
-        if(!under2.length) return null;
-        return h("div",{style:{marginTop:12,padding:"12px 14px",background:"#E3F2FD",borderRadius:12}},
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#2196F3",marginBottom:10}},"帯同メンバー（2年生以下）"),
-          under2.map(m=>{
+          allMembers.map(m => {
             const cur = attend[m.id]||"未";
-            return h("div",{key:m.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,
-              padding:"8px 12px",background:"#fff",borderRadius:10}},
-              h("div",{style:{width:28,height:28,borderRadius:6,background:(PC[m.position]||{bg:"#999"}).bg,
-                display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
-              h("div",{style:{flex:1,fontSize:13,fontWeight:600,color:"#1a1a2e"}},m.name),
-              h("div",{style:{fontSize:11,color:"#aaa",marginRight:6}},m.grade||""),
+            const isSaving = saving === m.id;
+            return h("div",{key:m.id,
+              style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
+              h("div",{style:{width:28,height:28,borderRadius:6,background:(PC[m.position]||{bg:"#999"}).bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
+              h("div",{style:{flex:1,minWidth:0}},
+                h("div",{style:{fontSize:13,fontWeight:600,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},m.name),
+                h("div",{style:{fontSize:11,color:"#9aa3b2"}},`${m.grade||"-"} / ${m.position||"-"}`)),
               h("div",{style:{display:"flex",gap:4}},
-                ["○","×","△"].map(s=>{
-                  const st=ATTEND_STYLE[s];
-                  const active=cur===s;
-                  return h("button",{key:s,onClick:()=>save(m.id,s),
-                    style:{width:34,height:34,border:"none",borderRadius:8,
-                      background:active?st.bg:"#eee",color:active?st.c:"#aaa",
-                      fontSize:14,fontWeight:700,cursor:"pointer"}},s);
+                ["○","×","△"].map(s => {
+                  const st = ATTEND_STYLE[s];
+                  const active = cur === s;
+                  return h("button",{key:s,onClick:()=>save(m.id,s),disabled:isSaving,
+                    style:{width:34,height:34,border:"none",borderRadius:8,background:active?st.bg:"#eee",color:active?st.c:"#aaa",fontSize:14,fontWeight:700,cursor:"pointer",opacity:isSaving?0.5:1}},s);
                 })));
           }));
       })()));
@@ -4452,7 +4410,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,user,users=[],onGoT
       h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
         (isSimpleDay
           ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"}]
-          : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"carpool",l:"🚗 配車"},{k:"attend",l:"✅ 出欠"}]
+          : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"}]
         ).map(t=>
           h("button",{key:t.k,onClick:()=>setDayTab(t.k),
             style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
