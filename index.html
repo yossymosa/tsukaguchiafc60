@@ -3286,7 +3286,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true}) {
 
   // 締め切りチェック
   const deadline = schedule.deadline || "";
-  const today = new Date().toISOString().slice(0,10);
+  const today = todayLocal();
   const isPast = deadline && deadline < today;
   if (isEventSchedule) {
     const totals = eventAttend.reduce((acc, row) => ({
@@ -3939,7 +3939,7 @@ function LiftingInput({members,liftings}) {
   const save=async()=>{
     if(!selId||!cnt) return;
     setSaving(true);
-    await api("saveLifting",{memberId:selId,memberName:sel?.name||"",count:Number(cnt),date:new Date().toISOString().slice(0,10)});
+    await api("saveLifting",{memberId:selId,memberName:sel?.name||"",count:Number(cnt),date:todayLocal()});
     // ローカル反映
     const lf=liftings.find(x=>x.memberId===selId);
     if(lf){lf.count=Number(cnt);}else{liftings.push({memberId:selId,memberName:sel?.name||"",count:Number(cnt)});}
@@ -3969,7 +3969,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
   const [month,setMonth]=useState(today.getMonth());
   const [modal,setModal]=useState(false);
   const [fs,setFs]=useState({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official",deadline:"",carpoolDeadline:""});
-  const todayStr=today.toISOString().slice(0,10);
+  const todayStr=todayLocal();
 
   // 過去の場所一覧（重複除去）
   const pastLocations=[...new Set(schedules.map(s=>s.location).filter(Boolean))];
