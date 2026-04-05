@@ -5171,7 +5171,12 @@ function App() {
     if(!user || !deepLink.scheduleId || schedules.length===0) return;
     const target = schedules.find(s => String(s.id || "").trim() === String(deepLink.scheduleId).trim());
     if (!target) return;
-    if (deepLink.tab) setTab(deepLink.tab);
+    if (deepLink.tab) {
+      const allowedTabs = isAdmin
+        ? ["home","cal","match","dash","member","memo","docs","settings"]
+        : ["home","cal","match","dash","member","memo","docs"];
+      setTab(allowedTabs.includes(deepLink.tab) ? deepLink.tab : "home");
+    }
     setPage({type:"dayDetail",schedule:target,dayTab:deepLink.dayTab||""});
     setDeepLink({scheduleId:"",dayTab:"",tab:""});
     try {
@@ -5233,7 +5238,6 @@ function App() {
     {k:"match",  i:"⚽",l:"試合"},
     {k:"dash",   i:"📊",l:"成績"},
     {k:"member", i:"👥",l:"選手"},
-    ...(isAdmin?[{k:"chat",i:"💬",l:"チャット"}]:[]),
     {k:"memo",   i:"📝",l:"メモ"},
     {k:"docs",   i:"📚",l:"資料"},
     ...(isAdmin?[{k:"settings",i:"⚙️",l:"設定"}]:[]),
@@ -5244,11 +5248,10 @@ function App() {
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="member" ? h(MemberTab,{members,liftings})
-    : tab==="chat" && isAdmin ? h(ChatTab,{user,canWrite})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
     : tab==="settings" ? h(SettingsTab,{user,users,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile})
-    : null;
+    : h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:setTab});
 
   return h(Fragment,{},
     loading && h(Loader,{msg:loadMsg}),
