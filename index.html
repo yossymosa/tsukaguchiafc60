@@ -51,12 +51,12 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzxf-IpOhTnctV0_E3PGcVAI0AkbMWs11XwVfy1NhrfyzgQYXnTvRXSrtC-97byS7_n/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbx-ltTe47RtFnilPuAhd6B-QeXXRT_hhTJOlpxWz_j9fy-kpSMboHcTzEoNmTCwUMnz/exec";
 // ================================================================
 
 const HOME_LINKS = [
   {label:"チームHP",  url:"https://afcjr.xsrv.jp/", icon:"🌐", sub:"公式ホームページ"},
-  {label:"公式YouTube", url:"https://youtube.com/playlist?list=PLLo2VVDM0WelHQk4YEdf-dvejZLkVbJ2N&si=xEJa9OEtTiQmKHWU", icon:"▶️", sub:"動画・ハイライト"},
+  {label:"試合動画", url:"https://youtube.com/playlist?list=PLLo2VVDM0WelHQk4YEdf-dvejZLkVbJ2N&si=xEJa9OEtTiQmKHWU", icon:"▶️", sub:"動画・ハイライト"},
 ];
 const FORMATS = [
   {label:"7分ハーフ", hm:7, hv:2},{label:"10分ハーフ",hm:10,hv:2},{label:"12分ハーフ",hm:12,hv:2},
