@@ -5033,6 +5033,10 @@ function App() {
   },[user?.id]);
   useEffect(()=>{if(user)load();},[user,load]);
   useEffect(()=>{
+    if(!user?.id) return;
+    api("recordAccess",{userId:user.id}).catch(()=>{});
+  },[user?.id]);
+  useEffect(()=>{
     if(!user || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       setNotificationEnabled(false);
       return;
