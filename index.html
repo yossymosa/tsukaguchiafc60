@@ -4283,6 +4283,7 @@ function ChatTab({user,canWrite}) {
       ? h("div", { style: { background: "#fff", borderRadius: 16, padding: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" } },
           h("textarea", {
             value: text,
+            onInput: e => setText(e.target.value),
             onChange: e => setText(e.target.value),
             placeholder: "メッセージを入力",
             rows: 2,
@@ -4294,12 +4295,23 @@ function ChatTab({user,canWrite}) {
             },
             style: { ...css.inp, resize: "none", marginBottom: 8 }
           }),
-          h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 } },
-            h("div", { style: { fontSize: 11, color: "#94A3B8" } }, "Enterで送信 / Shift+Enterで改行"),
+          h("div", { style: { fontSize: 11, color: "#94A3B8", marginBottom: 8 } }, "Enterで送信 / Shift+Enterで改行"),
+          h("div", { style: { display: "flex", justifyContent: "flex-end" } },
             h("button", {
               onClick: sendMessage,
               disabled: sending || !String(text || "").trim(),
-              style: { ...css.bS, flex: "0 0 auto", padding: "10px 16px", opacity: (sending || !String(text || "").trim()) ? 0.5 : 1 }
+              style: {
+                border: "none",
+                borderRadius: 10,
+                minWidth: 92,
+                padding: "10px 16px",
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: (sending || !String(text || "").trim()) ? "not-allowed" : "pointer",
+                background: (sending || !String(text || "").trim()) ? "#93C5FD" : "#1D4ED8",
+                color: "#fff",
+                boxShadow: "0 2px 8px rgba(29,78,216,0.25)"
+              }
             }, sending ? "送信中..." : "送信")
           )
         )
