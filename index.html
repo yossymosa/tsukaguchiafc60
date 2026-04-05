@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbx-ltTe47RtFnilPuAhd6B-QeXXRT_hhTJOlpxWz_j9fy-kpSMboHcTzEoNmTCwUMnz/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbymwV0HbJO3HthrUgDNtc0ZZkVauAHogaGGyuvqY_zGWmlhXmm7JQFbvrddGXBxrM5u/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -4186,6 +4186,113 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
 }
 
 
+// ── チャットタブ ─────────────────────────────────────────────────
+function ChatTab({user,canWrite}) {
+  const [messages,setMessages]=useState([]);
+  const [text,setText]=useState("");
+  const [loading,setLoading]=useState(true);
+  const [sending,setSending]=useState(false);
+  const [error,setError]=useState("");
+
+  const fmtChatTime = v => {
+    const d = new Date(String(v || ""));
+    if (isNaN(d.getTime())) return "";
+    return `${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  };
+
+  const loadMessages = useCallback(async (silent=false) => {
+    if (!silent) setLoading(true);
+    try {
+      const res = await api("getChatMessages",{userId:user.id,limit:200});
+      setMessages(Array.isArray(res.messages) ? res.messages : []);
+      setError("");
+    } catch(e) {
+      setError(e && e.message ? e.message : "取得エラー");
+    }
+    if (!silent) setLoading(false);
+  },[]);
+
+  useEffect(()=>{
+    let active = true;
+    const run = async (silent=false) => {
+      if (!active) return;
+      await loadMessages(silent);
+    };
+    run(false);
+    const timer = setInterval(()=>{ run(true); }, 2000);
+    return ()=>{ active=false; clearInterval(timer); };
+  },[loadMessages]);
+
+  const sendMessage = async () => {
+    const content = String(text || "").trim();
+    if (!content) return;
+    if (!canWrite) return alert("閲覧専用アカウントでは投稿できません");
+    if (sending) return;
+    setSending(true);
+    try {
+      const optimistic = {
+        id: "tmp_" + Date.now(),
+        date: new Date().toISOString(),
+        userId: user.id,
+        userName: user.name,
+        content
+      };
+      setMessages(prev => [...prev, optimistic]);
+      setText("");
+      await api("sendChatMessage",{
+        userId:user.id,
+        userName:user.name,
+        content
+      });
+      await loadMessages(true);
+    } catch(e) {
+      alert("送信エラー: " + (e && e.message ? e.message : e));
+      await loadMessages(true);
+    }
+    setSending(false);
+  };
+
+  return h(Fragment,{},
+    h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:4}},"💬 チームチャット"),
+      h("div",{style:{fontSize:11,color:"#94A3B8"}},"2秒ごと自動更新（無料版）"),
+      error&&h("div",{style:{fontSize:11,color:"#DC2626",marginTop:8}},error)),
+    h("div",{style:{background:"#fff",borderRadius:16,padding:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)",minHeight:360,maxHeight:480,overflowY:"auto",marginBottom:12}},
+      loading
+        ? h("div",{style:{textAlign:"center",color:"#94A3B8",fontSize:13,padding:"40px 0"}},"読み込み中...")
+        : (messages.length===0
+          ? h("div",{style:{textAlign:"center",color:"#94A3B8",fontSize:13,padding:"40px 0"}},"まだメッセージはありません")
+          : messages.map(m=>{
+              const mine = String(m.userId||"")===String(user.id||"");
+              return h("div",{key:m.id,style:{display:"flex",justifyContent:mine?"flex-end":"flex-start",marginBottom:8}},
+                h("div",{style:{maxWidth:"82%",background:mine?"#1D4ED8":"#F8FAFC",color:mine?"#fff":"#1E293B",border:mine?"none":"1px solid #E2E8F0",borderRadius:12,padding:"8px 10px"}},
+                  !mine&&h("div",{style:{fontSize:10,fontWeight:700,color:"#64748B",marginBottom:3}},m.userName||""),
+                  h("div",{style:{fontSize:13,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}},m.content||""),
+                  h("div",{style:{fontSize:10,marginTop:4,color:mine?"rgba(255,255,255,0.78)":"#94A3B8",textAlign:"right"}},fmtChatTime(m.date)));
+            })
+        )),
+    canWrite
+      ? h("div",{style:{background:"#fff",borderRadius:16,padding:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+          h("textarea",{
+            value:text,
+            onChange:e=>setText(e.target.value),
+            placeholder:"メッセージを入力",
+            rows:2,
+            onKeyDown:e=>{
+              if(e.key==="Enter" && !e.shiftKey){
+                e.preventDefault();
+                sendMessage();
+              }
+            },
+            style:{...css.inp,resize:"none",marginBottom:8}
+          }),
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}},
+            h("div",{style:{fontSize:11,color:"#94A3B8"}},"Enterで送信 / Shift+Enterで改行"),
+            h("button",{onClick:sendMessage,disabled:sending||!String(text||"").trim(),style:{...css.bS,flex:"0 0 auto",padding:"10px 16px",opacity:(sending||!String(text||"").trim())?0.5:1}},sending?"送信中...":"送信")))
+      : h("div",{style:{background:"#fff",borderRadius:16,padding:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)",fontSize:12,color:"#94A3B8"}},"閲覧専用アカウントです")
+  );
+}
+
 // ── メモタブ ───────────────────────────────────────────────────
 function MemoTab({news,isAdmin,user,onAdd,onDelete}) {
   const [cat,setCat]=useState("連絡");
@@ -5100,6 +5207,7 @@ function App() {
     {k:"match",  i:"⚽",l:"試合"},
     {k:"dash",   i:"📊",l:"成績"},
     {k:"member", i:"👥",l:"選手"},
+    ...(isAdmin?[{k:"chat",i:"💬",l:"チャット"}]:[]),
     {k:"memo",   i:"📝",l:"メモ"},
     {k:"docs",   i:"📚",l:"資料"},
     ...(isAdmin?[{k:"settings",i:"⚙️",l:"設定"}]:[]),
@@ -5110,6 +5218,7 @@ function App() {
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="member" ? h(MemberTab,{members,liftings})
+    : tab==="chat" && isAdmin ? h(ChatTab,{user,canWrite})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
     : tab==="settings" ? h(SettingsTab,{user,users,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile})
