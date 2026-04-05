@@ -24,9 +24,13 @@ module.exports = async function handler(req, res) {
   }
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
-  const title = String(body.title || "お知らせ");
+  const title = String(body.title || "Tsukaguchi AFC Jr");
   const message = String(body.body || "");
   const url = String(body.url || "/");
+  const targetUserIds = Array.isArray(body.targetUserIds)
+    ? body.targetUserIds.map(v => String(v || "").trim()).filter(Boolean)
+    : [];
+  const excludeUserId = String(body.excludeUserId || "").trim();
 
   webpush.setVapidDetails(subject, publicKey, privateKey);
 
@@ -40,7 +44,14 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: gasJson.error || "failed to fetch GAS targets" });
   }
 
-  const targets = gasJson.targets || [];
+  let targets = gasJson.targets || [];
+  if (targetUserIds.length) {
+    const idSet = new Set(targetUserIds);
+    targets = targets.filter(t => idSet.has(String(t.userId || "").trim()));
+  }
+  if (excludeUserId) {
+    targets = targets.filter(t => String(t.userId || "").trim() !== excludeUserId);
+  }
   if (!targets.length) {
     return res.status(200).json({ sent: 0, skipped: true });
   }
@@ -53,7 +64,7 @@ module.exports = async function handler(req, res) {
 
   let sent = 0;
   const expired = [];
-  await Promise.all(targets.map(async target => {
+  await Promise.all(targets.map(async (target) => {
     try {
       await webpush.sendNotification(target.subscription, payload);
       sent += 1;
@@ -66,7 +77,7 @@ module.exports = async function handler(req, res) {
   }));
 
   if (expired.length) {
-    await Promise.all(expired.map(endpoint =>
+    await Promise.all(expired.map((endpoint) =>
       fetch(gasUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
