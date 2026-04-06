@@ -3984,7 +3984,12 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
   const [year,setYear]=useState(today.getFullYear());
   const [month,setMonth]=useState(today.getMonth());
   const [modal,setModal]=useState(false);
-  const [fs,setFs]=useState({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official",deadline:"",carpoolDeadline:""});
+  const [dayModal,setDayModal]=useState(null);
+  const defaultFs=(dateVal="",typeVal="official")=>({
+    date:dateVal,allDay:true,timeFrom:"",timeTo:"",title:"",location:"",
+    type:typeVal,deadline:"",carpoolDeadline:""
+  });
+  const [fs,setFs]=useState(defaultFs());
   const todayStr=todayLocal();
 
   // 過去の場所一覧（重複除去）
@@ -3999,16 +4004,38 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
     event:["スポーツ交流","親子イベント","その他"],
   };
 
+  const isFridayDate=(dateStr)=>{
+    const s=String(dateStr||"").trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const [y,m,d]=s.split("-").map(Number);
+    return new Date(y,m-1,d).getDay()===5;
+  };
+  const applyFridayPracticeDefaults=(draft)=>{
+    const p={...draft};
+    if(p.type!=="practice" || !isFridayDate(p.date)) return p;
+    p.allDay=false;
+    if(!p.timeFrom) p.timeFrom="18:30";
+    if(!p.timeTo) p.timeTo="20:30";
+    if(!String(p.title||"").trim()) p.title="ナイター練習";
+    return p;
+  };
+  const openAddScheduleModal=(dateVal="")=>{
+    let next = defaultFs(dateVal,dateVal&&isFridayDate(dateVal)?"practice":"official");
+    next = applyFridayPracticeDefaults(next);
+    setFs(next);
+    setModal(true);
+  };
+
   const saveSchedule=async()=>{
-    const isPractice=fs.type==="practice";
-    const isEvent=fs.type==="event";
-    const titleVal=isPractice?"練習":fs.title;
-    if(!fs.date) return alert("日付を入力してください");
+    const normalizedFs=applyFridayPracticeDefaults(fs);
+    const isPractice=normalizedFs.type==="practice";
+    const titleVal=String(normalizedFs.title||"").trim() || (isPractice?"練習":"");
+    if(!normalizedFs.date) return alert("日付を入力してください");
     if(!titleVal) return alert("タイトルを入力してください");
-    const dateVal=(!fs.allDay&&fs.timeFrom)?fs.date+"T"+fs.timeFrom:fs.date;
-    const timeLabel=(!fs.allDay&&fs.timeFrom)?(fs.timeFrom+(fs.timeTo?" - "+fs.timeTo:"")):"";
-    await onAddSchedule({...fs,title:titleVal,date:dateVal,timeLabel});
-    setFs({date:"",allDay:true,timeFrom:"",timeTo:"",title:"",location:"",type:"official",deadline:"",carpoolDeadline:""});
+    const dateVal=(!normalizedFs.allDay&&normalizedFs.timeFrom)?normalizedFs.date+"T"+normalizedFs.timeFrom:normalizedFs.date;
+    const timeLabel=(!normalizedFs.allDay&&normalizedFs.timeFrom)?(normalizedFs.timeFrom+(normalizedFs.timeTo?" - "+normalizedFs.timeTo:"")):"";
+    await onAddSchedule({...normalizedFs,title:titleVal,date:dateVal,timeLabel});
+    setFs(defaultFs());
     setModal(false);
   };
 
@@ -4056,10 +4083,9 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
       const typeSoftBg = softBgMap[typeLabel] || "#EFF6FF";
       const moreCount = evs.length > 1 ? evs.length - 1 : 0;
       const clickDay=()=>{
-        if(!evs.length) return;
-        onGoToDay(evs[0]); // その日のまとめページへ
+        setDayModal({date:dStr,events:evs});
       };
-      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"6px 3px",borderRadius:8,background:isToday?"#1D4ED8":evs.length>0?typeSoftBg:"transparent",minHeight:70,minWidth:0,width:"100%",overflow:"hidden",cursor:evs.length>0?"pointer":"default"}},
+      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"6px 3px",borderRadius:8,background:isToday?"#1D4ED8":evs.length>0?typeSoftBg:"transparent",minHeight:70,minWidth:0,width:"100%",overflow:"hidden",cursor:"pointer"}},
         h("div",{style:{fontSize:13,fontWeight:isToday?900:400,color:isToday?"#fff":di===0?"#F44336":di===6?"#2196F3":"#1a1a2e"}},d),
         evs.length>0&&h("div",{style:{marginTop:4,padding:"4px 4px",borderRadius:7,background:isToday?"rgba(255,255,255,0.22)":"#fff",border:isToday?"1px solid rgba(255,255,255,0.35)":`1px solid ${typeColor}44`,textAlign:"left",width:"100%",boxSizing:"border-box",overflow:"hidden"}},
           h("div",{style:{fontSize:8,fontWeight:800,color:isToday?"#fff":typeColor,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden"}},
@@ -4082,7 +4108,7 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
       )
     ),
     isAdmin&&h("div",{style:{display:"flex",gap:8}},
-      h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"7px 14px",fontSize:12,whiteSpace:"nowrap"}},"+ 日程追加"))
+      h("button",{onClick:()=>openAddScheduleModal(),style:{...css.bO,padding:"7px 14px",fontSize:12,whiteSpace:"nowrap"}},"+ 日程追加"))
   )
 ),
     // ── 今月の予定リスト
@@ -4118,6 +4144,30 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
             }));
         }),
 
+    dayModal&&h(Modal,{title:fmt(dayModal.date).full,onClose:()=>setDayModal(null)},
+      dayModal.events.length===0
+        ? h("div",{style:{fontSize:13,color:"#94A3B8",marginBottom:16}},"この日の予定はまだありません")
+        : h("div",{style:{display:"grid",gap:8,marginBottom:16}},
+            dayModal.events.map(e=>{
+              const tc=getTC(e.type);
+              return h("div",{key:e.id,onClick:()=>{setDayModal(null);onGoToDay(e);},
+                style:{display:"flex",gap:10,alignItems:"center",padding:"10px 12px",borderRadius:10,background:"#F8FAFC",cursor:"pointer"}},
+                h("div",{style:{width:4,height:40,borderRadius:3,background:tc.bg,flexShrink:0}}),
+                h("div",{style:{flex:1,minWidth:0}},
+                  h(Bdg,{label:tc.lb,color:tc.bg,small:true}),
+                  h("div",{style:{fontSize:13,fontWeight:700,color:"#1E293B",marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},e.title||"予定"),
+                  e.timeLabel&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:2}},"🕐 "+e.timeLabel),
+                  e.location&&h("div",{style:{fontSize:11,color:"#94A3B8",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"📍 "+e.location)),
+                h("div",{style:{fontSize:14,color:"#CBD5E1"}},"›"));
+            })),
+      isAdmin&&h("button",{onClick:()=>{
+          const targetDate = dayModal.date;
+          setDayModal(null);
+          openAddScheduleModal(targetDate);
+        },style:{...css.bS,width:"100%"}},
+        dayModal.events.length>0 ? "予定を追加" : "予定を作成")
+    ),
+
     // ── 日程追加モーダル
     modal&&h(Modal,{title:"日程を追加",onClose:()=>setModal(false)},
       // 1. 種類（最初に選ぶ）
@@ -4125,7 +4175,12 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"種類"),
         h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
           Object.entries(TC).map(([k,v])=>h("button",{key:k,
-            onClick:()=>setFs(p=>({...p,type:k,title:"",carpoolDeadline:(k==="practice"||k==="event")?"":p.carpoolDeadline})),
+            onClick:()=>setFs(p=>{
+              let next={...p,type:k,carpoolDeadline:(k==="practice"||k==="event")?"":p.carpoolDeadline};
+              if(k!=="practice" && String(next.title||"").trim()==="ナイター練習") next.title="";
+              next=applyFridayPracticeDefaults(next);
+              return next;
+            }),
             style:{flex:1,padding:"9px 4px",border:"2px solid "+(fs.type===k?v.bg:"#eee"),
               borderRadius:10,background:fs.type===k?v.bg:"#fff",
               color:fs.type===k?"#fff":"#666",fontSize:11,fontWeight:600,cursor:"pointer",minWidth:60}},v.lb)))),
@@ -4133,7 +4188,7 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
       // 2. 日付 + 終日/時間
       h("div",{style:{marginBottom:14}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"日付"),
-        h("input",{type:"date",value:fs.date,onChange:e=>setFs(p=>({...p,date:e.target.value})),style:css.inp})),
+        h("input",{type:"date",value:fs.date,onChange:e=>setFs(p=>applyFridayPracticeDefaults({...p,date:e.target.value})),style:css.inp})),
       h("div",{style:{marginBottom:14}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"時間"),
         h("div",{style:{display:"flex",gap:8}},
@@ -4149,8 +4204,8 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
           h("input",{type:"time",value:fs.timeTo,onChange:e=>setFs(p=>({...p,timeTo:e.target.value})),
             style:{...css.inp,flex:1}}))),
 
-      // 3. タイトル（練習以外）
-      fs.type!=="practice"&&h("div",{style:{marginBottom:14}},
+      // 3. タイトル
+      h("div",{style:{marginBottom:14}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"タイトル"),
         h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}},
           (TITLE_OPTS[fs.type]||[]).map(t=>
