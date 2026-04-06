@@ -403,9 +403,10 @@ function Loader({msg="処理中..."}) {
   return h("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center"}},
     h("div",{style:{background:"#fff",borderRadius:16,padding:"18px 28px",fontWeight:700,fontSize:14}},"⏳ "+msg));
 }
-function Modal({title,onClose,children}) {
-  return h("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:200,display:"flex",alignItems:"flex-end"}},
-    h("div",{style:{background:"#fff",width:"100%",maxWidth:480,margin:"0 auto",borderRadius:"24px 24px 0 0",maxHeight:"92vh",overflowY:"auto"}},
+function Modal({title,onClose,children,position="bottom"}) {
+  const isCenter = position === "center";
+  return h("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:200,display:"flex",alignItems:isCenter?"center":"flex-end",padding:isCenter?"12px 0":"0"}},
+    h("div",{style:{background:"#fff",width:"100%",maxWidth:isCenter?460:480,margin:"0 auto",borderRadius:isCenter?16:"24px 24px 0 0",maxHeight:isCenter?"82vh":"92vh",overflowY:"auto"}},
       h("div",{style:{padding:"18px 22px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f5f5f5",position:"sticky",top:0,background:"#fff",zIndex:1}},
         h("div",{style:{fontSize:17,fontWeight:800,color:"#1a1a2e"}},title),
         h("button",{onClick:onClose,style:{background:"#f0f0f0",border:"none",borderRadius:"50%",width:32,height:32,fontSize:16,cursor:"pointer"}},"×")),
@@ -3985,12 +3986,31 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
   const [month,setMonth]=useState(today.getMonth());
   const [modal,setModal]=useState(false);
   const [dayModal,setDayModal]=useState(null);
+  const [holidayMap,setHolidayMap]=useState(()=>{
+    try{
+      const cached = sessionStorage.getItem("afc_holiday_map_jp");
+      return cached ? JSON.parse(cached) : {};
+    }catch(e){ return {}; }
+  });
   const defaultFs=(dateVal="",typeVal="official")=>({
     date:dateVal,allDay:true,timeFrom:"",timeTo:"",title:"",location:"",
     type:typeVal,deadline:"",carpoolDeadline:""
   });
   const [fs,setFs]=useState(defaultFs());
   const todayStr=todayLocal();
+  useEffect(()=>{
+    if(holidayMap && Object.keys(holidayMap).length>0) return;
+    let active=true;
+    fetch("https://holidays-jp.github.io/api/v1/date.json")
+      .then(r=>r.ok?r.json():{})
+      .then(data=>{
+        if(!active || !data || typeof data!=="object") return;
+        setHolidayMap(data);
+        try{ sessionStorage.setItem("afc_holiday_map_jp", JSON.stringify(data)); }catch(e){}
+      })
+      .catch(()=>{});
+    return ()=>{ active=false; };
+  },[]);
 
   // 過去の場所一覧（重複除去）
   const pastLocations=[...new Set(schedules.map(s=>s.location).filter(Boolean))];
@@ -4074,6 +4094,8 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
       if(!d) return h("div",{key:di});
       const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
       const evs=dayData[d]||[];
+      const holidayName = String(holidayMap[dStr] || "");
+      const isHoliday = !!holidayName;
       const isToday=dStr===todayStr;
       const primaryEvent = evs[0] || null;
       const primaryType = primaryEvent ? getTC(primaryEvent.type) : null;
@@ -4086,7 +4108,8 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
         setDayModal({date:dStr,events:evs});
       };
       return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"6px 3px",borderRadius:8,background:isToday?"#1D4ED8":evs.length>0?typeSoftBg:"transparent",minHeight:70,minWidth:0,width:"100%",overflow:"hidden",cursor:"pointer"}},
-        h("div",{style:{fontSize:13,fontWeight:isToday?900:400,color:isToday?"#fff":di===0?"#F44336":di===6?"#2196F3":"#1a1a2e"}},d),
+        h("div",{style:{fontSize:13,fontWeight:isToday?900:400,color:isToday?"#fff":isHoliday?"#F44336":di===0?"#F44336":di===6?"#2196F3":"#1a1a2e"}},d),
+        isHoliday&&h("div",{style:{fontSize:8,fontWeight:700,lineHeight:1.2,color:isToday?"rgba(255,255,255,0.95)":"#EF4444",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginTop:2}},holidayName),
         evs.length>0&&h("div",{style:{marginTop:4,padding:"4px 4px",borderRadius:7,background:isToday?"rgba(255,255,255,0.22)":"#fff",border:isToday?"1px solid rgba(255,255,255,0.35)":`1px solid ${typeColor}44`,textAlign:"left",width:"100%",boxSizing:"border-box",overflow:"hidden"}},
           h("div",{style:{fontSize:8,fontWeight:800,color:isToday?"#fff":typeColor,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden"}},
             typeLabel+(moreCount>0?` +${moreCount}`:"")),
@@ -4100,7 +4123,7 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
   // 凡例＋追加ボタン
   h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
     h("div",{style:{display:"flex",gap:10,flexWrap:"wrap"}},
-      [{c:"#4CAF50",l:"練習"},{c:"#1D4ED8",l:"公式戦"},{c:"#2563EB",l:"トレマ"},{c:"#0F172A",l:"カップ戦"},{c:"#009688",l:"イベント"}].map(x=>
+      [{c:"#EF4444",l:"祝日"},{c:"#4CAF50",l:"練習"},{c:"#1D4ED8",l:"公式戦"},{c:"#2563EB",l:"トレマ"},{c:"#0F172A",l:"カップ戦"},{c:"#009688",l:"イベント"}].map(x=>
         h("div",{key:x.l,style:{display:"flex",alignItems:"center",gap:5}},
           h("div",{style:{width:10,height:10,borderRadius:"50%",background:x.c}}),
           h("span",{style:{fontSize:11,color:"#888"}},x.l)
@@ -4144,7 +4167,7 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
             }));
         }),
 
-    dayModal&&h(Modal,{title:fmt(dayModal.date).full,onClose:()=>setDayModal(null)},
+    dayModal&&h(Modal,{title:fmt(dayModal.date).full,onClose:()=>setDayModal(null),position:"center"},
       dayModal.events.length===0
         ? h("div",{style:{fontSize:13,color:"#94A3B8",marginBottom:16}},"この日の予定はまだありません")
         : h("div",{style:{display:"grid",gap:8,marginBottom:16}},
