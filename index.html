@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbymwV0HbJO3HthrUgDNtc0ZZkVauAHogaGGyuvqY_zGWmlhXmm7JQFbvrddGXBxrM5u/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxlmia2lqfSL9g8NwPlFskp7KdAMEdIQZdLCuyhm8J2WwPLYWi-If0KKkSBAIxdNaY/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -4891,6 +4891,10 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
   const child = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
   const familyListView = parseFamilyMembers(currentUserProfile.familyMembers || []);
+  const accessCount = Number(currentUserProfile.accessCount || 0);
+  const lastAccessLabel = currentUserProfile.lastAccessAt
+    ? String(currentUserProfile.lastAccessAt).replace("T"," ").slice(0,16)
+    : "-";
   const [editing,setEditing] = useState(false);
   const [name,setName] = useState(currentUserProfile.name || "");
   const [memberId,setMemberId] = useState(currentUserProfile.memberId || "");
@@ -4954,7 +4958,14 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
         h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e",marginBottom:12,whiteSpace:"pre-wrap"}},
           familyListView.length ? familyListView.join("、") : "未登録"),
         h("div",{style:{fontSize:12,color:"#888",marginBottom:8}},"権限"),
-        h("div",{style:{fontSize:15,fontWeight:700,color:"#1a1a2e"}},user.role==="admin"?"admin":"member"),
+        h("div",{style:{fontSize:15,fontWeight:700,color:"#1a1a2e",marginBottom:12}},user.role==="admin"?"admin":"member"),
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+          h("div",{style:{background:"#F8FAFC",borderRadius:10,padding:"10px 12px"}},
+            h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:2}},"アクセス回数"),
+            h("div",{style:{fontSize:15,fontWeight:800,color:"#1a1a2e"}},String(accessCount))),
+          h("div",{style:{background:"#F8FAFC",borderRadius:10,padding:"10px 12px"}},
+            h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:2}},"最終アクセス"),
+            h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e"}},lastAccessLabel))),
         h("button",{onClick:()=>setEditing(true),style:{...css.bS,width:"100%",marginTop:16}},"プロフィールを編集"))),
     h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🧒 子ども情報"),
@@ -4991,7 +5002,19 @@ function App() {
   const [user,setUser]=useState(()=>{
     try{ const u=localStorage.getItem("afc_user"); return u?JSON.parse(u):null; }catch(e){ return null; }
   });
-  const saveUser=(u)=>{ setUser(u); try{ if(u) localStorage.setItem("afc_user",JSON.stringify(u)); else localStorage.removeItem("afc_user"); }catch(e){} };
+  const saveUser=(u)=>{
+    setUser(u);
+    try{
+      if(u){
+        localStorage.setItem("afc_user",JSON.stringify(u));
+      }else{
+        localStorage.removeItem("afc_user");
+        Object.keys(sessionStorage)
+          .filter(k=>k.indexOf("afc_access_logged_")===0)
+          .forEach(k=>sessionStorage.removeItem(k));
+      }
+    }catch(e){}
+  };
   const [loading,setLoading]=useState(false);
   const [loadMsg,setLoadMsg]=useState("読み込み中...");
   const [tab,setTab]=useState("home");
@@ -5021,7 +5044,11 @@ function App() {
   const load=useCallback(async(msg="読み込み中...")=>{
     setLoadMsg(msg);setLoading(true);
     try{
-      const d=await api("getAll",{userId:user?.id||""});
+      const uid = String(user?.id || "").trim();
+      const accessKey = uid ? "afc_access_logged_" + uid : "";
+      const shouldCountAccess = !!uid && !sessionStorage.getItem(accessKey);
+      const d=await api("getAll",{userId:uid,countAccess:shouldCountAccess?1:0});
+      if(shouldCountAccess) sessionStorage.setItem(accessKey,"1");
       setMembers((d.members||[]).map(normalizeMember));
       setSchedules(d.schedules||[]);
       setResults(d.results||[]);
@@ -5032,10 +5059,6 @@ function App() {
     setLoading(false);
   },[user?.id]);
   useEffect(()=>{if(user)load();},[user,load]);
-  useEffect(()=>{
-    if(!user?.id) return;
-    api("recordAccess",{userId:user.id}).catch(()=>{});
-  },[user?.id]);
   useEffect(()=>{
     if(!user || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       setNotificationEnabled(false);
@@ -5171,22 +5194,26 @@ function App() {
     saveUser({...user,...r.user});
     await load("更新中...");
   };
+  const safeSetTab=useCallback((nextTab)=>{
+    const t=String(nextTab||"").trim();
+    if(!t) return setTab("home");
+    if(t==="settings" && !isAdmin) return setTab("home");
+    setTab(t);
+  },[isAdmin]);
   useEffect(()=>{
     if(!user || !deepLink.scheduleId || schedules.length===0) return;
     const target = schedules.find(s => String(s.id || "").trim() === String(deepLink.scheduleId).trim());
     if (!target) return;
-    if (deepLink.tab) {
-      const allowedTabs = isAdmin
-        ? ["home","cal","match","dash","member","memo","docs","settings"]
-        : ["home","cal","match","dash","member","memo","docs"];
-      setTab(allowedTabs.includes(deepLink.tab) ? deepLink.tab : "home");
-    }
+    if (deepLink.tab) safeSetTab(deepLink.tab);
     setPage({type:"dayDetail",schedule:target,dayTab:deepLink.dayTab||""});
     setDeepLink({scheduleId:"",dayTab:"",tab:""});
     try {
       window.history.replaceState(null, "", location.pathname);
     } catch (e) {}
-  },[user,deepLink,schedules]);
+  },[user,deepLink,schedules,safeSetTab]);
+  useEffect(()=>{
+    if(!isAdmin && tab==="settings") setTab("home");
+  },[isAdmin,tab]);
 
   // ── ページルーティング ────────────────────────────────────────
   if(!user) return h(Login,{onLogin:saveUser});
@@ -5247,15 +5274,17 @@ function App() {
     ...(isAdmin?[{k:"settings",i:"⚙️",l:"設定"}]:[]),
   ];
   const currentTabContent =
-    tab==="home" ? h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:setTab})
+    tab==="home" ? h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab})
     : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule})
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
-    : tab==="settings" ? h(SettingsTab,{user,users,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile})
-    : h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:setTab});
+    : tab==="settings" ? (isAdmin
+        ? h(SettingsTab,{user,users,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile})
+        : null)
+    : h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab});
 
   return h(Fragment,{},
     loading && h(Loader,{msg:loadMsg}),
@@ -5263,7 +5292,7 @@ function App() {
       h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationEnabled,notificationBusy,onEnableNotifications:handleEnableNotifications}),
       h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
         h("div",{style:{display:"flex"}},
-          TABS.map(t=>h("button",{key:t.k,onClick:()=>setTab(t.k),style:{flex:1,padding:"11px 2px 9px",border:"none",background:tab===t.k?"#1D4ED8":"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
+          TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),style:{flex:1,padding:"11px 2px 9px",border:"none",background:tab===t.k?"#1D4ED8":"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
             h("span",{style:{fontSize:17}},t.i),
             h("span",{style:{fontSize:9,fontWeight:tab===t.k?700:400,color:tab===t.k?"#fff":"#aaa"}},t.l)
           ))
