@@ -1231,22 +1231,44 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
         const titleText = String(n.title||"");
         const contentText = String(n.content||"");
         const isScheduleAddedNotice = titleText.includes("新しい予定が追加されました") || contentText.includes("新しい予定が追加されました") || titleText.includes("予定が追加されました") || contentText.includes("予定が追加されました");
+        const isYoutubeNotice = /youtube/i.test(titleText+" "+contentText) || tt==="youtube";
+        const isDeadlineNotice = tt==="deadline" || tt.startsWith("pending_") || titleText.includes("締切") || contentText.includes("締切");
+        const linkedSchedule = findScheduleFromNotice(n);
         const summaryRaw = isScheduleAddedNotice
           ? contentText.replace("新しい予定が追加されました","").replace("予定が追加されました","").replace(/^[:：\s-]+/,"").trim()
           : contentText.trim();
         const summary = summaryRaw || (isScheduleAddedNotice ? "予定が追加されました" : "");
         const displayTitle = isScheduleAddedNotice ? "予定追加" : (titleText || "お知らせ");
+        const tone = isDeadlineNotice
+          ? {accent:"#F59E0B",badgeBg:"#FFF7ED",badgeText:"#B45309",label:"締切",title:"#B45309"}
+          : isYoutubeNotice
+          ? {accent:"#EF4444",badgeBg:"#FEF2F2",badgeText:"#B91C1C",label:"動画",title:"#B91C1C"}
+          : (isScheduleAddedNotice || tt==="schedule")
+          ? {accent:"#2563EB",badgeBg:"#EFF6FF",badgeText:"#1D4ED8",label:"予定",title:"#1D4ED8"}
+          : {accent:"#64748B",badgeBg:"#F1F5F9",badgeText:"#475569",label:"連絡",title:"#334155"};
+        let locationText = String(linkedSchedule?.location || "").trim();
+        if(!locationText && summary.includes(" / ")){
+          const parts = summary.split(" / ").map(x=>String(x||"").trim()).filter(Boolean);
+          if(parts.length>1){
+            const maybeLoc = String(parts[parts.length-1]||"").replace(/^📍\s*/,"").trim();
+            if(maybeLoc && !/締切/.test(maybeLoc)) locationText = maybeLoc;
+          }
+        }
         const canClick = isScheduleAddedNotice || /youtube/i.test(titleText+" "+contentText) || String(n.targetType||"").trim() || String(n.targetUrl||"").trim();
         const showNew = isFreshNews(n.date);
-        return h("div",{key:n.id,onClick:canClick?()=>openNotice(n):undefined,style:{background:"#fff",borderRadius:14,padding:"11px 12px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderLeft:isScheduleAddedNotice?"3px solid #1D4ED8":"3px solid #E2E8F0",cursor:canClick?"pointer":"default"}},
+        return h("div",{key:n.id,onClick:canClick?()=>openNotice(n):undefined,style:{background:"#fff",borderRadius:14,padding:"11px 12px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderLeft:`3px solid ${tone.accent}`,border:"1px solid #E2E8F0",cursor:canClick?"pointer":"default"}},
           h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5,gap:8}},
             h("div",{style:{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,flexWrap:"wrap"}},
               showNew && h("span",{style:{display:"inline-block",fontSize:9,fontWeight:800,color:"#fff",background:"#1D4ED8",borderRadius:999,padding:"2px 6px",lineHeight:1}},"NEW"),
-              h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e",paddingRight:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}},displayTitle)),
+              h("span",{style:{display:"inline-block",fontSize:10,fontWeight:800,color:tone.badgeText,background:tone.badgeBg,borderRadius:999,padding:"2px 7px",lineHeight:1}},tone.label),
+              h("div",{style:{fontSize:13,fontWeight:800,color:tone.title,paddingRight:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}},displayTitle)),
             h("div",{style:{display:"flex",alignItems:"center",gap:6,flexShrink:0}},
               h("div",{style:{fontSize:10,color:"#94A3B8"}},fmtNewsDateTime(n.date)),
               canClick && h("div",{style:{fontSize:12,color:"#94A3B8",fontWeight:700}},"›"))),
-          summary && h("div",{style:{fontSize:12,color:"#1E293B",lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:isScheduleAddedNotice?800:700}},summary));
+          h("div",{style:{display:"flex",gap:10,alignItems:"center",fontSize:10,color:"#64748B",marginBottom:summary?4:0,flexWrap:"wrap"}},
+            h("span",{style:{fontWeight:700}},"🕒 "+fmtNewsDateTime(n.date)),
+            locationText && h("span",{style:{fontWeight:700,color:"#0F766E"}},"📍 "+locationText)),
+          summary && h("div",{style:{fontSize:12,color:"#334155",lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:isScheduleAddedNotice?800:700}},summary));
       })),
     // ④ 最近の試合結果
     h("div",{style:{marginBottom:20}},
@@ -1403,6 +1425,17 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
     } catch (e) {}
     return [{ url: urlsText, name: namesText }];
   };
+  const buildPdfStoreValue = (items) => {
+    const clean = (items || [])
+      .map(item => ({ url: String(item?.url || "").trim(), name: String(item?.name || "").trim() }))
+      .filter(item => item.url);
+    if (clean.length === 0) return { pdfUrl: "", pdfName: "" };
+    if (clean.length === 1) return { pdfUrl: clean[0].url, pdfName: clean[0].name || "" };
+    return {
+      pdfUrl: JSON.stringify(clean.map(item => item.url)),
+      pdfName: JSON.stringify(clean.map(item => item.name || "")),
+    };
+  };
   const pdfItems = parsePdfItems(form.pdfUrl, form.pdfName);
   const pdfPreviewUrl = url => String(url || "").replace("/view?usp=sharing", "/preview").replace("/view", "/preview");
   const uploadPdf = async(file) => {
@@ -1428,6 +1461,31 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
     }catch(e){
       alert("PDFアップロードエラー: " + (e.message || e));
     }finally{
+      setPdfUploading(false);
+    }
+  };
+  const removePdfAt = async (idx) => {
+    if (!isAdmin) return;
+    if (idx < 0 || idx >= pdfItems.length) return;
+    if (!confirm("このPDF添付を削除しますか？")) return;
+    const nextItems = pdfItems.filter((_, i) => i !== idx);
+    const nextStored = buildPdfStoreValue(nextItems);
+    setPdfUploading(true);
+    try {
+      await api("updateSchedule", {
+        schedule: {
+          id: schedule.id,
+          pdfUrl: nextStored.pdfUrl,
+          pdfName: nextStored.pdfName,
+        }
+      });
+      setForm(p => ({ ...p, pdfUrl: nextStored.pdfUrl, pdfName: nextStored.pdfName }));
+      schedule.pdfUrl = nextStored.pdfUrl;
+      schedule.pdfName = nextStored.pdfName;
+      alert("PDF添付を削除しました");
+    } catch (e) {
+      alert("PDF削除エラー: " + (e.message || e));
+    } finally {
       setPdfUploading(false);
     }
   };
@@ -3574,9 +3632,36 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
 }
 
 // ── 試合結果タブ：月別一覧のみ ─────────────────────────────────
-function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onAdd}) {
+function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd}) {
+  const scheds=(schedules||[])
+    .filter(s=>{
+      const t=normalizeType(s.type);
+      return t!=="practice" && t!=="event";
+    })
+    .sort((a,b)=>nd(b.date).localeCompare(nd(a.date)));
   return h(Fragment,{},
-    h(MatchListByMonth,{results,schedules,onGoToMatch}));
+    h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:8}},"📅 日程一覧"),
+      h("div",{style:{fontSize:11,color:"#94A3B8"}},"日程を選ぶと、その日の試合一覧へ移動します")),
+    scheds.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"試合日程がありません"),
+    scheds.map((s,i)=>{
+      const tc=getTC(s.type);
+      const dt=fmt(s.date);
+      const count=(results||[]).filter(r=>String(r.scheduleId||"").trim()===String(s.id||"").trim() || nd(r.date)===nd(s.date)).length;
+      return h("div",{key:s.id||`${s.date}-${i}`,onClick:()=>onGoToDay&&onGoToDay(s,"match"),
+        style:{background:"#fff",borderRadius:14,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:10,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",cursor:"pointer"}},
+        h("div",{style:{textAlign:"center",flexShrink:0,width:40}},
+          h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700}},dt.short),
+          h("div",{style:{fontSize:10,color:"#94A3B8"}},dt.dw)),
+        h("div",{style:{width:3,height:42,background:tc.bg,borderRadius:2,flexShrink:0}}),
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{marginBottom:3}},h(Bdg,{label:tc.lb,color:tc.bg,small:true})),
+          h("div",{style:{fontSize:14,fontWeight:700,color:"#1E293B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},s.title||"（タイトルなし）"),
+          s.location&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"📍 "+s.location)),
+        h("div",{style:{textAlign:"right",flexShrink:0,color:"#64748B"}},
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#1D4ED8"}},count+"試合"),
+          h("div",{style:{fontSize:14,color:"#CBD5E1",marginTop:2}},"›"));
+    }));
 }
 
 
@@ -3816,8 +3901,8 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
                 h("div",{style:{width:`${st2.losses/st2.games*100}%`,background:"#F44336"}})),
               h("div",{style:{display:"flex",gap:8,fontSize:10,color:"rgba(255,255,255,0.4)",marginBottom:14}},
                 h("span",{},"■ 勝 "+st2.wins),h("span",{},"■ 分 "+st2.draws),h("span",{},"■ 負 "+st2.losses))),
-            h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,textAlign:"center"}},
-              [{l:"勝率",v:st2.pct,c:"#fff"},{l:"総得点",v:st2.gf,c:"#1D4ED8"},{l:"総失点",v:st2.ga,c:"#F44336"},{l:"優勝回数",v:championCount,c:"#FFD700"}]
+            h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,textAlign:"center"}},
+              [{l:"勝率",v:st2.pct,c:"#fff"},{l:"総得点",v:st2.gf,c:"#1D4ED8"},{l:"総失点",v:st2.ga,c:"#F44336"}]
                 .map(x=>h("div",{key:x.l,style:{background:"rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 4px"}},
                   h("div",{style:{fontSize:20,fontWeight:900,color:x.c}},x.v),
                   h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:2}},x.l))))),
@@ -5354,7 +5439,7 @@ function App() {
   const currentTabContent =
     tab==="home" ? h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab})
     : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule})
-    : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch})
+    : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
