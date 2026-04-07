@@ -1605,13 +1605,33 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
     h("div", { style: { marginBottom: 16 } },
       h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 6 } }, "PDF添付"),
       pdfItems.length > 0 && h("div", { style: { marginBottom: 8 } },
-        pdfItems.map((item, idx) => h("a", {
+        pdfItems.map((item, idx) => h("div", {
           key: item.url + idx,
-          href: item.url,
-          target: "_blank",
-          rel: "noopener noreferrer",
-          style: { display: "block", marginBottom: 6, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none" }
-        }, "📎 " + (item.name || `添付PDF ${idx + 1}`)))
+          style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }
+        },
+          h("a", {
+            href: item.url,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            style: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all" }
+          }, "📎 " + (item.name || `添付PDF ${idx + 1}`)),
+          isAdmin && h("button", {
+            type: "button",
+            onClick: () => removePdfAt(idx),
+            disabled: pdfUploading,
+            style: {
+              border: "1px solid #FCA5A5",
+              background: "#FFF1F2",
+              color: "#DC2626",
+              borderRadius: 8,
+              padding: "4px 8px",
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: pdfUploading ? "default" : "pointer",
+              opacity: pdfUploading ? 0.7 : 1
+            }
+          }, "削除")
+        ))
       ),
       isAdmin && h("label", {
         style: {
@@ -1765,12 +1785,30 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", marginBottom: 6 } }, "📎 添付PDF"),
       pdfItems.length === 0 && h("div", { style: { fontSize: 12, color: "#64748B", marginBottom: isAdmin ? 10 : 0 } }, "添付PDFはまだありません"),
       pdfItems.map((item, idx) => h("div", { key: item.url + "-preview-" + idx, style: { marginBottom: idx < pdfItems.length - 1 ? 16 : 0 } },
-        h("a", {
-          href: item.url,
-          target: "_blank",
-          rel: "noopener noreferrer",
-          style: { display: "inline-block", marginBottom: 10, fontSize: 13, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all" }
-        }, item.name || `PDFを開く ${idx + 1}`),
+        h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } },
+          h("a", {
+            href: item.url,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            style: { display: "inline-block", fontSize: 13, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all", flex: 1, minWidth: 0 }
+          }, item.name || `PDFを開く ${idx + 1}`),
+          isAdmin && h("button", {
+            type: "button",
+            onClick: () => removePdfAt(idx),
+            disabled: pdfUploading,
+            style: {
+              border: "1px solid #FCA5A5",
+              background: "#FFF1F2",
+              color: "#DC2626",
+              borderRadius: 8,
+              padding: "4px 8px",
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: pdfUploading ? "default" : "pointer",
+              opacity: pdfUploading ? 0.7 : 1
+            }
+          }, "削除")
+        ),
         pdfPreviewUrl(item.url) && h("iframe", {
           src: pdfPreviewUrl(item.url),
           title: item.name || `添付PDF ${idx + 1}`,
