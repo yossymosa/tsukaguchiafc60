@@ -3669,24 +3669,119 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
     }));
 }
 
-// ── 試合結果タブ：月別一覧のみ ─────────────────────────────────
+// ── 試合タブ：月タブ + 日程カード一覧 ───────────────────────────
 function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd}) {
-  const scheds=(schedules||[])
-    .filter(s=>{
-      const t=normalizeType(s.type);
-      return t!=="practice" && t!=="event";
-    })
-    .sort((a,b)=>nd(b.date).localeCompare(nd(a.date)));
+  const matchSchedules = useMemo(() =>
+    (schedules || [])
+      .filter(s => {
+        const t = normalizeType(s.type);
+        return t !== "practice" && t !== "event";
+      })
+      .sort((a,b) => nd(b.date).localeCompare(nd(a.date)))
+  , [schedules]);
+
+  const getResultsForSchedule = (schedule) => {
+    const sid = String(schedule?.id || "").trim();
+    const byId = (results || []).filter(r => String(r.scheduleId || "").trim() === sid);
+    if (byId.length > 0) return byId;
+    const d = nd(schedule?.date);
+    if (!d) return [];
+    return (results || []).filter(r => !String(r.scheduleId || "").trim() && nd(r.date) === d);
+  };
+
+  const monthGroups = useMemo(() => {
+    const map = {};
+    matchSchedules.forEach(s => {
+      const d = nd(s.date);
+      if (!d) return;
+      const ym = d.slice(0, 7);
+      if (!map[ym]) map[ym] = [];
+      map[ym].push(s);
+    });
+    return Object.entries(map)
+      .sort((a,b) => b[0].localeCompare(a[0]))
+      .map(([ym, scheds]) => ({
+        ym,
+        label: Number(ym.slice(0,4)) + "年" + Number(ym.slice(5,7)) + "月",
+        scheds: scheds.sort((a,b) => nd(b.date).localeCompare(nd(a.date))),
+      }));
+  }, [matchSchedules]);
+
+  const [selYm, setSelYm] = useState(() => monthGroups[0]?.ym || "");
+  useEffect(() => {
+    if (!monthGroups.length) {
+      if (selYm) setSelYm("");
+      return;
+    }
+    if (!monthGroups.find(g => g.ym === selYm)) {
+      setSelYm(monthGroups[0].ym);
+    }
+  }, [monthGroups, selYm]);
+
+  if (matchSchedules.length === 0) {
+    return h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"試合日程がありません");
+  }
+
+  const cur = monthGroups.find(g => g.ym === selYm) || monthGroups[0];
+  const monthResults = (() => {
+    const seen = new Set();
+    const rows = [];
+    (cur?.scheds || []).forEach(s => {
+      getResultsForSchedule(s).forEach(r => {
+        const key = String(r.id || `${nd(r.date)}|${r.opponent || ""}|${r.gameNumber || ""}|${r.ourScore || ""}|${r.theirScore || ""}`);
+        if (seen.has(key)) return;
+        seen.add(key);
+        rows.push(r);
+      });
+    });
+    return rows;
+  })();
+  const monthStat = calcStats(monthResults);
+
   return h(Fragment,{},
-    h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
-      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:8}},"📅 日程一覧"),
-      h("div",{style:{fontSize:11,color:"#94A3B8"}},"日程を選ぶと、その日の試合一覧へ移動します")),
-    scheds.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"試合日程がありません"),
-    scheds.map((s,i)=>{
-      const tc=getTC(s.type);
-      const dt=fmt(s.date);
-      const count=(results||[]).filter(r=>String(r.scheduleId||"").trim()===String(s.id||"").trim() || nd(r.date)===nd(s.date)).length;
-      return h("div",{key:s.id||`${s.date}-${i}`,onClick:()=>onGoToDay&&onGoToDay(s,"match"),
+    h("div",{style:{overflowX:"auto",marginBottom:12,paddingBottom:4}},
+      h("div",{style:{display:"flex",gap:6,width:"max-content"}},
+        monthGroups.map(g => {
+          const active = g.ym === (cur?.ym || "");
+          const monthRows = (() => {
+            const seen = new Set();
+            const rows = [];
+            g.scheds.forEach(s => {
+              getResultsForSchedule(s).forEach(r => {
+                const key = String(r.id || `${nd(r.date)}|${r.opponent || ""}|${r.gameNumber || ""}|${r.ourScore || ""}|${r.theirScore || ""}`);
+                if (seen.has(key)) return;
+                seen.add(key);
+                rows.push(r);
+              });
+            });
+            return rows;
+          })();
+          const mst = calcStats(monthRows);
+          return h("div",{key:g.ym,onClick:()=>setSelYm(g.ym),
+            style:{padding:"8px 14px",borderRadius:20,cursor:"pointer",flexShrink:0,textAlign:"center",
+              background:active?"#1D4ED8":"#fff",
+              color:active?"#fff":"#666",
+              boxShadow:"0 2px 6px rgba(0,0,0,0.07)",
+              border:active?"none":"1px solid #eee",
+              fontWeight:active?700:400}},
+            h("div",{style:{fontSize:12,whiteSpace:"nowrap"}},g.label),
+            h("div",{style:{fontSize:10,opacity:0.85,marginTop:2}},mst.wins+"勝"+mst.draws+"分"+mst.losses+"敗"));
+        })))),
+
+    cur && h("div",{style:{background:"#fff",borderRadius:14,padding:"12px 16px",marginBottom:12,display:"flex",gap:16,alignItems:"center",boxShadow:"0 2px 6px rgba(0,0,0,0.05)"}},
+      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",flex:1}},cur.label),
+      h("div",{style:{display:"flex",gap:10,fontSize:12,flexWrap:"wrap",justifyContent:"flex-end"}},
+        h("span",{style:{color:"#4CAF50",fontWeight:700}},monthStat.wins+"勝"),
+        h("span",{style:{color:"#FFC107",fontWeight:700}},monthStat.draws+"分"),
+        h("span",{style:{color:"#F44336",fontWeight:700}},monthStat.losses+"敗"),
+        h("span",{style:{color:"#64748B"}},(cur.scheds.length || 0)+"日程 / "+monthStat.games+"試合"))),
+
+    (cur?.scheds || []).map((s,i) => {
+      const tc = getTC(s.type);
+      const dt = fmt(s.date);
+      const dayRows = getResultsForSchedule(s);
+      const st = calcStats(dayRows);
+      return h("div",{key:s.id || `${s.date}-${i}`,onClick:()=>onGoToDay&&onGoToDay(s,"match"),
         style:{background:"#fff",borderRadius:14,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:10,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",cursor:"pointer"}},
         h("div",{style:{textAlign:"center",flexShrink:0,width:40}},
           h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700}},dt.short),
@@ -3697,9 +3792,12 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
           h("div",{style:{fontSize:14,fontWeight:700,color:"#1E293B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},s.title||"（タイトルなし）"),
           s.location&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"📍 "+s.location)),
         h("div",{style:{textAlign:"right",flexShrink:0,color:"#64748B"}},
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#1D4ED8"}},count+"試合"),
-          h("div",{style:{fontSize:14,color:"#CBD5E1",marginTop:2}},"›")));
-    }));
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#4CAF50"}},st.wins+"勝"),
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#FFC107"}},st.draws+"分"),
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#F44336"}},st.losses+"敗"),
+          h("div",{style:{fontSize:10,color:"#94A3B8",marginTop:2}},st.games+"試合")) );
+    })
+  );
 }
 
 
