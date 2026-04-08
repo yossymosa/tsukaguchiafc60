@@ -3519,7 +3519,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
               const selected = parseMemberList(eventForm[cat.key]);
               return h("div",{key:cat.key,style:{marginBottom:10,padding:"10px",borderRadius:10,background:"#fff",border:`1px solid ${cat.bg}`}},
                 h("div",{style:{fontSize:11,fontWeight:700,color:cat.color,marginBottom:8}},`${cat.label} (${selected.length}人)`),
-                h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+                h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6}},
                   eventFamilyCandidates.map(name => {
                     const active = selected.includes(name);
                     return h("button",{
@@ -3535,6 +3535,10 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
                         padding:"4px 10px",
                         fontSize:12,
                         fontWeight:700,
+                        width:"100%",
+                        whiteSpace:"nowrap",
+                        overflow:"hidden",
+                        textOverflow:"ellipsis",
                         cursor:(isPast||!canWrite)?"not-allowed":"pointer",
                         opacity:(isPast||!canWrite)?0.6:1
                       }
