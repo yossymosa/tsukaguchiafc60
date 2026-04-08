@@ -5296,22 +5296,23 @@ function MemberTab({members,liftings=[]}) {
           style:{padding:"6px 14px",border:`2px solid ${pos===t.k?"#1D4ED8":"#eee"}`,
             borderRadius:20,background:pos===t.k?"#1D4ED8":"#fff",
             color:pos===t.k?"#fff":"#666",fontSize:12,fontWeight:pos===t.k?700:400,cursor:"pointer"}},t.l))),
-    // 選手カード一覧
-    sorted.map(m=>{
-      const pc=PC[m.position]||{bg:"#999"};
-      const lf=liftings.find(x=>x.memberId===m.id);
-      return h("div",{key:m.id,style:{background:"#fff",borderRadius:16,padding:16,marginBottom:10,
-        boxShadow:"0 2px 8px rgba(0,0,0,0.06)",display:"flex",alignItems:"center",gap:14}},
-        h("div",{style:{width:48,height:48,borderRadius:12,background:pc.bg,
-          display:"flex",alignItems:"center",justifyContent:"center",
-          color:"#fff",fontSize:20,fontWeight:900,flexShrink:0}},m.number||"?"),
-        h("div",{style:{flex:1}},
-          h("div",{style:{fontSize:16,fontWeight:800,color:"#1a1a2e",marginBottom:3}},m.name),
-          h("div",{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}},
-            h("span",{style:{fontSize:11,fontWeight:700,color:pc.bg,background:pc.bg+"22",borderRadius:6,padding:"2px 8px"}},m.position||"?"),
-            h("span",{style:{fontSize:11,color:"#aaa"}},formatMemberGenerationGrade(m)||m.grade||""),
-            lf&&h("span",{style:{fontSize:11,color:"#4CAF50",background:"#E8F5E9",borderRadius:6,padding:"2px 8px"}},"🏃 "+lf.count+"回"))));
-    }));
+    // 選手カード一覧（3列）
+    h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8}},
+      sorted.map(m=>{
+        const pc=PC[m.position]||{bg:"#999"};
+        const lf=liftings.find(x=>x.memberId===m.id);
+        return h("div",{key:m.id,style:{background:"#fff",borderRadius:12,padding:"10px 8px",
+          boxShadow:"0 2px 8px rgba(0,0,0,0.06)",textAlign:"center",minWidth:0}},
+          h("div",{style:{width:40,height:40,borderRadius:10,background:pc.bg,margin:"0 auto 8px",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            color:"#fff",fontSize:17,fontWeight:900}},m.number||"?"),
+          h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},m.name),
+          h("div",{style:{display:"flex",justifyContent:"center",marginBottom:4}},
+            h("span",{style:{fontSize:10,fontWeight:700,color:pc.bg,background:pc.bg+"22",borderRadius:999,padding:"2px 8px"}},m.position||"?")),
+          h("div",{style:{fontSize:10,color:"#94A3B8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},formatMemberGenerationGrade(m)||m.grade||""),
+          lf&&h("div",{style:{fontSize:10,color:"#4CAF50",fontWeight:700,marginTop:4}},"🏃"+lf.count));
+      })
+    ));
 }
 
 function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile}) {
