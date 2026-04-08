@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxlmia2lqfSL9g8NwPlFskp7KdAMEdIQZdLCuyhm8J2WwPLYWi-If0KKkSBAIxdNaY/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw01dDDhkpXt6SfyB6O1yzAxVCXXEYxvu7PXQRc4-zJ6FueEOL5uoW9EAd5vFHs1WUw/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -1437,11 +1437,35 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
     };
   };
   const pdfItems = parsePdfItems(form.pdfUrl, form.pdfName);
+  const extractDriveFileId = url => {
+    const s = String(url || "");
+    const m1 = s.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (m1 && m1[1]) return m1[1];
+    const m2 = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m2 && m2[1]) return m2[1];
+    return "";
+  };
+  const isImageAttachment = item => {
+    const name = String((item && item.name) || "").toLowerCase();
+    const url = String((item && item.url) || "").toLowerCase();
+    return /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/i.test(name) || /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)([?#].*)?$/i.test(url);
+  };
+  const isPdfAttachment = item => {
+    const name = String((item && item.name) || "").toLowerCase();
+    const url = String((item && item.url) || "").toLowerCase();
+    return /\.pdf$/i.test(name) || /\.pdf([?#].*)?$/i.test(url);
+  };
   const pdfPreviewUrl = url => String(url || "").replace("/view?usp=sharing", "/preview").replace("/view", "/preview");
+  const imagePreviewUrl = item => {
+    const fid = extractDriveFileId(item && item.url);
+    return fid ? `https://drive.google.com/uc?export=view&id=${fid}` : String(item && item.url || "");
+  };
   const uploadPdf = async(file) => {
     if (!file) return;
-    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name || "")) {
-      alert("PDFファイルを選んでください");
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
+    const isImage = /^image\//i.test(file.type || "") || /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/i.test(file.name || "");
+    if (!isPdf && !isImage) {
+      alert("PDFまたは画像ファイルを選んでください");
       return;
     }
     setPdfUploading(true);
@@ -1457,9 +1481,9 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       setForm(p => ({ ...p, pdfUrl: r.pdfUrl || "", pdfName: r.pdfName || "" }));
       schedule.pdfUrl = r.pdfUrl || "";
       schedule.pdfName = r.pdfName || "";
-      alert("PDFを添付しました");
+      alert("添付ファイルを追加しました");
     }catch(e){
-      alert("PDFアップロードエラー: " + (e.message || e));
+      alert("添付ファイルアップロードエラー: " + (e.message || e));
     }finally{
       setPdfUploading(false);
     }
@@ -1467,7 +1491,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
   const removePdfAt = async (idx) => {
     if (!isAdmin) return;
     if (idx < 0 || idx >= pdfItems.length) return;
-    if (!confirm("このPDF添付を削除しますか？")) return;
+    if (!confirm("この添付ファイルを削除しますか？")) return;
     const nextItems = pdfItems.filter((_, i) => i !== idx);
     const nextStored = buildPdfStoreValue(nextItems);
     setPdfUploading(true);
@@ -1482,9 +1506,9 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       setForm(p => ({ ...p, pdfUrl: nextStored.pdfUrl, pdfName: nextStored.pdfName }));
       schedule.pdfUrl = nextStored.pdfUrl;
       schedule.pdfName = nextStored.pdfName;
-      alert("PDF添付を削除しました");
+      alert("添付ファイルを削除しました");
     } catch (e) {
-      alert("PDF削除エラー: " + (e.message || e));
+      alert("添付ファイル削除エラー: " + (e.message || e));
     } finally {
       setPdfUploading(false);
     }
@@ -1603,7 +1627,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       })
     ),
     h("div", { style: { marginBottom: 16 } },
-      h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 6 } }, "PDF添付"),
+      h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 6 } }, "添付ファイル"),
       pdfItems.length > 0 && h("div", { style: { marginBottom: 8 } },
         pdfItems.map((item, idx) => h("div", {
           key: item.url + idx,
@@ -1614,7 +1638,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
             target: "_blank",
             rel: "noopener noreferrer",
             style: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all" }
-          }, "📎 " + (item.name || `添付PDF ${idx + 1}`)),
+          }, "📎 " + (item.name || `添付ファイル ${idx + 1}`)),
           isAdmin && h("button", {
             type: "button",
             onClick: () => removePdfAt(idx),
@@ -1651,16 +1675,16 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
           opacity: pdfUploading ? 0.7 : 1
         }
       },
-        h("span", {}, pdfUploading ? "PDFアップロード中..." : "＋ PDFを追加"),
+        h("span", {}, pdfUploading ? "アップロード中..." : "＋ ファイルを追加"),
         h("input", {
           type: "file",
-          accept: "application/pdf,.pdf",
+          accept: "application/pdf,image/*,.pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.heic,.heif",
           disabled: pdfUploading,
           onChange: e => uploadPdf((e.target.files || [])[0]),
           style: { display: "none" }
         })
       ),
-      isAdmin && pdfUploading && h("div", { style: { fontSize: 12, color: "#666", marginTop: 6 } }, "PDFアップロード中...")
+      isAdmin && pdfUploading && h("div", { style: { fontSize: 12, color: "#666", marginTop: 6 } }, "アップロード中...")
     ),
     h("button", {
       onClick: save,
@@ -1680,7 +1704,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
                   [
                     {label:"大人", value:eventTotals.adult, color:"#1D4ED8", bg:"#DBEAFE"},
                     {label:"小学生", value:eventTotals.child, color:"#2563EB", bg:"#EFF6FF"},
-                    {label:"未就学児", value:eventTotals.preschool, color:"#0F172A", bg:"#E2E8F0"},
+                    {label:"幼児", value:eventTotals.preschool, color:"#0F172A", bg:"#E2E8F0"},
                   ].map(item =>
                     h("div",{key:item.label,style:{flex:1,textAlign:"center",padding:"10px 6px",borderRadius:10,background:item.bg}},
                       h("div",{style:{fontSize:20,fontWeight:900,color:item.color}},item.value),
@@ -1691,7 +1715,19 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
                   : eventAttend.slice().sort((a,b)=>String(a.userName||"").localeCompare(String(b.userName||""),"ja")).map(row =>
                       h("div",{key:row.userId,style:{marginBottom:8}},
                         h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e",marginBottom:2}},row.userName||"名前未設定"),
-                        h("div",{style:{fontSize:12,color:"#666"}},`大人 ${Number(row.adultCount||0)} / 小学生 ${Number(row.childCount||0)} / 未就学児 ${Number(row.preschoolCount||0)}`))
+                        h("div",{style:{fontSize:12,color:"#666"}},`大人 ${Number(row.adultCount||0)} / 小学生 ${Number(row.childCount||0)} / 幼児 ${Number(row.preschoolCount||0)}`),
+                        (() => {
+                          const adults = parseFamilyMembers(row.adultMembers || []);
+                          const childs = parseFamilyMembers(row.childMembers || []);
+                          const pres = parseFamilyMembers(row.preschoolMembers || []);
+                          const parts = [];
+                          if (adults.length) parts.push(`大人: ${adults.join("、")}`);
+                          if (childs.length) parts.push(`小学生: ${childs.join("、")}`);
+                          if (pres.length) parts.push(`幼児: ${pres.join("、")}`);
+                          return parts.length
+                            ? h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.5,marginTop:3}},parts.join(" / "))
+                            : null;
+                        })())
                     ))
               ]
         )
@@ -1782,8 +1818,8 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       showBelongings && h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap", marginTop: 8 } }, form.belongings)
     ),
     (pdfItems.length > 0 || isAdmin) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#DBEAFE", borderRadius: 10 } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", marginBottom: 6 } }, "📎 添付PDF"),
-      pdfItems.length === 0 && h("div", { style: { fontSize: 12, color: "#64748B", marginBottom: isAdmin ? 10 : 0 } }, "添付PDFはまだありません"),
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", marginBottom: 6 } }, "📎 添付ファイル"),
+      pdfItems.length === 0 && h("div", { style: { fontSize: 12, color: "#64748B", marginBottom: isAdmin ? 10 : 0 } }, "添付ファイルはまだありません"),
       pdfItems.map((item, idx) => h("div", { key: item.url + "-preview-" + idx, style: { marginBottom: idx < pdfItems.length - 1 ? 16 : 0 } },
         h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } },
           h("a", {
@@ -1791,7 +1827,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
             target: "_blank",
             rel: "noopener noreferrer",
             style: { display: "inline-block", fontSize: 13, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all", flex: 1, minWidth: 0 }
-          }, item.name || `PDFを開く ${idx + 1}`),
+          }, item.name || `添付ファイルを開く ${idx + 1}`),
           isAdmin && h("button", {
             type: "button",
             onClick: () => removePdfAt(idx),
@@ -1809,10 +1845,15 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
             }
           }, "削除")
         ),
-        pdfPreviewUrl(item.url) && h("iframe", {
+        isPdfAttachment(item) && pdfPreviewUrl(item.url) && h("iframe", {
           src: pdfPreviewUrl(item.url),
-          title: item.name || `添付PDF ${idx + 1}`,
+          title: item.name || `添付ファイル ${idx + 1}`,
           style: { width: "100%", height: 360, border: "none", borderRadius: 10, background: "#fff" }
+        }),
+        isImageAttachment(item) && h("img", {
+          src: imagePreviewUrl(item),
+          alt: item.name || `添付画像 ${idx + 1}`,
+          style: { width: "100%", maxHeight: 420, objectFit: "contain", borderRadius: 10, background: "#fff", border: "1px solid #E2E8F0" }
         })
       )),
       isAdmin && h("label", {
@@ -1833,10 +1874,10 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
           opacity: pdfUploading ? 0.7 : 1
         }
       },
-        h("span", {}, pdfUploading ? "PDFアップロード中..." : "＋ PDFを追加"),
+        h("span", {}, pdfUploading ? "アップロード中..." : "＋ ファイルを追加"),
         h("input", {
           type: "file",
-          accept: "application/pdf,.pdf",
+          accept: "application/pdf,image/*,.pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.heic,.heif",
           disabled: pdfUploading,
           onChange: e => uploadPdf((e.target.files || [])[0]),
           style: { display: "none" }
@@ -3290,13 +3331,46 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
 }
 
 // ── 出欠セクション（DayPage内で使用） ────────────────────────
-function AttendSection({schedule, members, user, isAdmin, canWrite=true}) {
+function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[]}) {
   const isEventSchedule = normalizeType(schedule.type) === "event";
   const [attend, setAttend] = useState({});   // {memberId: status}
   const [eventAttend, setEventAttend] = useState([]);
-  const [eventForm, setEventForm] = useState({adultCount:"0", childCount:"0", preschoolCount:"0"});
+  const [eventForm, setEventForm] = useState({adultMembers:[], childMembers:[], preschoolMembers:[]});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
+  const parseMemberList = value => parseFamilyMembers(value || []);
+  const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user || {};
+  const eventFamilyCandidates = [...new Set(
+    [
+      user.name,
+      ...parseFamilyMembers(currentUserProfile.familyMembers || currentUserProfile.familyComposition || []),
+      ...parseMemberList(eventForm.adultMembers),
+      ...parseMemberList(eventForm.childMembers),
+      ...parseMemberList(eventForm.preschoolMembers),
+    ]
+      .map(v => String(v || "").trim())
+      .filter(Boolean)
+  )];
+  const toggleEventMember = (categoryKey, name) => {
+    const targetName = String(name || "").trim();
+    if (!targetName) return;
+    setEventForm(prev => {
+      const keys = ["adultMembers", "childMembers", "preschoolMembers"];
+      const base = {
+        adultMembers: parseMemberList(prev.adultMembers),
+        childMembers: parseMemberList(prev.childMembers),
+        preschoolMembers: parseMemberList(prev.preschoolMembers),
+      };
+      keys.forEach(k => {
+        if (k !== categoryKey) base[k] = base[k].filter(n => n !== targetName);
+      });
+      const cur = base[categoryKey];
+      base[categoryKey] = cur.includes(targetName)
+        ? cur.filter(n => n !== targetName)
+        : [...cur, targetName];
+      return base;
+    });
+  };
 
   // スケジュールの出欠を読み込み
   useEffect(() => {
@@ -3309,10 +3383,12 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true}) {
         const mine = rows.find(a => String(a.userId) === String(user.id));
         if (mine) {
           setEventForm({
-            adultCount: String(mine.adultCount || 0),
-            childCount: String(mine.childCount || 0),
-            preschoolCount: String(mine.preschoolCount || 0),
+            adultMembers: parseMemberList(mine.adultMembers || []),
+            childMembers: parseMemberList(mine.childMembers || []),
+            preschoolMembers: parseMemberList(mine.preschoolMembers || []),
           });
+        } else {
+          setEventForm({ adultMembers: [], childMembers: [], preschoolMembers: [] });
         }
       } else {
         const map = {};
@@ -3336,13 +3412,19 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true}) {
   const saveEventAttend = async () => {
     if (!canWrite) return;
     setSaving("event");
+    const adultMembers = parseMemberList(eventForm.adultMembers || []);
+    const childMembers = parseMemberList(eventForm.childMembers || []);
+    const preschoolMembers = parseMemberList(eventForm.preschoolMembers || []);
     const payload = {
       scheduleId: schedule.id,
       userId: user.id,
       userName: user.name,
-      adultCount: Number(eventForm.adultCount || 0),
-      childCount: Number(eventForm.childCount || 0),
-      preschoolCount: Number(eventForm.preschoolCount || 0),
+      adultMembers,
+      childMembers,
+      preschoolMembers,
+      adultCount: adultMembers.length,
+      childCount: childMembers.length,
+      preschoolCount: preschoolMembers.length,
     };
     try {
       await api("saveEventAttend", payload);
@@ -3417,30 +3499,69 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true}) {
         [
           {label:"大人", value:totals.adult, color:"#1D4ED8", bg:"#DBEAFE"},
           {label:"小学生", value:totals.child, color:"#4CAF50", bg:"#E8F5E9"},
-          {label:"未就学児", value:totals.preschool, color:"#2196F3", bg:"#E3F2FD"},
+          {label:"幼児", value:totals.preschool, color:"#2196F3", bg:"#E3F2FD"},
         ].map(item=>
           h("div",{key:item.label,style:{textAlign:"center",padding:"12px 8px",borderRadius:12,background:item.bg}},
             h("div",{style:{fontSize:22,fontWeight:900,color:item.color}},item.value),
             h("div",{style:{fontSize:11,color:item.color,fontWeight:700,marginTop:4}},item.label)))),
       h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:12,marginBottom:12}},
-        h("div",{style:{fontSize:12,fontWeight:700,color:"#666",marginBottom:10}},isAdmin?"参加人数を入力":"参加予定人数"),
-        [
-          {key:"adultCount",label:"大人"},
-          {key:"childCount",label:"小学生"},
-          {key:"preschoolCount",label:"未就学児"},
-        ].map(item=>
-          h("div",{key:item.key,style:{display:"flex",alignItems:"center",gap:10,marginBottom:item.key==="preschoolCount"?0:10}},
-            h("div",{style:{width:74,fontSize:13,fontWeight:700,color:"#555"}},item.label),
-            h("input",{type:"number",min:"0",value:eventForm[item.key],onChange:e=>setEventForm(p=>({...p,[item.key]:e.target.value})),disabled:isPast||!canWrite,style:{...css.inp,flex:1,marginBottom:0}}))),
-        h("button",{onClick:saveEventAttend,disabled:saving==="event"||isPast||!canWrite,style:{...css.bS,width:"100%",marginTop:12,opacity:(saving==="event"||isPast||!canWrite)?0.6:1,cursor:(isPast||!canWrite)?"not-allowed":"pointer"}},!canWrite?"閲覧専用":(saving==="event"?"保存中...":"💾 参加人数を保存"))),
+        h("div",{style:{fontSize:12,fontWeight:700,color:"#666",marginBottom:10}},"登録家族から参加者を選択"),
+        eventFamilyCandidates.length===0
+          ? h("div",{style:{fontSize:12,color:"#64748B",marginBottom:10,lineHeight:1.6}},"設定タブで家族構成を登録すると、ここで選択できます")
+          : [
+              {key:"adultMembers",label:"大人",color:"#1D4ED8",bg:"#DBEAFE"},
+              {key:"childMembers",label:"小学生",color:"#4CAF50",bg:"#E8F5E9"},
+              {key:"preschoolMembers",label:"幼児",color:"#2563EB",bg:"#EFF6FF"},
+            ].map(cat => {
+              const selected = parseMemberList(eventForm[cat.key]);
+              return h("div",{key:cat.key,style:{marginBottom:10,padding:"10px",borderRadius:10,background:"#fff",border:`1px solid ${cat.bg}`}},
+                h("div",{style:{fontSize:11,fontWeight:700,color:cat.color,marginBottom:8}},`${cat.label} (${selected.length}人)`),
+                h("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+                  eventFamilyCandidates.map(name => {
+                    const active = selected.includes(name);
+                    return h("button",{
+                      key:cat.key+"-"+name,
+                      type:"button",
+                      onClick:()=>toggleEventMember(cat.key, name),
+                      disabled:isPast||!canWrite,
+                      style:{
+                        border:`1px solid ${active ? cat.color : "#E2E8F0"}`,
+                        background:active ? cat.bg : "#fff",
+                        color:active ? cat.color : "#334155",
+                        borderRadius:999,
+                        padding:"4px 10px",
+                        fontSize:12,
+                        fontWeight:700,
+                        cursor:(isPast||!canWrite)?"not-allowed":"pointer",
+                        opacity:(isPast||!canWrite)?0.6:1
+                      }
+                    },name);
+                  })
+                )
+              );
+            }),
+        h("button",{onClick:saveEventAttend,disabled:saving==="event"||isPast||!canWrite,style:{...css.bS,width:"100%",marginTop:12,opacity:(saving==="event"||isPast||!canWrite)?0.6:1,cursor:(isPast||!canWrite)?"not-allowed":"pointer"}},!canWrite?"閲覧専用":(saving==="event"?"保存中...":"💾 イベント出欠を保存"))),
       isAdmin&&h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:12}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"回答一覧"),
         eventAttend.length===0
           ? h("div",{style:{fontSize:12,color:"#aaa"}},"まだ回答がありません")
           : eventAttend.slice().sort((a,b)=>String(a.userName||"").localeCompare(String(b.userName||""),"ja")).map(row=>
-              h("div",{key:row.userId,style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"10px 0",borderTop:"1px solid #eee"}},
-                h("div",{style:{fontSize:13,fontWeight:700,color:"#333"}},row.userName||"名前未設定"),
-                h("div",{style:{fontSize:12,color:"#666",textAlign:"right"}},`大人 ${Number(row.adultCount||0)} / 小学生 ${Number(row.childCount||0)} / 未就学児 ${Number(row.preschoolCount||0)}`))))
+              h("div",{key:row.userId,style:{padding:"10px 0",borderTop:"1px solid #eee"}},
+                h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}},
+                  h("div",{style:{fontSize:13,fontWeight:700,color:"#333"}},row.userName||"名前未設定"),
+                  h("div",{style:{fontSize:12,color:"#666",textAlign:"right"}},`大人 ${Number(row.adultCount||0)} / 小学生 ${Number(row.childCount||0)} / 幼児 ${Number(row.preschoolCount||0)}`)),
+                h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6}},
+                  (() => {
+                    const adults = parseMemberList(row.adultMembers || []);
+                    const childs = parseMemberList(row.childMembers || []);
+                    const pres = parseMemberList(row.preschoolMembers || []);
+                    const parts = [];
+                    if (adults.length) parts.push(`大人: ${adults.join("、")}`);
+                    if (childs.length) parts.push(`小学生: ${childs.join("、")}`);
+                    if (pres.length) parts.push(`幼児: ${pres.join("、")}`);
+                    return parts.length ? parts.join(" / ") : "カテゴリ別の名前未設定";
+                  })()
+                ))))
     );
   }
 
@@ -5086,7 +5207,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       dayTab==="carpool"&&h(CarpoolSection,{schedule,user,isAdmin,canWrite,members,users}),
 
       // 出欠タブ
-      dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin,canWrite}),
+      dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin,canWrite,users}),
 
       // MVP入力欄（公式戦・カップ戦のみ・matchesタブ）
       dayTab==="matches"&&isTournamentTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
