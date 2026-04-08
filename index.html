@@ -3340,8 +3340,12 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
   const [saving, setSaving] = useState("");
   const parseMemberList = value => parseFamilyMembers(value || []);
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user || {};
+  const linkedMember = (members || []).find(m => String(m.id || "").trim() === String(user.memberId || "").trim());
+  const linkedPlayerName = String(linkedMember?.name || "").trim();
+  const defaultEventFamilyCandidates = ["父", "母", linkedPlayerName || "選手", "兄弟"];
   const eventFamilyCandidates = [...new Set(
     [
+      ...defaultEventFamilyCandidates,
       user.name,
       ...parseFamilyMembers(currentUserProfile.familyMembers || currentUserProfile.familyComposition || []),
       ...parseMemberList(eventForm.adultMembers),
@@ -3505,7 +3509,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
             h("div",{style:{fontSize:22,fontWeight:900,color:item.color}},item.value),
             h("div",{style:{fontSize:11,color:item.color,fontWeight:700,marginTop:4}},item.label)))),
       h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:12,marginBottom:12}},
-        h("div",{style:{fontSize:12,fontWeight:700,color:"#666",marginBottom:10}},"登録家族から参加者を選択"),
+        h("div",{style:{fontSize:12,fontWeight:700,color:"#666",marginBottom:10}},"父・母・選手名・兄弟＋登録家族から選択"),
         eventFamilyCandidates.length===0
           ? h("div",{style:{fontSize:12,color:"#64748B",marginBottom:10,lineHeight:1.6}},"設定タブで家族構成を登録すると、ここで選択できます")
           : [
