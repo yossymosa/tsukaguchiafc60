@@ -60,6 +60,8 @@ module.exports = async function handler(req, res) {
     title,
     body: message,
     url,
+    icon: "/icon-512.png",
+    badge: "/icon-192.png",
   });
 
   let sent = 0;
