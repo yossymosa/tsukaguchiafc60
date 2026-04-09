@@ -1,5 +1,7 @@
-const CACHE_NAME = "tsukaguchi-afc-v11";
-const APP_SHELL = ["/", "/index.html", "/manifest.json", "/icon-512.png"];
+const CACHE_NAME = "tsukaguchi-afc-v12";
+const APP_SHELL = ["/", "/index.html", "/manifest.json", "/icon-192.png", "/icon-512.png"];
+const NOTIFICATION_ICON = "/icon-512.png";
+const NOTIFICATION_BADGE = "/icon-192.png";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -67,11 +69,13 @@ self.addEventListener("push", (event) => {
     }
   })();
 
-  const title = data.title || "塚口AFC Jr";
+  const title = data.title || "Tsukaguchi AFC Jr";
   const options = {
     body: data.body || "",
-    icon: "/icon-512.png",
-    badge: "/icon-512.png",
+    icon: data.icon || NOTIFICATION_ICON,
+    badge: data.badge || NOTIFICATION_BADGE,
+    tag: data.tag || "afc-notice",
+    renotify: Boolean(data.renotify),
     data: {
       url: data.url || "/",
     },
@@ -86,7 +90,15 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const client of list) {
-        if ("focus" in client) return client.focus();
+        if (client.url && "focus" in client) {
+          try {
+            const opened = new URL(client.url);
+            if (opened.origin === self.location.origin) {
+              if ("navigate" in client) client.navigate(targetUrl);
+              return client.focus();
+            }
+          } catch (e) {}
+        }
       }
       if (clients.openWindow) return clients.openWindow(targetUrl);
       return null;
