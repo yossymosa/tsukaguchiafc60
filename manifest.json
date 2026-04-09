@@ -1,7 +1,7 @@
 {
-  "name": "塚口AFC Jr",
-  "short_name": "塚口AFC",
-  "description": "塚口AFC Jr 記録アプリ",
+  "name": "\u585a\u53E3AFC Jr",
+  "short_name": "\u585a\u53E3AFC",
+  "description": "\u585a\u53E3AFC Jr \u8A18\u9332\u30A2\u30D7\u30EA",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
@@ -9,6 +9,12 @@
   "theme_color": "#0F172A",
   "orientation": "portrait",
   "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
