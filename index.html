@@ -1295,7 +1295,30 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
 function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSave}) {
   const DEFAULT_CLOTHES = "練習シャツ、白パン、青ソックス、トレシュー、長袖インナー\n・防寒具\n・ジャージなどの上着";
   const DEFAULT_BELONGINGS = "ユニフォーム（白・青）、レガース、キャップ、タオル、スパイク\n・氷柱1本（ペットボトル、ジップロックなど）\n・コロコロ氷（水筒orジップロック）\n・水筒\n・着替え\n・軽食（ゼリー系）\n・昼食\n・お湯（当番・荷物担当）\n・着替え（必須）";
-  const COACH_OPTIONS = ["丸尾コーチ", "健太郎コーチ"];
+  const BASE_COACH_OPTIONS = ["丸尾コーチ", "健太郎コーチ", "博多コーチ"];
+  const CUSTOM_COACH_STORAGE_KEY = "afc_custom_coach_options_v1";
+  const parseCoachList = value => String(value || "")
+    .split(/[、,\n\/]/)
+    .map(v => String(v || "").trim())
+    .filter(Boolean);
+  const normalizeCoachLabel = raw => {
+    const base = String(raw || "").trim().replace(/\s+/g, "");
+    if (!base) return "";
+    if (/コーチ|先生/.test(base)) return base;
+    return base + "コーチ";
+  };
+  const loadCustomCoachOptions = () => {
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return [];
+      const raw = window.localStorage.getItem(CUSTOM_COACH_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map(normalizeCoachLabel).filter(Boolean);
+    } catch (e) {
+      return [];
+    }
+  };
   const isEventSchedule = normalizeType(schedule.type) === "event";
   const isPracticeSchedule = normalizeType(schedule.type) === "practice";
   const [editing, setEditing] = useState(false);
@@ -1309,7 +1332,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
     dutyNote: schedule.dutyNote || "",
     luggagePerson: schedule.luggagePerson || "",
     firstAidPerson: schedule.firstAidPerson || schedule.luggagePerson || "",
-    coach: schedule.coach || "丸尾コーチ",
+    coach: parseCoachList(schedule.coach || "丸尾コーチ").join("、"),
     note: schedule.note || "",
     pdfUrl: schedule.pdfUrl || "",
     pdfName: schedule.pdfName || "",
@@ -1321,6 +1344,11 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
   const [attendLoading, setAttendLoading] = useState(true);
   const [showClothes, setShowClothes] = useState(false);
   const [showBelongings, setShowBelongings] = useState(false);
+  const [coachOptions, setCoachOptions] = useState(() => {
+    const preset = parseCoachList(schedule.coach || "");
+    return [...new Set([...BASE_COACH_OPTIONS, ...loadCustomCoachOptions(), ...preset])];
+  });
+  const [customCoachInput, setCustomCoachInput] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -1403,6 +1431,39 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
   const mapUrl = schedule.location
     ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(schedule.location)
     : "";
+  const selectedCoachList = parseCoachList(form.coach);
+  const persistCustomCoachOptions = (allOptions) => {
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return;
+      const customOnly = [...new Set((allOptions || []).map(normalizeCoachLabel).filter(Boolean))]
+        .filter(name => !BASE_COACH_OPTIONS.includes(name));
+      window.localStorage.setItem(CUSTOM_COACH_STORAGE_KEY, JSON.stringify(customOnly));
+    } catch (e) {}
+  };
+  const toggleCoachOption = (name) => {
+    const coachName = normalizeCoachLabel(name);
+    setForm(prev => {
+      const current = parseCoachList(prev.coach);
+      const has = current.includes(coachName);
+      const next = has ? current.filter(v => v !== coachName) : [...current, coachName];
+      return { ...prev, coach: next.join("、") };
+    });
+  };
+  const addCustomCoachOption = () => {
+    const label = normalizeCoachLabel(customCoachInput);
+    if (!label) return;
+    setCoachOptions(prev => {
+      const next = [...new Set([...(prev || []), label])];
+      persistCustomCoachOptions(next);
+      return next;
+    });
+    setForm(prev => {
+      const current = parseCoachList(prev.coach);
+      if (current.includes(label)) return prev;
+      return { ...prev, coach: [...current, label].join("、") };
+    });
+    setCustomCoachInput("");
+  };
   const parsePdfItems = (urlRaw, nameRaw) => {
     const normalize = value => String(value || "").trim();
     const urlsText = normalize(urlRaw);
@@ -1600,21 +1661,41 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       ),
       assignmentField("luggagePerson", "荷物車（コーチドリンク担当）", luggageCountMap, true),
       h("div", { style: { marginBottom: 12 } },
-        h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, "コーチ"),
-        h("select", {
-          value: COACH_OPTIONS.includes(form.coach) ? form.coach : "その他",
-          onChange: e => setForm(p => ({ ...p, coach: e.target.value === "その他" ? "" : e.target.value })),
-          style: { ...css.inp, width: "100%", marginBottom: COACH_OPTIONS.includes(form.coach) ? 0 : 8 }
-        },
-          COACH_OPTIONS.map(v => h("option", { key: v, value: v }, v)),
-          h("option", { value: "その他" }, "その他")
+        h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 6 } }, "コーチ（複数選択）"),
+        h("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 } },
+          coachOptions.map(name => {
+            const selected = selectedCoachList.includes(name);
+            return h("button", {
+              key: "coach-opt-" + name,
+              type: "button",
+              onClick: () => toggleCoachOption(name),
+              style: {
+                border: `1.5px solid ${selected ? "#1D4ED8" : "#D1D5DB"}`,
+                background: selected ? "#DBEAFE" : "#fff",
+                color: selected ? "#1D4ED8" : "#475569",
+                borderRadius: 999,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer"
+              }
+            }, name);
+          })
         ),
-        !COACH_OPTIONS.includes(form.coach) && h("input", {
-          value: form.coach,
-          onChange: e => setForm(p => ({ ...p, coach: e.target.value })),
-          placeholder: "その他のコーチ名を入力",
-          style: { ...css.inp, width: "100%" }
-        })
+        h("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 4 } },
+          h("input", {
+            value: customCoachInput,
+            onChange: e => setCustomCoachInput(e.target.value),
+            placeholder: "その他コーチ（苗字）を追加",
+            style: { ...css.inp, flex: 1, minWidth: 0 }
+          }),
+          h("button", {
+            type: "button",
+            onClick: addCustomCoachOption,
+            style: { ...css.bW, whiteSpace: "nowrap", padding: "8px 12px", borderRadius: 10 }
+          }, "追加")
+        ),
+        h("div", { style: { fontSize: 11, color: "#64748B" } }, "苗字のみ入力でも「◯◯コーチ」として次回から候補に残ります")
       )
     ),
     h("div", { style: { marginBottom: 16 } },
@@ -1768,11 +1849,11 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
         }, "地図")
       )
     ),
-    !isEventSchedule && ([cleanTime(form.gatherTime), cleanTime(form.upTime), cleanTime(form.matchTime)].some(Boolean)) && h("div", { style: { background: "linear-gradient(135deg,#1D4ED8,#0F172A)", borderRadius: 12, padding: 14, marginBottom: 12 } },
+    !isEventSchedule && ([cleanTime(form.gatherTime), cleanTime(form.upTime), cleanTime(form.matchTime)].some(Boolean)) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
       [["集合", cleanTime(form.gatherTime)], ["アップ", cleanTime(form.upTime)], ["試合開始", cleanTime(form.matchTime)]].filter(([, v]) => v).map(([l, v]) =>
-        h("div", { key: l, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4, color: "#fff" } },
-          h("div", { style: { fontSize: 11, color: "rgba(255,255,255,0.7)", width: 60 } }, l),
-          h("div", { style: { fontSize: 15, fontWeight: 900 } }, v)
+        h("div", { key: l, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4 } },
+          h("div", { style: { fontSize: 11, color: "#64748B", width: 60 } }, l),
+          h("div", { style: { fontSize: 15, fontWeight: 800, color: "#1a1a2e" } }, v)
         )
       )
     ),
@@ -1794,7 +1875,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       ),
       form.coach && h("div", {},
         h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "コーチ"),
-        h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, form.coach)
+        h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, parseCoachList(form.coach).join("、"))
       )
     ),
     !isEventSchedule && !isPracticeSchedule && form.clothes && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E3F2FD", borderRadius: 10 } },
@@ -2386,7 +2467,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
     .map(v => String(v || "").trim())
     .filter(Boolean);
   const coachNameKeySet = new Set(
-    [...scheduleCoachNames, "丸尾コーチ", "健太郎コーチ"]
+    [...scheduleCoachNames, "丸尾コーチ", "健太郎コーチ", "博多コーチ"]
       .map(normalizeName)
       .filter(Boolean)
   );
