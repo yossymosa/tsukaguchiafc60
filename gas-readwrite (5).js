@@ -32,7 +32,7 @@ const MAPS = {
   schedule: {
     // 「試合分類」列 = タイトル兼用
     "ID":"id", "日付":"date", "試合分類":"title",
-    "場所":"location", "種類":"type", "順位":"rank", "MVP":"mvp", "出欠締切":"deadline",
+    "場所":"location", "種類":"type", "順位":"rank", "MVP":"mvp", "出欠締切":"deadline", "配車締切":"carpoolDeadline",
     "時間ラベル":"timeLabel",
     "集合時間":"gatherTime", "アップ時間":"upTime", "試合時間":"matchTime",
     "服装":"clothes", "持ち物":"belongings",
@@ -63,11 +63,16 @@ const MAPS = {
   news: {
     "ID":"id", "日付":"date", "タイトル":"title",
     "内容":"content", "投稿者":"author", "カテゴリ":"category",
-    "対象種別":"targetType", "対象ID":"targetId", "対象URL":"targetUrl"
+    "対象種別":"targetType", "対象ID":"targetId", "対象URL":"targetUrl",
+    "添付URL":"attachmentUrl", "添付名":"attachmentName"
+  },
+  chat: {
+    "ID":"id", "日付":"date", "ユーザーID":"userId", "ユーザー名":"userName", "内容":"content"
   },
   user: {
     "ID":"id", "メール":"email", "名前":"name", "権限":"role", "パスワード":"password",
-    "メンバーID":"memberId"
+    "メンバーID":"memberId", "家族構成":"familyComposition", "家族メンバー":"familyMembers",
+    "アクセス回数":"accessCount", "最終アクセス":"lastAccessAt"
   },
   signupRequest: {
     "ID":"id", "メール":"email", "状態":"status", "トークン":"token", "申請日時":"requestedAt",
@@ -81,7 +86,8 @@ const MAPS = {
   },
   eventAttend: {
     "ID":"id", "スケジュールID":"scheduleId", "ユーザーID":"userId", "ユーザー名":"userName",
-    "大人":"adultCount", "小学生":"childCount", "未就学児":"preschoolCount"
+    "大人":"adultCount", "小学生":"childCount", "未就学児":"preschoolCount",
+    "大人メンバー":"adultMembers", "小学生メンバー":"childMembers", "未就学児メンバー":"preschoolMembers"
   },
   pushSubscription: {
     "ID":"id", "ユーザーID":"userId", "ユーザー名":"userName", "エンドポイント":"endpoint",
@@ -89,7 +95,12 @@ const MAPS = {
   },
   carpool: {
     "ID":"id", "スケジュールID":"scheduleId", "ユーザーID":"userId", "ユーザー名":"userName",
-    "可否":"available", "人数":"capacity", "備考":"note"
+    "可否":"available", "人数":"capacity", "備考":"note",
+    "家族移動":"familyPlan", "家族メンバー":"familyMembers"
+  },
+  carpoolPlan: {
+    "ID":"id", "スケジュールID":"scheduleId", "確定":"confirmed",
+    "配車JSON":"planJson", "更新者ID":"updatedBy", "更新者名":"updatedByName", "更新日時":"updatedAt"
   },
   lifting: {
     "ID":"id", "メンバーID":"memberId", "メンバー名":"memberName", "記録":"count", "日付":"date"
@@ -108,6 +119,7 @@ function setupSheets() {
     {name:"試合結果",     map:MAPS.result},
     {name:"得点記録",     map:MAPS.goal},
     {name:"お知らせ",     map:MAPS.news},
+    {name:"チャット",     map:MAPS.chat},
     {name:"ユーザー",     map:MAPS.user},
     {name:"登録申請",     map:MAPS.signupRequest},
     {name:"招待",         map:MAPS.invite},
@@ -115,6 +127,7 @@ function setupSheets() {
     {name:"イベント出欠", map:MAPS.eventAttend},
     {name:"通知購読",     map:MAPS.pushSubscription},
     {name:"配車",         map:MAPS.carpool},
+    {name:"配車確定",     map:MAPS.carpoolPlan},
   ];
 
   sheetDefs.forEach(({name, map}) => {
@@ -159,6 +172,14 @@ function genId() {
 
 function getSheet(name) {
   return SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
+}
+
+function getSpreadsheetTimeZone() {
+  try {
+    return SpreadsheetApp.openById(SPREADSHEET_ID).getSpreadsheetTimeZone() || "Asia/Tokyo";
+  } catch (e) {
+    return "Asia/Tokyo";
+  }
 }
 
 function normalizeEmail(email) {
@@ -224,6 +245,155 @@ function getPushTargetsByRole() {
     }));
 }
 
+function getPushTargetsAll() {
+  return sheetToObjects("通知購読", MAPS.pushSubscription)
+    .filter(s => s.endpoint && s.p256dh && s.auth)
+    .map(s => ({
+      userId: s.userId || "",
+      userName: s.userName || "",
+      subscription: {
+        endpoint: s.endpoint,
+        keys: {
+          p256dh: s.p256dh,
+          auth: s.auth,
+        },
+      },
+    }));
+}
+
+function normalizeScheduleTypeValue(type) {
+  const raw = String(type || "").trim();
+  const low = raw.toLowerCase();
+  if (low === "official" || raw === "公式戦") return "official";
+  if (low === "cup" || raw === "カップ戦") return "cup";
+  if (low === "training" || raw === "トレマ" || raw === "練習試合" || raw === "トレーニングマッチ") return "training";
+  if (low === "practice" || raw === "練習") return "practice";
+  if (low === "event" || raw === "イベント") return "event";
+  return low || raw;
+}
+
+function isSimpleScheduleType(type) {
+  const t = normalizeScheduleTypeValue(type);
+  return t === "practice" || t === "event";
+}
+
+function isAttendStatusAnswered(status) {
+  const s = String(status || "").trim();
+  return !!s && s !== "未";
+}
+
+function buildPendingResponseMap(users, schedules, attendRows, eventAttendRows, carpoolRows, options) {
+  const onlyDate = String((options && options.onlyDate) || "").trim();
+  const fromDate = String((options && options.fromDate) || "").trim();
+  const attendMap = {};
+  (attendRows || []).forEach(r => {
+    const sid = String(r.scheduleId || "").trim();
+    const mid = String(r.memberId || "").trim();
+    if (!sid || !mid) return;
+    attendMap[sid + "|" + mid] = String(r.status || "").trim();
+  });
+  const eventAttendMap = {};
+  (eventAttendRows || []).forEach(r => {
+    const sid = String(r.scheduleId || "").trim();
+    const uid = String(r.userId || "").trim();
+    if (!sid || !uid) return;
+    eventAttendMap[sid + "|" + uid] = true;
+  });
+  const carpoolMap = {};
+  (carpoolRows || []).forEach(r => {
+    const sid = String(r.scheduleId || "").trim();
+    const uid = String(r.userId || "").trim();
+    if (!sid || !uid) return;
+    carpoolMap[sid + "|" + uid] = true;
+  });
+
+  const byUser = {};
+  (users || []).forEach(u => {
+    const userId = String(u.id || "").trim();
+    if (!userId) return;
+    const memberId = String(u.memberId || "").trim();
+    const list = [];
+
+    (schedules || []).forEach(s => {
+      const scheduleId = String(s.id || "").trim();
+      if (!scheduleId) return;
+      const typeNorm = normalizeScheduleTypeValue(s.type);
+      const scheduleTitle = s.title || "予定";
+      const scheduleDate = String(s.date || "").trim();
+      const location = s.location || "";
+      const attendDeadline = String(s.deadline || "").trim();
+      const carpoolDeadline = String(s.carpoolDeadline || "").trim();
+
+      if (attendDeadline && (!onlyDate || attendDeadline === onlyDate) && (!fromDate || attendDeadline >= fromDate)) {
+        let attendAnswered = true;
+        if (typeNorm === "event") {
+          attendAnswered = !!eventAttendMap[scheduleId + "|" + userId];
+        } else if (memberId) {
+          attendAnswered = isAttendStatusAnswered(attendMap[scheduleId + "|" + memberId]);
+        }
+        if (!attendAnswered) {
+          list.push({
+            kind: "attend",
+            scheduleId,
+            scheduleTitle,
+            scheduleDate,
+            location,
+            deadline: attendDeadline,
+            type: s.type || "",
+            dayTab: "attend",
+            url: "/?source=push&tab=cal&scheduleId=" + encodeURIComponent(scheduleId) + "&dayTab=attend"
+          });
+        }
+      }
+
+      if (carpoolDeadline && !isSimpleScheduleType(typeNorm) && (!onlyDate || carpoolDeadline === onlyDate) && (!fromDate || carpoolDeadline >= fromDate)) {
+        const carpoolAnswered = !!carpoolMap[scheduleId + "|" + userId];
+        if (!carpoolAnswered) {
+          list.push({
+            kind: "carpool",
+            scheduleId,
+            scheduleTitle,
+            scheduleDate,
+            location,
+            deadline: carpoolDeadline,
+            type: s.type || "",
+            dayTab: "carpool",
+            url: "/?source=push&tab=cal&scheduleId=" + encodeURIComponent(scheduleId) + "&dayTab=carpool"
+          });
+        }
+      }
+    });
+
+    list.sort((a, b) =>
+      String(a.deadline || "").localeCompare(String(b.deadline || ""))
+      || String(a.scheduleDate || "").localeCompare(String(b.scheduleDate || ""))
+      || String(a.kind || "").localeCompare(String(b.kind || ""))
+    );
+    if (list.length > 0) byUser[userId] = list;
+  });
+  return byUser;
+}
+
+function pendingItemToNotice(item) {
+  const kindLabel = item.kind === "carpool" ? "配車" : "出欠";
+  const d = String(item.deadline || "");
+  const shortDeadline = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.slice(5).replace("-", "/") : d;
+  return {
+    id: "pending-" + item.kind + "-" + item.scheduleId + "-" + d,
+    date: nowIso(),
+    title: kindLabel + " 未回答",
+    content: (item.scheduleDate ? item.scheduleDate + " " : "") + (item.scheduleTitle || "予定") + " / 締切 " + shortDeadline,
+    category: "連絡",
+    targetType: "pending_" + item.kind,
+    targetId: item.scheduleId || "",
+    targetUrl: item.url || "",
+    deadline: item.deadline || "",
+    targetDeadline: item.deadline || "",
+    scheduleTitle: item.scheduleTitle || "",
+    scheduleDate: item.scheduleDate || "",
+  };
+}
+
 function sendPushBroadcast(payload) {
   const secret = PropertiesService.getScriptProperties().getProperty("PUSH_SYNC_SECRET");
   if (!secret) return { ok: false, skipped: true, reason: "missing PUSH_SYNC_SECRET" };
@@ -237,6 +407,8 @@ function sendPushBroadcast(payload) {
       title: payload.title || "",
       body: payload.body || "",
       url: payload.url || "/",
+      targetUserIds: Array.isArray(payload.targetUserIds) ? payload.targetUserIds : [],
+      excludeUserId: payload.excludeUserId || "",
     }),
   });
   const text = res.getContentText() || "{}";
@@ -293,6 +465,21 @@ function parsePdfEntries(urlRaw, nameRaw) {
     }
   } catch (e) {}
   return [{ url: urlsText, name: namesText }];
+}
+
+function parseNameList(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map(v => String(v || "").trim()).filter(Boolean))];
+  }
+  const s = String(value || "").trim();
+  if (!s) return [];
+  try {
+    const parsed = JSON.parse(s);
+    if (Array.isArray(parsed)) {
+      return [...new Set(parsed.map(v => String(v || "").trim()).filter(Boolean))];
+    }
+  } catch (e) {}
+  return [...new Set(s.split(/\r?\n|,|、/).map(v => String(v || "").trim()).filter(Boolean))];
 }
 
 function findSignupRequestByEmail(email) {
@@ -375,6 +562,7 @@ function buildApprovalPage(title, body, link) {
 function sheetToObjects(sheetName, map) {
   const sh = getSheet(sheetName);
   if (!sh || sh.getLastRow() < 2) return [];
+  const tz = getSpreadsheetTimeZone();
   const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
   const rows = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
   return rows
@@ -389,7 +577,7 @@ function sheetToObjects(sheetName, map) {
           if (v instanceof Error || (typeof v === 'string' && v.startsWith('#'))) {
             v = "";
           } else if (v instanceof Date) {
-            v = Utilities.formatDate(v, "Asia/Tokyo", "yyyy-MM-dd");
+            v = Utilities.formatDate(v, tz, "yyyy-MM-dd");
           } else {
             v = String(v === null || v === undefined ? "" : v).trim();
           }
@@ -409,6 +597,74 @@ function appendObject(sheetName, map, obj) {
     return key && obj[key] !== undefined ? obj[key] : "";
   });
   sh.appendRow(row);
+}
+
+function ensureSheetColumnsByMap(sheetName, map) {
+  const sh = getSheet(sheetName);
+  if (!sh) return;
+  const headers = sh.getLastColumn() > 0
+    ? sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String)
+    : [];
+  Object.keys(map).forEach(col => {
+    if (headers.includes(col)) return;
+    const nextCol = sh.getLastColumn() + 1;
+    sh.getRange(1, nextCol).setValue(col);
+    headers.push(col);
+  });
+}
+
+function ensureSheetWithMap(sheetName, map) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sh = ss.getSheetByName(sheetName);
+  if (!sh) {
+    sh = ss.insertSheet(sheetName);
+    sh.appendRow(Object.keys(map));
+    return sh;
+  }
+  ensureSheetColumnsByMap(sheetName, map);
+  return sh;
+}
+
+function incrementUserAccessById(userId) {
+  const uid = String(userId || "").trim();
+  if (!uid) return null;
+  ensureSheetColumnsByMap("ユーザー", MAPS.user);
+  const sh = getSheet("ユーザー");
+  if (!sh || sh.getLastRow() < 2) return null;
+
+  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const rows = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+  const idCol = headers.indexOf("ID");
+  const accessCol = headers.indexOf("アクセス回数");
+  const lastAccessCol = headers.indexOf("最終アクセス");
+  if (idCol < 0 || accessCol < 0 || lastAccessCol < 0) return null;
+
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][idCol] || "").trim() !== uid) continue;
+    const current = Number(rows[i][accessCol] || 0);
+    const next = (isNaN(current) ? 0 : current) + 1;
+    const now = nowIso();
+    sh.getRange(i + 2, accessCol + 1).setValue(next);
+    sh.getRange(i + 2, lastAccessCol + 1).setValue(now);
+    return { accessCount: next, lastAccessAt: now };
+  }
+  return null;
+}
+
+function getUserById(userId) {
+  const uid = String(userId || "").trim();
+  if (!uid) return null;
+  const users = sheetToObjects("ユーザー", MAPS.user);
+  return users.find(u => String(u.id || "").trim() === uid) || null;
+}
+
+function ensureAdminUser(userId) {
+  const u = getUserById(userId);
+  if (!u) throw new Error("ユーザーが見つかりません");
+  if (String(u.role || "").trim() !== "admin") {
+    throw new Error("この操作はadminのみ実行できます");
+  }
+  return u;
 }
 
 // 特定列の値でIDを探して行を削除
@@ -657,6 +913,7 @@ function dispatch(req) {
       const userId = String(req.userId || "").trim();
       const name = String(req.name || "").trim();
       const memberId = String(req.memberId || "").trim();
+      const familyMembers = parseNameList(req.familyMembers || []);
       if (!userId) throw new Error("ユーザーIDがありません");
       if (!name) throw new Error("名前を入力してください");
       if (!memberId) throw new Error("子どもを選択してください");
@@ -665,6 +922,7 @@ function dispatch(req) {
       const member = members.find(m => String(m.id || "") === memberId);
       if (!member) throw new Error("選択した子どもが見つかりません");
 
+      ensureSheetColumnsByMap("ユーザー", MAPS.user);
       const sh = getSheet("ユーザー");
       if (!sh || sh.getLastRow() < 2) throw new Error("ユーザーシートが見つかりません");
       const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
@@ -672,16 +930,28 @@ function dispatch(req) {
       const idCol = headers.indexOf("ID");
       const nameCol = headers.indexOf("名前");
       const memberIdCol = headers.indexOf("メンバーID");
+      const familyCompositionCol = headers.indexOf("家族構成");
+      const familyMembersCol = headers.indexOf("家族メンバー");
       for (let i = 0; i < rows.length; i++) {
         if (String(rows[i][idCol] || "").trim() === userId) {
           sh.getRange(i + 2, nameCol + 1).setValue(name);
           sh.getRange(i + 2, memberIdCol + 1).setValue(memberId);
+          if (familyCompositionCol >= 0) sh.getRange(i + 2, familyCompositionCol + 1).setValue(familyMembers.join(","));
+          if (familyMembersCol >= 0) sh.getRange(i + 2, familyMembersCol + 1).setValue(familyMembers.join(","));
           const email = String(rows[i][headers.indexOf("メール")] || "");
           const role = String(rows[i][headers.indexOf("権限")] || "");
-          return { user: { id: userId, name, email, role, memberId } };
+          return { user: { id: userId, name, email, role, memberId, familyMembers, familyComposition: familyMembers.join(",") } };
         }
       }
       throw new Error("ユーザーが見つかりません");
+    }
+
+    case "recordAccess": {
+      const userId = String(req.userId || "").trim();
+      if (!userId) throw new Error("ユーザーIDがありません");
+      const updated = incrementUserAccessById(userId);
+      if (!updated) throw new Error("ユーザーが見つかりません");
+      return updated;
     }
 
     case "savePushSubscription": {
@@ -741,18 +1011,44 @@ function dispatch(req) {
     case "getPushDeadlineTargets": {
       requirePushSyncSecret(req.secret);
       const tomorrow = getJstDate(1);
-      const schedules = sheetToObjects("スケジュール", MAPS.schedule)
-        .filter(s => String(s.deadline || "") === tomorrow)
-        .map(s => ({
-          id: s.id,
-          title: s.title || "予定",
-          deadline: s.deadline || "",
-          location: s.location || "",
-          type: s.type || "",
-        }));
-      return {
-        targets: getPushTargetsByRole(),
+      const users = sheetToObjects("ユーザー", MAPS.user);
+      const schedules = sheetToObjects("スケジュール", MAPS.schedule);
+      const attendRows = sheetToObjects("出欠", MAPS.attend);
+      const eventAttendRows = sheetToObjects("イベント出欠", MAPS.eventAttend);
+      const carpoolRows = sheetToObjects("配車", MAPS.carpool);
+      const pendingByUser = buildPendingResponseMap(
+        users,
         schedules,
+        attendRows,
+        eventAttendRows,
+        carpoolRows,
+        { onlyDate: tomorrow }
+      );
+      const targets = getPushTargetsAll()
+        .map(t => ({
+          ...t,
+          pending: pendingByUser[String(t.userId || "").trim()] || []
+        }))
+        .filter(t => (t.pending || []).length > 0);
+      const summaryBySchedule = {};
+      targets.forEach(t => {
+        (t.pending || []).forEach(item => {
+          const sid = String(item.scheduleId || "").trim();
+          if (!sid) return;
+          if (!summaryBySchedule[sid]) {
+            summaryBySchedule[sid] = {
+              id: sid,
+              title: item.scheduleTitle || "予定",
+              date: item.scheduleDate || "",
+              location: item.location || "",
+              type: item.type || "",
+            };
+          }
+        });
+      });
+      return {
+        targets,
+        schedules: Object.values(summaryBySchedule),
       };
     }
 
@@ -779,6 +1075,9 @@ function dispatch(req) {
       const results   = sheetToObjects("試合結果",     MAPS.result);
       const goals     = sheetToObjects("得点記録",     MAPS.goal);
       const news      = sheetToObjects("お知らせ",     MAPS.news);
+      const attendRows = sheetToObjects("出欠", MAPS.attend);
+      const eventAttendRows = sheetToObjects("イベント出欠", MAPS.eventAttend);
+      const carpoolRows = sheetToObjects("配車", MAPS.carpool);
 
       // スコア集計
       const scoreMap = calcScores(goals);
@@ -789,53 +1088,19 @@ function dispatch(req) {
         const myGoals = goals.filter(g => g.resultId === r.id && resolveTeam(g) === "us");
         const theirGoals = goals.filter(g => g.resultId === r.id && resolveTeam(g) === "them");
 
-                  // スケジュールと紐付け（scheduleId優先、なければ同日候補から種類優先で決定）
-          const normalizeScheduleType = value => {
-            const s = String(value || "").toLowerCase();
-            if (/official|公式|リーグ|大会|選手権/.test(s)) return "official";
-            if (/cup|カップ/.test(s)) return "cup";
-            if (/training|tm|トレマ|練習試合|トレーニングマッチ/.test(s)) return "training";
-            if (/practice|練習/.test(s)) return "practice";
-            if (/event|イベント|開会式/.test(s)) return "event";
-            return "";
-          };
-          const schedulePriority = value => {
-            const t = normalizeScheduleType(value);
-            if (t === "official") return 5;
-            if (t === "cup") return 4;
-            if (t === "training") return 3;
-            if (t === "practice") return 2;
-            if (t === "event") return 1;
-            return 0;
-          };
-          const sameDayAll = schedules.filter(s => s.date === r.date);
-          const titledSameDay = sameDayAll.filter(s => {
-            const title = String(s.title || "").trim();
-            return title && title !== "(タイトルなし)";
-          });
-          const sameDay = titledSameDay.length ? titledSameDay : sameDayAll;
-          const resultType = normalizeScheduleType(r.type || r.formatLabel || r.memo || "");
-          const typedSameDay = resultType ? sameDay.filter(s => normalizeScheduleType(s.type || s.title) === resultType) : [];
-          const pickSchedule = arr => {
-            if (!arr.length) return null;
-            return [...arr].sort((a,b) =>
-              schedulePriority(b.type || b.title) - schedulePriority(a.type || a.title)
-              || (String(b.title || "").trim() ? 1 : 0) - (String(a.title || "").trim() ? 1 : 0)
-            )[0] || null;
-          };
-          const byIdRaw = schedules.find(s => String(s.id || "") === String(r.scheduleId || ""));
-          const byId = byIdRaw && String(byIdRaw.title || "").trim() && String(byIdRaw.title || "").trim() !== "(タイトルなし)" ? byIdRaw : null;
-          const sch = byId || pickSchedule(typedSameDay) || pickSchedule(sameDay);
-          const resolvedType = normalizeScheduleType((sch ? (sch.type || sch.title) : "") || r.type || r.formatLabel || r.memo || "");
+        // スケジュールと紐付け（scheduleId優先、なければ日付一致）
+        const sch = schedules.find(s => s.id === r.scheduleId) ||
+                    schedules.find(s => s.date === r.date);
+        if (sch && !r.type) r.type = sch.type;
 
-          return {
-            ...r,
-            ourScore:   scores.ourScore,
-            theirScore: scores.theirScore,
-            goals:      myGoals,
-            theirGoals: theirGoals,
-            scheduleId: (sch ? sch.id : "") || r.scheduleId || "",
-            type:       resolvedType || (sch ? sch.type : "") || r.type || "",
+        return {
+          ...r,
+          ourScore:   scores.ourScore,
+          theirScore: scores.theirScore,
+          goals:      myGoals,
+          theirGoals: theirGoals,
+          scheduleId: r.scheduleId || (sch ? sch.id : ""),
+          type:       r.type || (sch ? sch.type : ""),
         };
       });
 
@@ -844,14 +1109,40 @@ function dispatch(req) {
       schedules.sort((a,b) => b.date.localeCompare(a.date));
 
       const liftings = sheetToObjects("リフティング", MAPS.lifting);
+      const currentUserId = String(req.userId || "").trim();
+      const countAccess = req.countAccess === true || String(req.countAccess || "").trim() === "1" || String(req.countAccess || "").toLowerCase() === "true";
+      if (currentUserId && countAccess) incrementUserAccessById(currentUserId);
       const allUsers = sheetToObjects("ユーザー", MAPS.user);
       // パスワードを除いて返す
-      const users = allUsers.map(u=>({id:u.id,name:u.name,email:u.email,role:u.role,memberId:u.memberId||""}));
-      return { members, schedules, results: enrichedResults, news, liftings, users };
+      const users = allUsers.map(u=>({
+        id:u.id,
+        name:u.name,
+        email:u.email,
+        role:u.role,
+        memberId:u.memberId||"",
+        familyComposition:u.familyComposition||"",
+        familyMembers: parseNameList(u.familyMembers || u.familyComposition || ""),
+        accessCount:Number(u.accessCount||0),
+        lastAccessAt:u.lastAccessAt||"",
+      }));
+      let myPendingNotices = [];
+      if (currentUserId) {
+        const pendingByUser = buildPendingResponseMap(
+          allUsers,
+          schedules,
+          attendRows,
+          eventAttendRows,
+          carpoolRows,
+          { fromDate: getJstDate(0) }
+        );
+        myPendingNotices = (pendingByUser[currentUserId] || []).map(pendingItemToNotice);
+      }
+      return { members, schedules, results: enrichedResults, news, liftings, users, myPendingNotices };
     }
 
     // ── 日程追加 ──────────────────────────────────────────────
     case "addSchedule": {
+      ensureSheetColumnsByMap("スケジュール", MAPS.schedule);
       const s = req.schedule;
       const obj = {
         id:        genId(),
@@ -862,6 +1153,8 @@ function dispatch(req) {
         rank:      s.rank      || "",
         category:  s.category  || "",
         mvp:       s.mvp       || "",
+        deadline:  s.deadline  || "",
+        carpoolDeadline: s.carpoolDeadline || "",
         timeLabel: s.timeLabel || "",
       };
       appendObject("スケジュール", MAPS.schedule, obj);
@@ -885,6 +1178,7 @@ function dispatch(req) {
 
     // ── 日程更新 ──────────────────────────────────────────────
     case "updateSchedule": {
+      ensureSheetColumnsByMap("スケジュール", MAPS.schedule);
       const sh = getSheet("スケジュール");
       if (!sh) return {};
       const headers = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
@@ -895,7 +1189,7 @@ function dispatch(req) {
         if (String(ids[i][0]) === String(req.schedule.id)) {
           headers.forEach((h, j) => {
             const s = req.schedule;
-            const map = {"日付":"date","試合分類":"title","場所":"location","種類":"type","順位":"rank","MVP":"mvp","出欠締切":"deadline","時間ラベル":"timeLabel",
+            const map = {"日付":"date","試合分類":"title","場所":"location","種類":"type","順位":"rank","MVP":"mvp","出欠締切":"deadline","配車締切":"carpoolDeadline","時間ラベル":"timeLabel",
               "集合時間":"gatherTime","アップ時間":"upTime","試合時間":"matchTime",
               "服装":"clothes","持ち物":"belongings",
               "当番":"duty","当番メモ":"dutyNote","荷物担当":"luggagePerson","救急担当":"firstAidPerson",
@@ -912,11 +1206,14 @@ function dispatch(req) {
 
     case "uploadSchedulePdf": {
       const scheduleId = String(req.scheduleId || "").trim();
-      const fileName = String(req.fileName || "schedule.pdf").trim();
+      const fileName = String(req.fileName || "schedule-file").trim();
       const mimeType = String(req.mimeType || "application/pdf").trim();
       const base64 = String(req.base64 || "").trim();
-      if (!scheduleId || !base64) throw new Error("PDFアップロード情報が不足しています");
-      if (mimeType !== "application/pdf") throw new Error("PDFファイルのみアップロードできます");
+      if (!scheduleId || !base64) throw new Error("ファイルアップロード情報が不足しています");
+      const lowerName = fileName.toLowerCase();
+      const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(lowerName);
+      const isImage = /^image\//i.test(mimeType) || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lowerName);
+      if (!isPdf && !isImage) throw new Error("PDFまたは画像ファイルのみアップロードできます");
 
       const sh = getSheet("スケジュール");
       if (!sh || sh.getLastRow() < 2) throw new Error("スケジュールシートがありません");
@@ -966,10 +1263,82 @@ function dispatch(req) {
       return { pdfUrl: storedUrls, pdfName: storedNames, pdfs: nextPdfs, fileId: file.getId() };
     }
 
+    case "uploadNewsAttachment": {
+      const fileName = String(req.fileName || "document").trim();
+      const mimeType = String(req.mimeType || "application/octet-stream").trim();
+      const base64 = String(req.base64 || "").trim();
+      if (!base64) throw new Error("添付ファイル情報が不足しています");
+
+      const folderId = String(
+        PropertiesService.getScriptProperties().getProperty("NEWS_DOC_FOLDER_ID")
+          || PropertiesService.getScriptProperties().getProperty("SCHEDULE_PDF_FOLDER_ID")
+          || ""
+      ).trim();
+      let folder = DriveApp.getRootFolder();
+      if (folderId) {
+        try {
+          folder = DriveApp.getFolderById(folderId);
+        } catch (e) {
+          folder = DriveApp.getRootFolder();
+        }
+      }
+
+      const safeName = fileName.replace(/[\\/:*?\"<>|]+/g, "_");
+      const stamp = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyyMMdd_HHmmss");
+      const storedName = [stamp, safeName].filter(Boolean).join("_");
+      const bytes = Utilities.base64Decode(base64);
+      const blob = Utilities.newBlob(bytes, mimeType || "application/octet-stream", storedName);
+      const file = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const url = "https://drive.google.com/file/d/" + file.getId() + "/view?usp=sharing";
+      return { url: url, name: file.getName(), fileId: file.getId() };
+    }
+
     // ── 日程削除 ──────────────────────────────────────────────
     case "deleteSchedule": {
-      deleteRowById("スケジュール", req.id);
-      return {};
+      const targetScheduleId = String(req.id || "").trim();
+      if (!targetScheduleId) throw new Error("削除対象の日程IDがありません");
+
+      // 1) 日程に紐づく試合結果を削除（IDを保持）
+      const deletedResultIds = [];
+      const resultSh = getSheet("試合結果");
+      if (resultSh && resultSh.getLastRow() > 1) {
+        const rHeaders = resultSh.getRange(1, 1, 1, resultSh.getLastColumn()).getValues()[0].map(String);
+        const sidCol = rHeaders.indexOf("スケジュールID") + 1;
+        const ridCol = rHeaders.indexOf("ID") + 1;
+        if (sidCol > 0 && ridCol > 0) {
+          const rows = resultSh.getRange(2, 1, resultSh.getLastRow() - 1, resultSh.getLastColumn()).getValues();
+          for (let i = rows.length - 1; i >= 0; i--) {
+            if (String(rows[i][sidCol - 1] || "").trim() === targetScheduleId) {
+              const rid = String(rows[i][ridCol - 1] || "").trim();
+              if (rid) deletedResultIds.push(rid);
+              resultSh.deleteRow(i + 2);
+            }
+          }
+        }
+      }
+
+      // 2) 削除した試合結果に紐づく得点記録を削除
+      if (deletedResultIds.length > 0) {
+        const idSet = {};
+        deletedResultIds.forEach(id => { idSet[id] = true; });
+        const goalSh = getSheet("得点記録");
+        if (goalSh && goalSh.getLastRow() > 1) {
+          const gHeaders = goalSh.getRange(1, 1, 1, goalSh.getLastColumn()).getValues()[0].map(String);
+          const resultIdCol = gHeaders.indexOf("試合ID") + 1;
+          if (resultIdCol > 0) {
+            const vals = goalSh.getRange(2, resultIdCol, goalSh.getLastRow() - 1, 1).getValues();
+            for (let i = vals.length - 1; i >= 0; i--) {
+              const rid = String(vals[i][0] || "").trim();
+              if (idSet[rid]) goalSh.deleteRow(i + 2);
+            }
+          }
+        }
+      }
+
+      // 3) 日程本体を削除
+      deleteRowById("スケジュール", targetScheduleId);
+      return { deletedResultCount: deletedResultIds.length };
     }
 
     // ── リフティング記録追加/更新 ───────────────────────────
@@ -1149,6 +1518,15 @@ function dispatch(req) {
     case "addNews": {
       const n = req.news;
       const now = nowIso();
+      const sh = getSheet("お知らせ");
+      if (!sh) throw new Error("お知らせシートがありません");
+      const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+      ["対象種別","対象ID","対象URL","添付URL","添付名"].forEach(col => {
+        if (headers.indexOf(col) === -1) {
+          sh.getRange(1, sh.getLastColumn() + 1).setValue(col);
+          headers.push(col);
+        }
+      });
       const obj = {
         id:       genId(),
         date:     n.date     || now,
@@ -1156,15 +1534,103 @@ function dispatch(req) {
         content:  n.content  || "",
         author:   n.author   || "",
         category: n.category || "連絡",
+        targetType: n.targetType || "",
+        targetId: n.targetId || "",
+        targetUrl: n.targetUrl || "",
+        attachmentUrl:  n.attachmentUrl  || "",
+        attachmentName: n.attachmentName || "",
       };
       appendObject("お知らせ", MAPS.news, obj);
       return { id: obj.id };
+    }
+
+    case "updateNews": {
+      const n = req.news || {};
+      const id = String(n.id || "").trim();
+      if (!id) throw new Error("更新対象IDがありません");
+      const sh = getSheet("お知らせ");
+      if (!sh || sh.getLastRow() < 2) throw new Error("お知らせシートがありません");
+      const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+      ["対象種別","対象ID","対象URL","添付URL","添付名"].forEach(col => {
+        if (headers.indexOf(col) === -1) {
+          sh.getRange(1, sh.getLastColumn() + 1).setValue(col);
+          headers.push(col);
+        }
+      });
+      const idCol = headers.indexOf("ID") + 1;
+      if (!idCol) throw new Error("お知らせID列がありません");
+      const ids = sh.getRange(2, idCol, sh.getLastRow() - 1, 1).getValues();
+      let row = 0;
+      for (let i = 0; i < ids.length; i++) {
+        if (String(ids[i][0] || "").trim() === id) { row = i + 2; break; }
+      }
+      if (!row) throw new Error("更新対象のお知らせが見つかりません");
+      const map = {
+        "日付":"date", "タイトル":"title", "内容":"content", "投稿者":"author",
+        "カテゴリ":"category", "対象種別":"targetType", "対象ID":"targetId", "対象URL":"targetUrl",
+        "添付URL":"attachmentUrl", "添付名":"attachmentName"
+      };
+      headers.forEach((h, idx) => {
+        const key = map[h];
+        if (!key) return;
+        if (n[key] === undefined) return;
+        sh.getRange(row, idx + 1).setValue(n[key]);
+      });
+      return {};
     }
 
     // ── お知らせ削除 ──────────────────────────────────────────
     case "deleteNews": {
       deleteRowById("お知らせ", req.id);
       return {};
+    }
+
+    // ── チャット取得 ────────────────────────────────────────────
+    case "getChatMessages": {
+      ensureAdminUser(req.userId);
+      ensureSheetWithMap("チャット", MAPS.chat);
+      const limitRaw = Number(req.limit || 200);
+      const limit = Math.max(1, Math.min(500, isNaN(limitRaw) ? 200 : Math.floor(limitRaw)));
+      const after = String(req.after || "").trim();
+      const rows = sheetToObjects("チャット", MAPS.chat)
+        .filter(r => String(r.content || "").trim())
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+      const filtered = after
+        ? rows.filter(r => String(r.date || "") > after)
+        : rows;
+      return { messages: filtered.slice(-limit) };
+    }
+
+    // ── チャット投稿 ────────────────────────────────────────────
+    case "sendChatMessage": {
+      const adminUser = ensureAdminUser(req.userId);
+      const userId = String(adminUser.id || "").trim();
+      const userName = String(adminUser.name || "").trim();
+      const content = String(req.content || "").trim();
+      if (!userId) throw new Error("ユーザーIDがありません");
+      if (!userName) throw new Error("ユーザー名がありません");
+      if (!content) throw new Error("メッセージを入力してください");
+      if (content.length > 1000) throw new Error("メッセージは1000文字以内で入力してください");
+      ensureSheetWithMap("チャット", MAPS.chat);
+      const message = {
+        id: genId(),
+        date: nowIso(),
+        userId,
+        userName,
+        content,
+      };
+      appendObject("チャット", MAPS.chat, message);
+      try {
+        const compact = content.replace(/\s+/g, " ").trim();
+        const preview = compact.length > 60 ? compact.slice(0, 60) + "…" : compact;
+        sendPushBroadcast({
+          title: "新着チャット",
+          body: `${userName}: ${preview}`,
+          url: "/?source=push&tab=chat",
+          excludeUserId: userId,
+        });
+      } catch (e) {}
+      return { message };
     }
 
     // ── MVP更新 ───────────────────────────────────────────────
@@ -1227,23 +1693,50 @@ function dispatch(req) {
     }
 
     case "getEventAttend": {
+      ensureSheetColumnsByMap("イベント出欠", MAPS.eventAttend);
       const rows = sheetToObjects("イベント出欠", MAPS.eventAttend);
       const result = rows.filter(r => String(r.scheduleId) === String(req.scheduleId));
       return { attend: result };
     }
 
     case "saveEventAttend": {
+      ensureSheetColumnsByMap("イベント出欠", MAPS.eventAttend);
       const sh = getSheet("イベント出欠");
       if (!sh) return {};
       const headers = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
       const sidCol = headers.indexOf("スケジュールID") + 1;
       const uidCol = headers.indexOf("ユーザーID") + 1;
       const lastRow = sh.getLastRow();
+      const normalizeDistinct = arr => {
+        const used = {};
+        return (arr || []).filter(name => {
+          const key = String(name || "").trim();
+          if (!key || used[key]) return false;
+          used[key] = true;
+          return true;
+        });
+      };
+      let adultMembers = normalizeDistinct(parseNameList(req.adultMembers || []));
+      let childMembers = normalizeDistinct(parseNameList(req.childMembers || []));
+      let preschoolMembers = normalizeDistinct(parseNameList(req.preschoolMembers || []));
+      const taken = {};
+      const filterDuplicated = arr => arr.filter(name => {
+        const key = String(name || "").trim();
+        if (!key || taken[key]) return false;
+        taken[key] = true;
+        return true;
+      });
+      adultMembers = filterDuplicated(adultMembers);
+      childMembers = filterDuplicated(childMembers);
+      preschoolMembers = filterDuplicated(preschoolMembers);
       const payload = {
         userName: req.userName || "",
-        adultCount: Number(req.adultCount || 0),
-        childCount: Number(req.childCount || 0),
-        preschoolCount: Number(req.preschoolCount || 0),
+        adultCount: adultMembers.length > 0 ? adultMembers.length : Number(req.adultCount || 0),
+        childCount: childMembers.length > 0 ? childMembers.length : Number(req.childCount || 0),
+        preschoolCount: preschoolMembers.length > 0 ? preschoolMembers.length : Number(req.preschoolCount || 0),
+        adultMembers: adultMembers.join(","),
+        childMembers: childMembers.join(","),
+        preschoolMembers: preschoolMembers.join(","),
       };
       if (lastRow >= 2) {
         const sids = sh.getRange(1,sidCol,lastRow,1).getValues();
@@ -1256,6 +1749,9 @@ function dispatch(req) {
               if (h==="大人") sh.getRange(i+1,j+1).setValue(payload.adultCount);
               if (h==="小学生") sh.getRange(i+1,j+1).setValue(payload.childCount);
               if (h==="未就学児") sh.getRange(i+1,j+1).setValue(payload.preschoolCount);
+              if (h==="大人メンバー") sh.getRange(i+1,j+1).setValue(payload.adultMembers);
+              if (h==="小学生メンバー") sh.getRange(i+1,j+1).setValue(payload.childMembers);
+              if (h==="未就学児メンバー") sh.getRange(i+1,j+1).setValue(payload.preschoolMembers);
             });
             return {};
           }
@@ -1270,6 +1766,9 @@ function dispatch(req) {
         if (h==="大人") return payload.adultCount;
         if (h==="小学生") return payload.childCount;
         if (h==="未就学児") return payload.preschoolCount;
+        if (h==="大人メンバー") return payload.adultMembers;
+        if (h==="小学生メンバー") return payload.childMembers;
+        if (h==="未就学児メンバー") return payload.preschoolMembers;
         return "";
       });
       sh.appendRow(newRow);
@@ -1329,7 +1828,91 @@ function dispatch(req) {
     // ── 配車取得 ─────────────────────────────────────────────
     case "getCarpool": {
       const rows = sheetToObjects("配車", MAPS.carpool);
-      return { carpools: rows.filter(r => String(r.scheduleId) === String(req.scheduleId)) };
+      const targetScheduleId = String(req.scheduleId || "").trim();
+      const byUser = {};
+      rows
+        .filter(r => String(r.scheduleId || "").trim() === targetScheduleId)
+        .forEach(r => {
+          const uid = String(r.userId || "").trim();
+          if (!uid) return;
+          byUser[uid] = r; // 同一ユーザーは最新行を採用
+        });
+      return { carpools: Object.values(byUser) };
+    }
+
+    // ── 配車確定取得 ───────────────────────────────────────────
+    case "getCarpoolPlan": {
+      const targetScheduleId = String(req.scheduleId || "").trim();
+      if (!targetScheduleId) return { plan: null };
+      const rows = sheetToObjects("配車確定", MAPS.carpoolPlan)
+        .filter(r => String(r.scheduleId || "").trim() === targetScheduleId);
+      if (rows.length === 0) return { plan: null };
+      const latest = rows[rows.length - 1];
+      let planObj = {};
+      try {
+        planObj = JSON.parse(String(latest.planJson || "{}"));
+      } catch (e) {
+        planObj = {};
+      }
+      return {
+        plan: {
+          ...planObj,
+          confirmed: String(latest.confirmed || "") === "1",
+          updatedBy: latest.updatedBy || "",
+          updatedByName: latest.updatedByName || "",
+          updatedAt: latest.updatedAt || "",
+          confirmedAt: latest.updatedAt || "",
+          confirmedByName: latest.updatedByName || "",
+        }
+      };
+    }
+
+    // ── 配車確定保存（upsert） ────────────────────────────────
+    case "saveCarpoolPlan": {
+      const sh = getSheet("配車確定");
+      if (!sh) throw new Error("配車確定シートがありません");
+      const headers = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
+      const sidCol = headers.indexOf("スケジュールID") + 1;
+      if (!sidCol) throw new Error("配車確定シートの列が不足しています（スケジュールID）");
+      const targetScheduleId = String(req.scheduleId || "").trim();
+      if (!targetScheduleId) throw new Error("scheduleId が必要です");
+      const now = nowIso();
+      const confirmed = req.plan && req.plan.confirmed ? "1" : "";
+      const planJson = JSON.stringify(req.plan || {});
+      const setter = (row) => {
+        const set = (col, val) => {
+          const idx = headers.indexOf(col);
+          if (idx >= 0) sh.getRange(row, idx + 1).setValue(val);
+        };
+        set("スケジュールID", targetScheduleId);
+        set("確定", confirmed);
+        set("配車JSON", planJson);
+        set("更新者ID", String(req.userId || "").trim());
+        set("更新者名", req.userName || "");
+        set("更新日時", now);
+      };
+      const lastRow = sh.getLastRow();
+      if (lastRow >= 2) {
+        const sids = sh.getRange(2, sidCol, lastRow - 1, 1).getValues();
+        for (let i = 0; i < sids.length; i++) {
+          if (String(sids[i][0] || "").trim() === targetScheduleId) {
+            setter(i + 2);
+            return { savedAt: now };
+          }
+        }
+      }
+      const newRow = headers.map(h => {
+        if (h === "ID") return genId();
+        if (h === "スケジュールID") return targetScheduleId;
+        if (h === "確定") return confirmed;
+        if (h === "配車JSON") return planJson;
+        if (h === "更新者ID") return String(req.userId || "").trim();
+        if (h === "更新者名") return req.userName || "";
+        if (h === "更新日時") return now;
+        return "";
+      });
+      sh.appendRow(newRow);
+      return { savedAt: now };
     }
 
     // ── 配車保存（upsert） ───────────────────────────────────
@@ -1339,31 +1922,40 @@ function dispatch(req) {
       const headers = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
       const sidCol = headers.indexOf("スケジュールID") + 1;
       const uidCol = headers.indexOf("ユーザーID") + 1;
+      const targetScheduleId = String(req.scheduleId || "").trim();
+      const targetUserId = String(req.userId || "").trim();
+      if (!targetScheduleId || !targetUserId) {
+        throw new Error("scheduleId と userId が必要です");
+      }
       const lastRow = sh.getLastRow();
       if (lastRow >= 2) {
-        const sids = sh.getRange(1,sidCol,lastRow,1).getValues();
-        const uids = sh.getRange(1,uidCol,lastRow,1).getValues();
-        for (let i = 1; i < lastRow; i++) {
-          if (String(sids[i][0]) === String(req.scheduleId) &&
-              String(uids[i][0]) === String(req.userId)) {
-            const row = i + 1;
+        const sids = sh.getRange(2, sidCol, lastRow - 1, 1).getValues();
+        const uids = sh.getRange(2, uidCol, lastRow - 1, 1).getValues();
+        for (let i = 0; i < sids.length; i++) {
+          if (String(sids[i][0] || "").trim() === targetScheduleId &&
+              String(uids[i][0] || "").trim() === targetUserId) {
+            const row = i + 2;
             const set = (col, val) => { const ci = headers.indexOf(col); if(ci>=0) sh.getRange(row,ci+1).setValue(val); };
             set("ユーザー名", req.userName||"");
             set("可否",       req.available||"");
             set("人数",       req.capacity||"");
             set("備考",       req.note||"");
+            set("家族移動",   req.familyPlan||"");
+            set("家族メンバー", Array.isArray(req.familyMembers) ? req.familyMembers.join(",") : (req.familyMembers||""));
             return {};
           }
         }
       }
       const newRow = headers.map(h => {
         if(h==="ID")           return genId();
-        if(h==="スケジュールID") return req.scheduleId;
-        if(h==="ユーザーID")    return req.userId;
+        if(h==="スケジュールID") return targetScheduleId;
+        if(h==="ユーザーID")    return targetUserId;
         if(h==="ユーザー名")    return req.userName||"";
         if(h==="可否")          return req.available||"";
         if(h==="人数")          return req.capacity||"";
         if(h==="備考")          return req.note||"";
+        if(h==="家族移動")      return req.familyPlan||"";
+        if(h==="家族メンバー")  return Array.isArray(req.familyMembers) ? req.familyMembers.join(",") : (req.familyMembers||"");
         return "";
       });
       sh.appendRow(newRow);
@@ -1536,6 +2128,3 @@ function decodeHtmlEntities(text) {
     .replace(/&#39;/gi, "'")
     .replace(/&#(\d+);/g, function(_, n) { return String.fromCharCode(Number(n)); });
 }
-
-
-
