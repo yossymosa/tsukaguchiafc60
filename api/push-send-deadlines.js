@@ -27,6 +27,8 @@ function buildPayload(pendingItems) {
     title,
     body: lines.join("\n"),
     url: first.url || "/?source=push&tab=cal",
+    icon: "/icon-512.png",
+    badge: "/icon-192.png",
   };
 }
 
