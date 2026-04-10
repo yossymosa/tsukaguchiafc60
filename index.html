@@ -3504,6 +3504,10 @@ function AlbumSection({schedule, isAdmin, canWrite=true}) {
 
   const toPreviewUrl = (item) => {
     const fid = extractDriveFileId(item?.url);
+    return fid ? `https://drive.google.com/thumbnail?id=${fid}&sz=w1200` : String(item?.url || "");
+  };
+  const toPreviewFallbackUrl = (item) => {
+    const fid = extractDriveFileId(item?.url);
     return fid ? `https://drive.google.com/uc?export=view&id=${fid}` : String(item?.url || "");
   };
   const toDownloadUrl = (item) => {
@@ -3587,8 +3591,19 @@ function AlbumSection({schedule, isAdmin, canWrite=true}) {
         ? h("div",{style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:12,padding:16,textAlign:"center",fontSize:12,color:"#94A3B8"}},"まだ写真がありません")
         : h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginBottom:12}},
             imageItems.map((item,idx)=>h("div",{key:(item.url||"")+idx,style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:6}},
-              h("a",{href:item.url,target:"_blank",rel:"noopener noreferrer",style:{display:"block",marginBottom:6,textDecoration:"none"}},
-                h("img",{src:toPreviewUrl(item),alt:item.name||`写真${idx+1}`,style:{width:"100%",aspectRatio:"1 / 1",objectFit:"cover",borderRadius:8,background:"#E2E8F0"}})
+                h("a",{href:item.url,target:"_blank",rel:"noopener noreferrer",style:{display:"block",marginBottom:6,textDecoration:"none"}},
+                h("img",{
+                  src:toPreviewUrl(item),
+                  alt:item.name||`写真${idx+1}`,
+                  onError:e=>{
+                    const img = e && (e.currentTarget || e.target);
+                    if (!img) return;
+                    if (img.dataset && img.dataset.previewFallback === "1") return;
+                    if (img.dataset) img.dataset.previewFallback = "1";
+                    img.src = toPreviewFallbackUrl(item);
+                  },
+                  style:{width:"100%",aspectRatio:"1 / 1",objectFit:"cover",borderRadius:8,background:"#E2E8F0"}
+                })
               ),
               h("div",{style:{fontSize:10,color:"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginBottom:6}},item.name||`写真 ${idx+1}`),
               h("div",{style:{display:"flex",gap:6}},
