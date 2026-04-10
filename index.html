@@ -1079,7 +1079,7 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
 }
 
 // ── ホームタブ ─────────────────────────────────────────────────
-function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoToMatch,onGoToDay,onOpenDashTab,onOpenTab}) {
+function HomeTab({results,schedules,news,officialMatchUpdates=[],pendingNotices=[],members,isAdmin,onGoToMatch,onGoToDay,onOpenDashTab,onOpenTab}) {
   const [todayKey,setTodayKey]=useState(()=>todayLocal());
   const parseNewsTs = v => {
     const d = new Date(String(v || ""));
@@ -1211,6 +1211,7 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
     })
     .slice(0,5);
   const noticeItems=recentNews;
+  const officialItems = (officialMatchUpdates || []).slice(0, 5);
   // 次の試合を探す
   const today=todayKey;
   const nextSch=schedules.filter(s=>nd(s.date)>=today).sort((a,b)=>nd(a.date).localeCompare(nd(b.date)))[0];
@@ -1296,7 +1297,22 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
           compactSummary && h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.35,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},compactSummary)
         );
       })),
-    // ④ 最近の試合結果
+    // ④ 公式更新履歴（試合結果）
+    h("div",{style:{marginBottom:20}},
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"公式更新履歴（試合結果）"),
+      officialItems.length===0
+        &&h("div",{style:{background:"#fff",borderRadius:14,padding:14,textAlign:"center",color:"#94A3B8",fontSize:12}},"取得できる更新履歴はありません"),
+      officialItems.map(item=>
+        h("div",{key:item.id,onClick:()=>{ if(item.url) window.open(item.url,"_blank","noopener,noreferrer"); },style:{background:"#fff",borderRadius:12,padding:"8px 10px",marginBottom:6,boxShadow:"0 1px 6px rgba(0,0,0,0.05)",borderLeft:"2px solid #2563EB",border:"1px solid #E2E8F0",cursor:item.url?"pointer":"default"}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:2}},
+            h("span",{style:{fontSize:9,fontWeight:800,color:"#1D4ED8",background:"#EFF6FF",borderRadius:999,padding:"1px 6px",lineHeight:1.2}},"公式"),
+            h("span",{style:{fontSize:9,color:"#94A3B8"}},item.date ? (fmt(item.date).short || item.date) : "")
+          ),
+          h("div",{style:{fontSize:12,fontWeight:700,color:"#1E293B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},item.title || "")
+        )
+      )
+    ),
+    // ⑤ 最近の試合結果
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"最近の試合結果"),
       recent.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"試合記録がありません"),
@@ -5559,6 +5575,7 @@ function App() {
   const [schedules,setSchedules]=useState([]);
   const [results,setResults]=useState([]);
   const [news,setNews]=useState([]);
+  const [officialMatchUpdates,setOfficialMatchUpdates]=useState([]);
   const [pendingNotices,setPendingNotices]=useState([]);
   const [liftings,setLiftings]=useState([]);
   const [users,setUsers]=useState([]);
@@ -5588,6 +5605,7 @@ function App() {
       setSchedules(d.schedules||[]);
       setResults(d.results||[]);
       setNews(d.news||[]); setLiftings(d.liftings||[]);
+      setOfficialMatchUpdates(d.officialMatchUpdates||[]);
       setPendingNotices(d.myPendingNotices||[]);
       setUsers(d.users||[]);
     }catch(e){alert("読み込みエラー: "+e.message);}
@@ -5809,7 +5827,7 @@ function App() {
     ...(isAdmin?[{k:"settings",i:"⚙️",l:"設定"}]:[]),
   ];
   const currentTabContent =
-    tab==="home" ? h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab})
+    tab==="home" ? h(HomeTab,{results,schedules,news,officialMatchUpdates,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab})
     : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule})
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
@@ -5819,7 +5837,7 @@ function App() {
     : tab==="settings" ? (isAdmin
         ? h(SettingsTab,{user,users,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile})
         : null)
-    : h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab});
+    : h(HomeTab,{results,schedules,news,officialMatchUpdates,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab});
 
   return h(Fragment,{},
     loading && h(Loader,{msg:loadMsg}),
