@@ -1,4 +1,4 @@
-const CACHE_NAME = "tsukaguchi-afc-v12";
+const CACHE_NAME = "tsukaguchi-afc-v13";
 const APP_SHELL = ["/", "/index.html", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 const NOTIFICATION_ICON = "/icon-512.png";
 const NOTIFICATION_BADGE = "/icon-192.png";
