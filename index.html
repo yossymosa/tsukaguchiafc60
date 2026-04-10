@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzdJuxoG2On-qzy47YXB0aY5FGX_7vtz9Y7mvQIvcFRQ-yWWurJBIT2vmhzZ1IJ-tf3/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyts6cZXOHxYMv2kFq75Diww8JaYalzBMq-OG6C77zmna1otXY086y2Y54EAIOHOyCd/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -3437,6 +3437,194 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
   );
 }
 
+// ── アルバムセクション ─────────────────────────────────────────
+function AlbumSection({schedule, isAdmin, canWrite=true}) {
+  const [albumStore, setAlbumStore] = useState({
+    albumUrl: schedule.albumUrl || "",
+    albumName: schedule.albumName || "",
+  });
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState({done:0,total:0});
+
+  useEffect(() => {
+    setAlbumStore({
+      albumUrl: schedule.albumUrl || "",
+      albumName: schedule.albumName || "",
+    });
+  }, [schedule.id, schedule.albumUrl, schedule.albumName]);
+
+  const parseItems = (urlRaw, nameRaw) => {
+    const normalize = value => String(value || "").trim();
+    const urlsText = normalize(urlRaw);
+    const namesText = normalize(nameRaw);
+    if (!urlsText) return [];
+    try {
+      const parsedUrls = JSON.parse(urlsText);
+      if (Array.isArray(parsedUrls)) {
+        if (parsedUrls.length && typeof parsedUrls[0] === "object") {
+          return parsedUrls
+            .map(item => ({ url: normalize(item.url), name: normalize(item.name) }))
+            .filter(item => item.url);
+        }
+        let parsedNames = [];
+        try { parsedNames = JSON.parse(namesText || "[]"); } catch (e) {}
+        return parsedUrls
+          .map((url, idx) => ({ url: normalize(url), name: normalize(parsedNames[idx]) }))
+          .filter(item => item.url);
+      }
+    } catch (e) {}
+    return [{ url: urlsText, name: namesText }];
+  };
+  const buildStoreValue = (items) => {
+    const clean = (items || [])
+      .map(item => ({ url: String(item?.url || "").trim(), name: String(item?.name || "").trim() }))
+      .filter(item => item.url);
+    if (clean.length === 0) return { albumUrl: "", albumName: "" };
+    if (clean.length === 1) return { albumUrl: clean[0].url, albumName: clean[0].name || "" };
+    return {
+      albumUrl: JSON.stringify(clean.map(item => item.url)),
+      albumName: JSON.stringify(clean.map(item => item.name || "")),
+    };
+  };
+  const extractDriveFileId = url => {
+    const s = String(url || "");
+    const m1 = s.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (m1 && m1[1]) return m1[1];
+    const m2 = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m2 && m2[1]) return m2[1];
+    return "";
+  };
+  const isImageFile = (nameOrType) => {
+    const s = String(nameOrType || "").toLowerCase();
+    return /^image\//.test(s) || /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/i.test(s);
+  };
+  const imageItems = parseItems(albumStore.albumUrl, albumStore.albumName).filter(item =>
+    isImageFile(item.name || "") || isImageFile(item.url || "")
+  );
+
+  const toPreviewUrl = (item) => {
+    const fid = extractDriveFileId(item?.url);
+    return fid ? `https://drive.google.com/uc?export=view&id=${fid}` : String(item?.url || "");
+  };
+  const toDownloadUrl = (item) => {
+    const fid = extractDriveFileId(item?.url);
+    return fid ? `https://drive.google.com/uc?export=download&id=${fid}` : String(item?.url || "");
+  };
+
+  const uploadPhotos = async (fileList) => {
+    if (!canWrite) return;
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const imageFiles = files.filter(f => isImageFile(f.type || "") || isImageFile(f.name || ""));
+    if (!imageFiles.length) {
+      alert("画像ファイルを選んでください");
+      return;
+    }
+    if (imageFiles.length !== files.length) {
+      alert("画像以外のファイルはスキップします");
+    }
+    setUploading(true);
+    setProgress({done:0,total:imageFiles.length});
+    let latest = { albumUrl: albumStore.albumUrl || "", albumName: albumStore.albumName || "" };
+    try {
+      for (let i = 0; i < imageFiles.length; i++) {
+        const file = imageFiles[i];
+        const dataUrl = await readFileAsDataUrl(file);
+        const base64 = String(dataUrl || "").split(",")[1] || "";
+        if (!base64) continue;
+        const r = await api("uploadScheduleAlbumPhoto", {
+          scheduleId: schedule.id,
+          fileName: file.name || "photo",
+          mimeType: file.type || "image/jpeg",
+          base64,
+        });
+        latest = { albumUrl: r.albumUrl || latest.albumUrl, albumName: r.albumName || latest.albumName };
+        setAlbumStore(latest);
+        schedule.albumUrl = latest.albumUrl;
+        schedule.albumName = latest.albumName;
+        setProgress({done:i+1,total:imageFiles.length});
+      }
+      alert(`${imageFiles.length}件アップロードしました`);
+    } catch (e) {
+      alert("アルバムアップロードエラー: " + (e.message || e));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeAt = async (idx) => {
+    if (!isAdmin) return;
+    if (idx < 0 || idx >= imageItems.length) return;
+    if (!confirm("この写真を削除しますか？")) return;
+    const nextItems = imageItems.filter((_, i) => i !== idx);
+    const nextStored = buildStoreValue(nextItems);
+    setUploading(true);
+    try {
+      await api("updateSchedule", {
+        schedule: {
+          id: schedule.id,
+          albumUrl: nextStored.albumUrl,
+          albumName: nextStored.albumName,
+        }
+      });
+      setAlbumStore(nextStored);
+      schedule.albumUrl = nextStored.albumUrl;
+      schedule.albumName = nextStored.albumName;
+    } catch (e) {
+      alert("アルバム削除エラー: " + (e.message || e));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return h(Fragment,{},
+    h("div",{style:{background:"#fff",borderRadius:16,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}} ,
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:12}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"アルバム"),
+        h("div",{style:{fontSize:11,color:"#64748B"}},`${imageItems.length}枚`)
+      ),
+      imageItems.length===0
+        ? h("div",{style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:12,padding:16,textAlign:"center",fontSize:12,color:"#94A3B8"}},"まだ写真がありません")
+        : h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginBottom:12}},
+            imageItems.map((item,idx)=>h("div",{key:(item.url||"")+idx,style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:6}},
+              h("a",{href:item.url,target:"_blank",rel:"noopener noreferrer",style:{display:"block",marginBottom:6,textDecoration:"none"}},
+                h("img",{src:toPreviewUrl(item),alt:item.name||`写真${idx+1}`,style:{width:"100%",aspectRatio:"1 / 1",objectFit:"cover",borderRadius:8,background:"#E2E8F0"}})
+              ),
+              h("div",{style:{fontSize:10,color:"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginBottom:6}},item.name||`写真 ${idx+1}`),
+              h("div",{style:{display:"flex",gap:6}},
+                h("a",{href:item.url,target:"_blank",rel:"noopener noreferrer",style:{flex:1,textAlign:"center",padding:"5px 0",background:"#E2E8F0",color:"#334155",fontSize:10,fontWeight:700,borderRadius:8,textDecoration:"none"}},"表示"),
+                h("a",{href:toDownloadUrl(item),target:"_blank",rel:"noopener noreferrer",style:{flex:1,textAlign:"center",padding:"5px 0",background:"#DBEAFE",color:"#1D4ED8",fontSize:10,fontWeight:700,borderRadius:8,textDecoration:"none"}},"DL"),
+                isAdmin && h("button",{type:"button",onClick:()=>removeAt(idx),disabled:uploading,style:{border:"1px solid #FCA5A5",background:"#FFF1F2",color:"#DC2626",fontSize:10,fontWeight:700,borderRadius:8,padding:"5px 6px",cursor:uploading?"default":"pointer",opacity:uploading?0.7:1}},"削除")
+              )
+            ))
+          ),
+      canWrite && h("label",{
+        style:{
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+          width:"100%",padding:"12px 14px",borderRadius:12,border:"1.5px dashed #93C5FD",
+          background:uploading ? "#EFF6FF" : "linear-gradient(135deg,#EFF6FF,#DBEAFE)",
+          color:"#1D4ED8",fontSize:13,fontWeight:800,cursor:uploading?"default":"pointer",
+          opacity:uploading ? 0.7 : 1
+        }
+      },
+        h("span",{}, uploading ? `アップロード中 ${progress.done}/${progress.total}` : "＋ 写真を追加（複数選択OK）"),
+        h("input",{
+          type:"file",
+          accept:"image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg,.heic,.heif",
+          multiple:true,
+          disabled:uploading,
+          onChange:e=>{
+            uploadPhotos((e.target.files || []));
+            e.target.value = "";
+          },
+          style:{display:"none"}
+        })
+      ),
+      !canWrite && h("div",{style:{fontSize:12,color:"#94A3B8"}},"閲覧専用アカウントはアップロードできません")
+    )
+  );
+}
+
 // ── 出欠セクション（DayPage内で使用） ────────────────────────
 function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[]}) {
   const isEventSchedule = normalizeType(schedule.type) === "event";
@@ -5085,9 +5273,9 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     const fallback = isSimpleDay ? "detail" : "matches";
     const v = String(raw || "").trim();
     if (isSimpleDay) return (v === "detail" || v === "attend") ? v : fallback;
-    return ["matches","detail","attend","carpool"].includes(v) ? v : fallback;
+    return ["matches","detail","attend","carpool","album"].includes(v) ? v : fallback;
   };
-  const [dayTab,setDayTab]=useState(()=>resolveDayTab(initialTab)); // "matches"|"detail"|"attend"|"carpool"
+  const [dayTab,setDayTab]=useState(()=>resolveDayTab(initialTab)); // "matches"|"detail"|"attend"|"carpool"|"album"
   const tc=getTC(schedule.type);
   const dt=fmt(schedule.date);
   const dayR=results
@@ -5239,7 +5427,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
         (isSimpleDay
           ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"}]
-          : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"}]
+          : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"album",l:"🖼 アルバム"}]
         ).map(t=>
           h("button",{key:t.k,onClick:()=>setDayTab(t.k),
             style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
@@ -5319,6 +5507,9 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
 
       // 配車タブ
       dayTab==="carpool"&&h(CarpoolSection,{schedule,user,isAdmin,canWrite,members,users}),
+
+      // アルバムタブ
+      dayTab==="album"&&h(AlbumSection,{schedule,isAdmin,canWrite}),
 
       // 出欠タブ
       dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin,canWrite,users}),
