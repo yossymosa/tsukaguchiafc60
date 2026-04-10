@@ -1543,6 +1543,10 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
     return /\.pdf$/i.test(name) || /\.pdf([?#].*)?$/i.test(url);
   };
   const pdfPreviewUrl = url => String(url || "").replace("/view?usp=sharing", "/preview").replace("/view", "/preview");
+  const imageThumbUrl = item => {
+    const fid = extractDriveFileId(item && item.url);
+    return fid ? `https://drive.google.com/thumbnail?id=${fid}&sz=w1200` : String(item && item.url || "");
+  };
   const imagePreviewUrl = item => {
     const fid = extractDriveFileId(item && item.url);
     return fid ? `https://drive.google.com/uc?export=view&id=${fid}` : String(item && item.url || "");
@@ -1958,8 +1962,15 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
           style: { width: "100%", height: 360, border: "none", borderRadius: 10, background: "#fff" }
         }),
         isImageAttachment(item) && h("img", {
-          src: imagePreviewUrl(item),
+          src: imageThumbUrl(item),
           alt: item.name || `添付画像 ${idx + 1}`,
+          onError: e => {
+            const img = e && (e.currentTarget || e.target);
+            if (!img) return;
+            if (img.dataset && img.dataset.previewFallback === "1") return;
+            if (img.dataset) img.dataset.previewFallback = "1";
+            img.src = imagePreviewUrl(item);
+          },
           style: { width: "100%", maxHeight: 420, objectFit: "contain", borderRadius: 10, background: "#fff", border: "1px solid #E2E8F0" }
         })
       )),
