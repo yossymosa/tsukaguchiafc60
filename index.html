@@ -1742,30 +1742,49 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       pdfItems.length > 0 && h("div", { style: { marginBottom: 8 } },
         pdfItems.map((item, idx) => h("div", {
           key: item.url + idx,
-          style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }
+          style: { marginBottom: idx < pdfItems.length - 1 ? 12 : 0, padding: 10, borderRadius: 10, background: "#fff", border: "1px solid #DBEAFE" }
         },
-          h("a", {
-            href: item.url,
-            target: "_blank",
-            rel: "noopener noreferrer",
-            style: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all" }
-          }, "📎 " + (item.name || `添付ファイル ${idx + 1}`)),
-          isAdmin && h("button", {
-            type: "button",
-            onClick: () => removePdfAt(idx),
-            disabled: pdfUploading,
-            style: {
-              border: "1px solid #FCA5A5",
-              background: "#FFF1F2",
-              color: "#DC2626",
-              borderRadius: 8,
-              padding: "4px 8px",
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: pdfUploading ? "default" : "pointer",
-              opacity: pdfUploading ? 0.7 : 1
-            }
-          }, "削除")
+          h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 } },
+            h("a", {
+              href: item.url,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              style: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: "#1D4ED8", textDecoration: "none", wordBreak: "break-all" }
+            }, "📎 " + (item.name || `添付ファイル ${idx + 1}`)),
+            isAdmin && h("button", {
+              type: "button",
+              onClick: () => removePdfAt(idx),
+              disabled: pdfUploading,
+              style: {
+                border: "1px solid #FCA5A5",
+                background: "#FFF1F2",
+                color: "#DC2626",
+                borderRadius: 8,
+                padding: "4px 8px",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: pdfUploading ? "default" : "pointer",
+                opacity: pdfUploading ? 0.7 : 1
+              }
+            }, "削除")
+          ),
+          isPdfAttachment(item) && pdfPreviewUrl(item.url) && h("iframe", {
+            src: pdfPreviewUrl(item.url),
+            title: item.name || `添付ファイル ${idx + 1}`,
+            style: { width: "100%", height: 260, border: "none", borderRadius: 8, background: "#fff" }
+          }),
+          isImageAttachment(item) && h("img", {
+            src: imageThumbUrl(item),
+            alt: item.name || `添付画像 ${idx + 1}`,
+            onError: e => {
+              const img = e && (e.currentTarget || e.target);
+              if (!img) return;
+              if (img.dataset && img.dataset.previewFallback === "1") return;
+              if (img.dataset) img.dataset.previewFallback = "1";
+              img.src = imagePreviewUrl(item);
+            },
+            style: { width: "100%", maxHeight: 260, objectFit: "contain", borderRadius: 8, background: "#F8FAFC", border: "1px solid #E2E8F0" }
+          })
         ))
       ),
       isAdmin && h("label", {
@@ -3456,12 +3475,18 @@ function AlbumSection({schedule, isAdmin, canWrite=true}) {
   });
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState({done:0,total:0});
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [selectedMap, setSelectedMap] = useState({});
 
   useEffect(() => {
     setAlbumStore({
       albumUrl: schedule.albumUrl || "",
       albumName: schedule.albumName || "",
     });
+    setViewerOpen(false);
+    setViewerIndex(0);
+    setSelectedMap({});
   }, [schedule.id, schedule.albumUrl, schedule.albumName]);
 
   const parseItems = (urlRaw, nameRaw) => {
@@ -3512,6 +3537,9 @@ function AlbumSection({schedule, isAdmin, canWrite=true}) {
   const imageItems = parseItems(albumStore.albumUrl, albumStore.albumName).filter(item =>
     isImageFile(item.name || "") || isImageFile(item.url || "")
   );
+  const selectedIndexes = Object.keys(selectedMap)
+    .map(k => Number(k))
+    .filter(i => selectedMap[i] && imageItems[i]);
 
   const toPreviewUrl = (item) => {
     const fid = extractDriveFileId(item?.url);
@@ -3524,6 +3552,60 @@ function AlbumSection({schedule, isAdmin, canWrite=true}) {
   const toDownloadUrl = (item) => {
     const fid = extractDriveFileId(item?.url);
     return fid ? `https://drive.google.com/uc?export=download&id=${fid}` : String(item?.url || "");
+  };
+  const openViewer = (idx) => {
+    setViewerIndex(Math.max(0, Math.min(imageItems.length - 1, Number(idx || 0))));
+    setViewerOpen(true);
+  };
+  const toggleSelect = (idx) => {
+    const i = Number(idx);
+    if (Number.isNaN(i) || !imageItems[i]) return;
+    setSelectedMap(prev => ({ ...prev, [i]: !prev[i] }));
+  };
+  const getTargetIndexes = () => {
+    if (selectedIndexes.length > 0) return selectedIndexes;
+    return imageItems[viewerIndex] ? [viewerIndex] : [];
+  };
+  const downloadByIndexes = (indexes) => {
+    const uniq = [...new Set((indexes || []).filter(i => imageItems[i]))];
+    if (!uniq.length) return;
+    uniq.forEach((i, order) => {
+      setTimeout(() => {
+        window.open(toDownloadUrl(imageItems[i]), "_blank", "noopener,noreferrer");
+      }, order * 120);
+    });
+  };
+  const deleteByIndexes = async (indexes) => {
+    if (!isAdmin) return;
+    const uniq = [...new Set((indexes || []).filter(i => imageItems[i]))];
+    if (!uniq.length) return;
+    const removeSet = new Set(uniq);
+    const nextItems = imageItems.filter((_, i) => !removeSet.has(i));
+    const nextStored = buildStoreValue(nextItems);
+    setUploading(true);
+    try {
+      await api("updateSchedule", {
+        schedule: {
+          id: schedule.id,
+          albumUrl: nextStored.albumUrl,
+          albumName: nextStored.albumName,
+        }
+      });
+      setAlbumStore(nextStored);
+      schedule.albumUrl = nextStored.albumUrl;
+      schedule.albumName = nextStored.albumName;
+      setSelectedMap({});
+      if (nextItems.length === 0) {
+        setViewerOpen(false);
+        setViewerIndex(0);
+      } else {
+        setViewerIndex(Math.max(0, Math.min(viewerIndex, nextItems.length - 1)));
+      }
+    } catch (e) {
+      alert("アルバム削除エラー: " + (e.message || e));
+    } finally {
+      setUploading(false);
+    }
   };
 
   const uploadPhotos = async (fileList) => {
@@ -3566,43 +3648,67 @@ function AlbumSection({schedule, isAdmin, canWrite=true}) {
       setUploading(false);
     }
   };
-
-  const removeAt = async (idx) => {
-    if (!isAdmin) return;
-    if (idx < 0 || idx >= imageItems.length) return;
-    if (!confirm("この写真を削除しますか？")) return;
-    const nextItems = imageItems.filter((_, i) => i !== idx);
-    const nextStored = buildStoreValue(nextItems);
-    setUploading(true);
-    try {
-      await api("updateSchedule", {
-        schedule: {
-          id: schedule.id,
-          albumUrl: nextStored.albumUrl,
-          albumName: nextStored.albumName,
-        }
-      });
-      setAlbumStore(nextStored);
-      schedule.albumUrl = nextStored.albumUrl;
-      schedule.albumName = nextStored.albumName;
-    } catch (e) {
-      alert("アルバム削除エラー: " + (e.message || e));
-    } finally {
-      setUploading(false);
-    }
-  };
+  const currentItem = imageItems[viewerIndex] || null;
+  const targetIndexes = getTargetIndexes();
 
   return h(Fragment,{},
+    viewerOpen && currentItem && h(Modal,{title:`アルバム (${viewerIndex + 1}/${imageItems.length})`,onClose:()=>setViewerOpen(false)},
+      h("div",{style:{display:"flex",justifyContent:"center",marginBottom:10}},
+        h("img",{
+          src:toPreviewUrl(currentItem),
+          alt:currentItem.name || `写真${viewerIndex + 1}`,
+          onError:e=>{
+            const img = e && (e.currentTarget || e.target);
+            if (!img) return;
+            if (img.dataset && img.dataset.previewFallback === "1") return;
+            if (img.dataset) img.dataset.previewFallback = "1";
+            img.src = toPreviewFallbackUrl(currentItem);
+          },
+          style:{width:"100%",maxHeight:420,objectFit:"contain",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0"}
+        })
+      ),
+      h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}},
+        h("div",{style:{fontSize:12,color:"#64748B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",flex:1}},currentItem.name || `写真 ${viewerIndex + 1}`),
+        h("button",{type:"button",onClick:()=>toggleSelect(viewerIndex),style:{border:"1px solid #93C5FD",background:selectedMap[viewerIndex]?"#DBEAFE":"#fff",color:"#1D4ED8",borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}},
+          selectedMap[viewerIndex] ? "選択解除" : "選択に追加")
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}},
+        h("button",{type:"button",onClick:()=>downloadByIndexes(targetIndexes),style:{...css.bW,padding:"10px 8px",fontSize:12,borderRadius:10}},
+          (selectedIndexes.length>0?`選択をDL (${selectedIndexes.length})`:"この画像をDL")),
+        isAdmin
+          ? h("button",{type:"button",disabled:uploading,onClick:async()=>{
+              if (!confirm(selectedIndexes.length>0?`選択中 ${selectedIndexes.length}枚を削除しますか？`:"この画像を削除しますか？")) return;
+              await deleteByIndexes(targetIndexes);
+            },style:{border:"1px solid #FCA5A5",background:uploading?"#FEE2E2":"#FFF1F2",color:"#DC2626",borderRadius:10,padding:"10px 8px",fontSize:12,fontWeight:700,cursor:uploading?"default":"pointer",opacity:uploading?0.7:1}},
+            (selectedIndexes.length>0?`選択を削除 (${selectedIndexes.length})`:"この画像を削除"))
+          : h("div",{})
+      ),
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}},
+        h("button",{type:"button",disabled:viewerIndex<=0,onClick:()=>setViewerIndex(i=>Math.max(0,i-1)),style:{...css.bG,padding:"7px 12px",fontSize:12,opacity:viewerIndex<=0?0.5:1,cursor:viewerIndex<=0?"default":"pointer"}},"← 前へ"),
+        h("div",{style:{fontSize:11,color:"#64748B"}},"複数選択してまとめてDL/削除できます"),
+        h("button",{type:"button",disabled:viewerIndex>=imageItems.length-1,onClick:()=>setViewerIndex(i=>Math.min(imageItems.length-1,i+1)),style:{...css.bG,padding:"7px 12px",fontSize:12,opacity:viewerIndex>=imageItems.length-1?0.5:1,cursor:viewerIndex>=imageItems.length-1?"default":"pointer"}},"次へ →")
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(6,minmax(0,1fr))",gap:6,maxHeight:110,overflowY:"auto"}},
+        imageItems.map((item,idx)=>h("button",{key:"album-thumb-"+idx,type:"button",onClick:()=>setViewerIndex(idx),style:{padding:2,border:idx===viewerIndex?"2px solid #1D4ED8":"1px solid #CBD5E1",background:selectedMap[idx]?"#DBEAFE":"#fff",borderRadius:8,cursor:"pointer"}},
+          h("img",{src:toPreviewUrl(item),alt:item.name||`写真${idx+1}`,onError:e=>{
+            const img = e && (e.currentTarget || e.target);
+            if (!img) return;
+            if (img.dataset && img.dataset.previewFallback === "1") return;
+            if (img.dataset) img.dataset.previewFallback = "1";
+            img.src = toPreviewFallbackUrl(item);
+          },style:{width:"100%",aspectRatio:"1 / 1",objectFit:"cover",borderRadius:6}})
+        ))
+      )
+    ),
     h("div",{style:{background:"#fff",borderRadius:16,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}} ,
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:12}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"アルバム"),
-        h("div",{style:{fontSize:11,color:"#64748B"}},`${imageItems.length}枚`)
+        h("div",{style:{fontSize:11,color:"#64748B"}},`${imageItems.length}枚${selectedIndexes.length?` / 選択${selectedIndexes.length}`:""}`)
       ),
       imageItems.length===0
         ? h("div",{style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:12,padding:16,textAlign:"center",fontSize:12,color:"#94A3B8"}},"まだ写真がありません")
         : h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginBottom:12}},
-            imageItems.map((item,idx)=>h("div",{key:(item.url||"")+idx,style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:6}},
-                h("a",{href:item.url,target:"_blank",rel:"noopener noreferrer",style:{display:"block",marginBottom:6,textDecoration:"none"}},
+            imageItems.map((item,idx)=>h("button",{key:(item.url||"")+idx,type:"button",onClick:()=>openViewer(idx),style:{background:selectedMap[idx]?"#DBEAFE":"#F8FAFC",border:selectedMap[idx]?"2px solid #60A5FA":"1px solid #E2E8F0",borderRadius:10,padding:4,cursor:"pointer",textAlign:"left",position:"relative"}},
                 h("img",{
                   src:toPreviewUrl(item),
                   alt:item.name||`写真${idx+1}`,
@@ -3614,14 +3720,8 @@ function AlbumSection({schedule, isAdmin, canWrite=true}) {
                     img.src = toPreviewFallbackUrl(item);
                   },
                   style:{width:"100%",aspectRatio:"1 / 1",objectFit:"cover",borderRadius:8,background:"#E2E8F0"}
-                })
-              ),
-              h("div",{style:{fontSize:10,color:"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginBottom:6}},item.name||`写真 ${idx+1}`),
-              h("div",{style:{display:"flex",gap:6}},
-                h("a",{href:item.url,target:"_blank",rel:"noopener noreferrer",style:{flex:1,textAlign:"center",padding:"5px 0",background:"#E2E8F0",color:"#334155",fontSize:10,fontWeight:700,borderRadius:8,textDecoration:"none"}},"表示"),
-                h("a",{href:toDownloadUrl(item),target:"_blank",rel:"noopener noreferrer",style:{flex:1,textAlign:"center",padding:"5px 0",background:"#DBEAFE",color:"#1D4ED8",fontSize:10,fontWeight:700,borderRadius:8,textDecoration:"none"}},"DL"),
-                isAdmin && h("button",{type:"button",onClick:()=>removeAt(idx),disabled:uploading,style:{border:"1px solid #FCA5A5",background:"#FFF1F2",color:"#DC2626",fontSize:10,fontWeight:700,borderRadius:8,padding:"5px 6px",cursor:uploading?"default":"pointer",opacity:uploading?0.7:1}},"削除")
-              )
+                }),
+                selectedMap[idx] && h("span",{style:{position:"absolute",top:6,right:6,fontSize:10,fontWeight:800,color:"#1D4ED8",background:"#fff",border:"1px solid #93C5FD",borderRadius:999,padding:"2px 6px"}},"選択")
             ))
           ),
       canWrite && h("label",{
@@ -3646,7 +3746,8 @@ function AlbumSection({schedule, isAdmin, canWrite=true}) {
           style:{display:"none"}
         })
       ),
-      !canWrite && h("div",{style:{fontSize:12,color:"#94A3B8"}},"閲覧専用アカウントはアップロードできません")
+      !canWrite && h("div",{style:{fontSize:12,color:"#94A3B8"}},"閲覧専用アカウントはアップロードできません"),
+      imageItems.length>0 && h("div",{style:{fontSize:11,color:"#64748B",marginTop:8}},"画像をタップすると、表示・ダウンロード・削除（管理者）操作ができます")
     )
   );
 }
