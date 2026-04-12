@@ -1118,7 +1118,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
             }
           },hf))
         ),
-        canWrite && h(Fragment,{},
+        isAdmin && h(Fragment,{},
           h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
             h("div",{style:{fontSize:11,color:"#94A3B8",fontWeight:700}},"選手ごとのシュート数（出席○のみ）"),
             h("div",{style:{display:"flex",alignItems:"center",gap:8}},
