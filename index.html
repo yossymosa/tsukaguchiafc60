@@ -4838,6 +4838,7 @@ function RankList({title,icon,data,unit}) {
 }
 
 function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDashTab="result",onGoToMatch,onGoToDay}) {
+  const SHOT_RATE_START_DATE = "2026-04-12";
   const [dashTab,setDashTab]=useState(initialDashTab); // "result" | "tournament" | "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
   const [periodF,setPeriodF]=useState("grade4"); // "alltime"|"grade4"|"grade3"|"month"|"lastmonth"|"custom"
@@ -4944,14 +4945,22 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   // 個人成績: メンバー別集計
   const personalStats = useMemo(()=>members.map(m=>{
     let goals=0,assists=0,shots=0,pkMade=0,pkTotal=0,mvpCount=0;
+    let shotRateGoals=0, shotRateShots=0;
     filtered.forEach(r=>{
+      const resultDate = nd(r.date);
+      const isShotRateTarget = !!resultDate && resultDate >= SHOT_RATE_START_DATE;
       const shotMap = parseResultShotStats(r);
-      shots += Math.max(0, Number(shotMap[m.id] || 0) || 0);
+      const myShotsInResult = Math.max(0, Number(shotMap[m.id] || 0) || 0);
+      shots += myShotsInResult;
+      if (isShotRateTarget) shotRateShots += myShotsInResult;
       (r.goals||[]).forEach(g=>{
         const scId=g.scorerId||(g.scorerName&&members.find(x=>x.name===g.scorerName)?.id)||"";
         const asId=g.assistId||(g.assistName&&members.find(x=>x.name===g.assistName)?.id)||"";
         const isOwnGoal = g.goalType==="オウンゴール";
-        if(scId===m.id && !isOwnGoal) goals++;
+        if(scId===m.id && !isOwnGoal) {
+          goals++;
+          if (isShotRateTarget) shotRateGoals++;
+        }
         if(asId===m.id && !isOwnGoal) assists++;
       });
       // pkKickers（キッカー方式）からPK成功率を集計
@@ -4971,9 +4980,9 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
       const mv=members.find(x=>x.name===s.mvp||x.id===s.mvp);
       if(mv&&mv.id===m.id) mvpCount++;
     });
-    return {...m,goals,assists,shots,pkMade,pkTotal,mvpCount};
+    return {...m,goals,assists,shots,pkMade,pkTotal,mvpCount,shotRateGoals,shotRateShots};
   }).filter(m=>m.goals>0||m.assists>0||m.shots>0||m.mvpCount>0).sort((a,b)=>b.goals-a.goals||b.shots-a.shots||b.assists-a.assists)
-  ,[filtered,members,schedules,periodRange]);
+  ,[filtered,members,schedules,periodRange,SHOT_RATE_START_DATE]);
 
   return h(Fragment,{},
     // サブタブ
@@ -5143,7 +5152,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
         : personalStats.map(m=>{
           const pc=PC[m.position]||{bg:"#999"};
           const pkRate=m.pkTotal>0?Math.round(m.pkMade/m.pkTotal*100)+"%":"-";
-          const shotRate = m.shots>0 ? (Math.round((m.goals/m.shots)*1000)/10)+"%" : "-";
+          const shotRate = m.shotRateShots>0 ? (Math.round((m.shotRateGoals/m.shotRateShots)*1000)/10)+"%" : "-";
           const lf=(liftings||[]).find(x=>x.memberId===m.id);
           return h("div",{key:m.id,style:{background:"#fff",borderRadius:16,padding:18,marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
             h("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:12}},
@@ -5155,7 +5164,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
               [{l:"⚽ ゴール",v:m.goals,c:"#1D4ED8"},
                {l:"🅰 アシスト",v:m.assists,c:"#2196F3"},
                {l:"🎯 シュート",v:m.shots,c:"#0EA5E9"},
-               {l:"✅ シュート成功率",v:shotRate,c:"#0F766E"},
+               {l:"✅ シュート成功率(4/12〜)",v:shotRate,c:"#0F766E"},
                {l:"🥅 PK成功率",v:pkRate,c:"#FFC107"},
                {l:"🏅 MVP",v:m.mvpCount,c:"#0F172A"},
                {l:"🏃 リフティング",v:lf?lf.count+"":" - ",c:"#4CAF50"},
