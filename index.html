@@ -884,7 +884,7 @@ function copyToClipboard(text) {
 }
 
 // ── ゴール記録ページ ─────────────────────────────────────────
-function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
+function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,onSaved}) {
   const halfSortOrder = h => {
     const v = normalizeHalfLabel(h);
     return v==="1st" ? 0 : v==="2nd" ? 1 : v==="3rd" ? 2 : 99;
@@ -963,8 +963,6 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
   const shotStatsPayload = buildShotStatsPayload(shotByHalf, theirShotsByHalfSafe);
   const ourShotsTotal = visibleHalfOptions.reduce((sum, hf) => sum + Math.max(0, Number(ourShotsByHalf[hf] || 0) || 0), 0);
   const theirShotsTotal = visibleHalfOptions.reduce((sum, hf) => sum + Math.max(0, Number(theirShotsByHalfSafe[hf] || 0) || 0), 0);
-  const ourShotRate = ourShotsTotal > 0 ? Math.round((ourT / ourShotsTotal) * 1000) / 10 : 0;
-  const theirShotRate = theirShotsTotal > 0 ? Math.round((thT / theirShotsTotal) * 1000) / 10 : 0;
   const halfScoreMapOur = { "1st": our1, "2nd": our2, "3rd": our3 };
   const halfScoreMapTheir = { "1st": th1, "2nd": th2, "3rd": th3 };
   const scoreHeaders = [...visibleHalfOptions, "計"];
@@ -973,22 +971,6 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
   const shotHeaders = [...visibleHalfOptions, "計"];
   const ourShotCells = [...visibleHalfOptions.map(hf => Math.max(0, Number(ourShotsByHalf[hf] || 0) || 0)), ourShotsTotal];
   const theirShotCells = [...visibleHalfOptions.map(hf => Math.max(0, Number(theirShotsByHalfSafe[hf] || 0) || 0)), theirShotsTotal];
-  const ourShotRateCells = [
-    ...visibleHalfOptions.map(hf => {
-      const den = Math.max(0, Number(ourShotsByHalf[hf] || 0) || 0);
-      const num = Math.max(0, Number(halfScoreMapOur[hf] || 0) || 0);
-      return den > 0 ? `${Math.round((num / den) * 1000) / 10}%` : "-";
-    }),
-    ourShotsTotal > 0 ? `${ourShotRate}%` : "-",
-  ];
-  const theirShotRateCells = [
-    ...visibleHalfOptions.map(hf => {
-      const den = Math.max(0, Number(theirShotsByHalfSafe[hf] || 0) || 0);
-      const num = Math.max(0, Number(halfScoreMapTheir[hf] || 0) || 0);
-      return den > 0 ? `${Math.round((num / den) * 1000) / 10}%` : "-";
-    }),
-    theirShotsTotal > 0 ? `${theirShotRate}%` : "-",
-  ];
   const activeTheirShots = Math.max(0, Number(theirShotsByHalfSafe[safeActiveShotHalf] || 0) || 0);
   const all=[
     ...goals.map((g,idx)=>({...g,team:"us",sourceIdx:idx})),
@@ -1115,7 +1097,7 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
         h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
           h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"SHOTS"),
           h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B"}},`入力対象: ${safeActiveShotHalf}`)),
-        !isAdmin && h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:10}},"入力は管理者のみ / 表示は全員"),
+        !isAdmin && h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:10}},"入力は管理者のみ"),
         isAdmin && h("div",{style:{fontSize:11,color:"#64748B",marginBottom:10}},"前半を保存→後半を追加入力して再保存で累計されます"),
         h("div",{style:{display:"grid",gridTemplateColumns:`110px ${shotHeaders.map(()=> "1fr").join(" ")}`,gap:6,alignItems:"center",marginBottom:12}},
           h("div",{}),
@@ -1123,11 +1105,7 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
           h("div",{style:{fontSize:12,color:"#1D4ED8",fontWeight:700}},"塚口AFC シュート"),
           ...ourShotCells.map((v,i)=>h("div",{key:"our-shot-"+i,style:{fontSize:i===ourShotCells.length-1?18:15,fontWeight:900,color:"#1D4ED8",textAlign:"center"}},v)),
           h("div",{style:{fontSize:12,color:"#64748B",fontWeight:700}},(match.opponent||"相手")+" シュート"),
-          ...theirShotCells.map((v,i)=>h("div",{key:"their-shot-"+i,style:{fontSize:i===theirShotCells.length-1?18:15,fontWeight:900,color:"#334155",textAlign:"center"}},v)),
-          h("div",{style:{fontSize:12,color:"#1D4ED8",fontWeight:700}},"塚口AFC 決定率"),
-          ...ourShotRateCells.map((v,i)=>h("div",{key:"our-rate-"+i,style:{fontSize:12,fontWeight:800,color:"#1D4ED8",textAlign:"center"}},v)),
-          h("div",{style:{fontSize:12,color:"#64748B",fontWeight:700}},(match.opponent||"相手")+" 決定率"),
-          ...theirShotRateCells.map((v,i)=>h("div",{key:"their-rate-"+i,style:{fontSize:12,fontWeight:800,color:"#64748B",textAlign:"center"}},v))
+          ...theirShotCells.map((v,i)=>h("div",{key:"their-shot-"+i,style:{fontSize:i===theirShotCells.length-1?18:15,fontWeight:900,color:"#334155",textAlign:"center"}},v))
         ),
         h("div",{style:{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}},
           visibleHalfOptions.map(hf => h("button",{
@@ -1140,44 +1118,46 @@ function GoalPage({match,schedule,members,isAdmin,onBack,onHome,onSaved}) {
             }
           },hf))
         ),
-        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
-          h("div",{style:{fontSize:11,color:"#94A3B8",fontWeight:700}},"選手ごとのシュート数（出席○のみ）"),
-          h("div",{style:{display:"flex",alignItems:"center",gap:8}},
-            h("button",{
-              onClick:isAdmin?()=>bumpTheirShot(-1):undefined,
-              style:{width:28,height:28,border:"1px solid #CBD5E1",borderRadius:8,background:"#fff",color:"#334155",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
-            },"−"),
-            h("div",{style:{minWidth:28,textAlign:"center",fontSize:16,fontWeight:900,color:"#334155"}},activeTheirShots),
-            h("button",{
-              onClick:isAdmin?()=>bumpTheirShot(1):undefined,
-              style:{width:28,height:28,border:"1px solid #94A3B8",borderRadius:8,background:"#0F172A",color:"#fff",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
-            },"＋")
-          )),
-        attendLoading
-          ? h("div",{style:{fontSize:12,color:"#94A3B8",padding:"8px 0"}},"出欠情報を読み込み中...")
-          : (scheduleIdForAttend && shotTargetMembers.length===0
-              ? h("div",{style:{fontSize:12,color:"#94A3B8",padding:"8px 0"}},"出席○の選手がいません")
-              : h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}},
-          shotsByMember.map(row=>{
-            const m = row.member;
-            const val = Number(row.shots || 0);
-            return h("div",{key:"shot-member-"+m.id,style:{border:"1px solid #E2E8F0",background:"#F8FAFC",borderRadius:10,padding:"8px 8px"}},
-              h("div",{style:{fontSize:12,fontWeight:700,color:"#1E293B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginBottom:6}},
-                "#"+(m.number||"-")+" "+(m.name||"")),
-              h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}},
-                h("button",{
-                  onClick:isAdmin?()=>bumpMemberShot(m.id,-1):undefined,
-                  style:{width:28,height:28,border:"1px solid #CBD5E1",borderRadius:8,background:"#fff",color:"#334155",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
-                },"−"),
-                h("div",{style:{minWidth:24,textAlign:"center",fontSize:17,fontWeight:900,color:"#1D4ED8"}},val),
-                h("button",{
-                  onClick:isAdmin?()=>bumpMemberShot(m.id,1):undefined,
-                  style:{width:28,height:28,border:"1px solid #93C5FD",borderRadius:8,background:"#DBEAFE",color:"#1D4ED8",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
-                },"＋")
-              )
-            );
-          })
-        ))
+        canWrite && h(Fragment,{},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
+            h("div",{style:{fontSize:11,color:"#94A3B8",fontWeight:700}},"選手ごとのシュート数（出席○のみ）"),
+            h("div",{style:{display:"flex",alignItems:"center",gap:8}},
+              h("button",{
+                onClick:isAdmin?()=>bumpTheirShot(-1):undefined,
+                style:{width:28,height:28,border:"1px solid #CBD5E1",borderRadius:8,background:"#fff",color:"#334155",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
+              },"−"),
+              h("div",{style:{minWidth:28,textAlign:"center",fontSize:16,fontWeight:900,color:"#334155"}},activeTheirShots),
+              h("button",{
+                onClick:isAdmin?()=>bumpTheirShot(1):undefined,
+                style:{width:28,height:28,border:"1px solid #94A3B8",borderRadius:8,background:"#0F172A",color:"#fff",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
+              },"＋")
+            )),
+          attendLoading
+            ? h("div",{style:{fontSize:12,color:"#94A3B8",padding:"8px 0"}},"出欠情報を読み込み中...")
+            : (scheduleIdForAttend && shotTargetMembers.length===0
+                ? h("div",{style:{fontSize:12,color:"#94A3B8",padding:"8px 0"}},"出席○の選手がいません")
+                : h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}},
+            shotsByMember.map(row=>{
+              const m = row.member;
+              const val = Number(row.shots || 0);
+              return h("div",{key:"shot-member-"+m.id,style:{border:"1px solid #E2E8F0",background:"#F8FAFC",borderRadius:10,padding:"8px 8px"}},
+                h("div",{style:{fontSize:12,fontWeight:700,color:"#1E293B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginBottom:6}},
+                  "#"+(m.number||"-")+" "+(m.name||"")),
+                h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}},
+                  h("button",{
+                    onClick:isAdmin?()=>bumpMemberShot(m.id,-1):undefined,
+                    style:{width:28,height:28,border:"1px solid #CBD5E1",borderRadius:8,background:"#fff",color:"#334155",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
+                  },"−"),
+                  h("div",{style:{minWidth:24,textAlign:"center",fontSize:17,fontWeight:900,color:"#1D4ED8"}},val),
+                  h("button",{
+                    onClick:isAdmin?()=>bumpMemberShot(m.id,1):undefined,
+                    style:{width:28,height:28,border:"1px solid #93C5FD",borderRadius:8,background:"#DBEAFE",color:"#1D4ED8",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
+                  },"＋")
+                )
+              );
+            })
+          ))
+        )
       ),
       // ゴール一覧
       h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -6505,7 +6485,7 @@ function App() {
   if(page?.type==="matchDetail") return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
     h(GoalPage,{
-      match:page.match,schedule:page.schedule,members,isAdmin,
+      match:page.match,schedule:page.schedule,members,isAdmin,canWrite,
       onHome:goBack,
       onBack:()=>{
         const backSchedule = findLinkedScheduleForResult(page.match, schedules) || page.schedule;
