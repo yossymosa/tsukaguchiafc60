@@ -5889,7 +5889,8 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
   const [aiLoading,setAiLoading]=useState(false);
   const [aiDraftSaved,setAiDraftSaved]=useState(false);
   const [hpCopied,setHpCopied]=useState(false);
-  const hpDraftKey = "afc_hp_ai_draft_" + (schedule?.id || "");
+  const hpDraftOwner = encodeURIComponent(String(user?.email || user?.id || user?.name || "anon").trim().toLowerCase());
+  const hpDraftKey = "afc_hp_ai_draft_" + (schedule?.id || "") + "_" + hpDraftOwner;
   const loadAiDraft = ()=>{
     try{
       return localStorage.getItem(hpDraftKey) || "";
@@ -5954,9 +5955,8 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     setAiLoading(true);
     try{
       const prompt="あなたは少年サッカーチーム「塚口AFCjr」の広報担当です。\n"+
-        "以下の素材をもとに、HPに載せる自然な文章を作成してください。\n\n"+
-        "【ベーステキスト】\n"+hpText+
-        "\n\n【当日の試合内容・AIへの指示】\n"+aiDraft.trim()+
+        "以下の入力内容だけをもとに、HPに載せる自然な文章を作成してください。\n\n"+
+        "【当日の試合内容・AIへの指示】\n"+aiDraft.trim()+
         "\n\n出力は本文テキストのみ。前置きや説明は不要です。";
       const d=await api("aiGenerate",{prompt});
       if(d.text) setAiResult(String(d.text).trim());
