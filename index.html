@@ -219,6 +219,18 @@ function parseFamilyMembers(value){
   } catch(e) {}
   return [...new Set(s.split(/\r?\n|,|、/).map(v=>String(v||"").trim()).filter(Boolean))];
 }
+function scrollAppTop(){
+  try{
+    const el=document.scrollingElement||document.documentElement||document.body;
+    if(el) el.scrollTop=0;
+  }catch(e){}
+  try{
+    const app=document.getElementById("app");
+    if(app) app.scrollTop=0;
+  }catch(e){}
+  try{ window.scrollTo({top:0,left:0,behavior:"auto"}); }
+  catch(e){ try{ window.scrollTo(0,0); }catch(_){} }
+}
 function createEmptyShotByHalf(){
   return {"1st":{}, "2nd":{}, "3rd":{}};
 }
@@ -923,8 +935,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const [ytCopied,setYtCopied]=useState("");
   const [matchMemo,setMatchMemo]=useState(()=>String(match.memo||""));
   useEffect(() => {
-    try { window.scrollTo({ top: 0, behavior: "auto" }); }
-    catch(e){ try { window.scrollTo(0,0); } catch(_){} }
+    scrollAppTop();
+    setTimeout(scrollAppTop, 0);
   }, [match?.id]);
   // PK戦
   const parseJson = v => { try{ return typeof v==="string"&&v?JSON.parse(v):v||[]; }catch(e){ return []; }};
@@ -6673,14 +6685,24 @@ function App() {
       title: r?.opponent ? ("vs " + r.opponent) : "試合",
       type: r?.type || ""
     };
+    scrollAppTop();
     setPage({type:"matchDetail",match:r,schedule:linked});
+    setTimeout(scrollAppTop,0);
   };
-  const goToDay  =(s,dayTab="")  =>setPage({type:"dayDetail",schedule:s,dayTab:dayTab||""});
+  const goToDay  =(s,dayTab="")  =>{
+    scrollAppTop();
+    setPage({type:"dayDetail",schedule:s,dayTab:dayTab||""});
+    setTimeout(scrollAppTop,0);
+  };
   const openDashTab = (nextTab) => {
     setDashInitialTab(nextTab || "result");
     setTab("dash");
   };
-  const goBack   =()   =>setPage(null);
+  const goBack   =()   =>{
+    scrollAppTop();
+    setPage(null);
+    setTimeout(scrollAppTop,0);
+  };
 
   const handleAddResult=async fr=>{
     setLoading(true);setLoadMsg("追加中...");
@@ -6790,12 +6812,12 @@ function App() {
       onHome:goBack,
       onBack:()=>{
         const backSchedule = findLinkedScheduleForResult(page.match, schedules) || page.schedule;
-        setPage({type:"dayDetail",schedule:backSchedule});
+        goToDay(backSchedule);
       },
       onSaved:async()=>{
         await load("更新中...");
         const backSchedule = findLinkedScheduleForResult(page.match, schedules) || page.schedule;
-        setPage({type:"dayDetail",schedule:backSchedule});
+        goToDay(backSchedule);
       },
       onShotSaved:async()=>{
         await load("更新中...");
@@ -6820,7 +6842,7 @@ function App() {
     },onClose:()=>setEditResult(null)}),
     h(DayPage,{
       schedule:page.schedule,results,schedules,members,isAdmin,canWrite,user,users,initialTab:page.dayTab||"",
-      onGoToMatch:(r,s)=>setPage({type:"matchDetail",match:r,schedule:s}),
+      onGoToMatch:goToMatch,
       onAdd:s=>setPage({type:"addMatch",schedule:s}),
       onEdit:r=>setEditResult(r),
       onDelete:handleDeleteResult,
