@@ -1434,29 +1434,29 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
                 h("input",{value:ytUrls[f.k],onChange:e=>setYtUrls(p=>({...p,[f.k]:e.target.value})),placeholder:"https://youtube.com/...",style:{...css.inp,fontSize:11,padding:"6px 10px",flex:1}}))))),
 
         // テンプレ生成（adminのみ）
-        isAdmin&&h(Fragment,{},
+        isAdmin && h(Fragment, {},
           h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"テンプレコピー"),
           [
-            ...(ytUrls.full?[
+            ...(ytUrls.full ? [
               {label:"通し タイトル", key:"t_full", text:()=>makeYtTitle(match,schedule,"通し")},
               {label:"通し 説明欄",   key:"d_full", text:()=>makeYtDesc(match,members,"通し")},
-            ]:[]),
+            ] : []),
             {label:"前半 タイトル", key:"t_first",  text:()=>makeYtTitle(match,schedule,"1st")},
             {label:"前半 説明欄",   key:"d_first",  text:()=>makeYtDesc(match,members,"1st")},
             {label:"後半 タイトル", key:"t_second", text:()=>makeYtTitle(match,schedule,"2nd")},
             {label:"後半 説明欄",   key:"d_second", text:()=>makeYtDesc(match,members,"2nd")},
             {label:"3rd タイトル",  key:"t_third",  text:()=>makeYtTitle(match,schedule,"3rd")},
             {label:"3rd 説明欄",    key:"d_third",  text:()=>makeYtDesc(match,members,"3rd")},
-          ].map(item=>{
-            const text=item.text();
-            const copied=ytCopied===item.key;
-            return h("div",{key:item.key,style:{background:"#F8F9FA",borderRadius:10,padding:"10px 12px",marginBottom:8}},
+          ].map(item =>
+            h("div",{key:item.key,style:{background:"#F8F9FA",borderRadius:10,padding:"10px 12px",marginBottom:8}},
               h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}},
                 h("div",{style:{flex:1}},
                   h("div",{style:{fontSize:10,fontWeight:700,color:"#aaa",marginBottom:4}},item.label),
-                  h("div",{style:{fontSize:12,color:"#333",lineHeight:1.6,wordBreak:"break-all",whiteSpace:"pre-wrap"}},text)),
-                h("button",{onClick:()=>copyYt(text,item.key),style:{flexShrink:0,background:copied?"#4CAF50":"#1a1a2e",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}},copied?"✓ コピー済":"コピー")));
-          })))),
+                  h("div",{style:{fontSize:12,color:"#333",lineHeight:1.6,wordBreak:"break-all",whiteSpace:"pre-wrap"}},item.text())),
+                h("button",{onClick:()=>copyYt(item.text(),item.key),style:{flexShrink:0,background:ytCopied===item.key?"#4CAF50":"#1a1a2e",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}},ytCopied===item.key?"✓ コピー済":"コピー"))
+            )
+          )
+        ),
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"⚽ 得点を追加",onClose:()=>setModal(null)},
