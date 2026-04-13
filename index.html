@@ -1456,7 +1456,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
                   h("div",{style:{fontSize:10,fontWeight:700,color:"#aaa",marginBottom:4}},item.label),
                   h("div",{style:{fontSize:12,color:"#333",lineHeight:1.6,wordBreak:"break-all",whiteSpace:"pre-wrap"}},text)),
                 h("button",{onClick:()=>copyYt(text,item.key),style:{flexShrink:0,background:copied?"#4CAF50":"#1a1a2e",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}},copied?"✓ コピー済":"コピー")));
-          })))),
+          }))),
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"⚽ 得点を追加",onClose:()=>setModal(null)},
