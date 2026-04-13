@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbz67hWHAyCBnRX-dmcDtc2uMc6kNswuQLqGKRffCWGj567we091QIKG-V5-_dUwsT7Q/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwsYbqZ4PvB6nJex-GsCjdkk7CrQxg2X8gMrZaiu1VP4IkZiTR-45D0ho2Cb3J6dyyH/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -67,6 +67,27 @@ const FORMAT_MODE_OPTIONS = [
 const DEFAULT_FORMAT_TIME = 10;
 const DEFAULT_FORMAT_MODE = "half";
 const ALL_HALF_OPTIONS = ["1st","2nd","3rd"];
+const MATCH_FORMATION_PRESETS = {
+  "3-2-2": [
+    {id:"gk",label:"GK"},
+    {id:"df1",label:"DF1"},{id:"df2",label:"DF2"},{id:"df3",label:"DF3"},
+    {id:"mf1",label:"MF1"},{id:"mf2",label:"MF2"},
+    {id:"fw1",label:"FW1"},{id:"fw2",label:"FW2"},
+  ],
+  "3-3-1": [
+    {id:"gk",label:"GK"},
+    {id:"df1",label:"DF1"},{id:"df2",label:"DF2"},{id:"df3",label:"DF3"},
+    {id:"mf1",label:"MF1"},{id:"mf2",label:"MF2"},{id:"mf3",label:"MF3"},
+    {id:"fw1",label:"FW1"},
+  ],
+};
+const MATCH_STAT_DEFS = [
+  {key:"Shots", label:"シュート"},
+  {key:"Corners", label:"コーナーキック"},
+  {key:"FreeKicks", label:"フリーキック"},
+  {key:"PkCount", label:"PK"},
+  {key:"Offsides", label:"オフサイド"},
+];
 function normalizeHalfLabel(h) {
   const s = String(h || "").trim();
   if (/^(1st|前半|first|1)$/i.test(s)) return "1st";
@@ -900,6 +921,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const [ntg,setNtg]=useState({half:"1st",minute:"",second:"",goalType:"通常"});
   const [ytUrls,setYtUrls]=useState({full:match.youtubeUrl||"",first:match.youtubeUrl1st||"",second:match.youtubeUrl2nd||""});
   const [ytCopied,setYtCopied]=useState("");
+  const [matchMemo,setMatchMemo]=useState(()=>String(match.memo||""));
   // PK戦
   const parseJson = v => { try{ return typeof v==="string"&&v?JSON.parse(v):v||[]; }catch(e){ return []; }};
   const initKickers  = parseJson(match.pkKickers);
@@ -918,8 +940,63 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const [activeShotHalf,setActiveShotHalf]=useState("1st");
   const [attendMap,setAttendMap]=useState(null);
   const [attendLoading,setAttendLoading]=useState(false);
+  const [matchStats,setMatchStats]=useState(()=>({
+    ourShots:Math.max(0, Number(match.ourShots||0)||0),
+    theirShots:Math.max(0, Number(match.theirShots||0)||0),
+    ourCorners:Math.max(0, Number(match.ourCorners||0)||0),
+    theirCorners:Math.max(0, Number(match.theirCorners||0)||0),
+    ourFreeKicks:Math.max(0, Number(match.ourFreeKicks||0)||0),
+    theirFreeKicks:Math.max(0, Number(match.theirFreeKicks||0)||0),
+    ourPkCount:Math.max(0, Number(match.ourPkCount||0)||0),
+    theirPkCount:Math.max(0, Number(match.theirPkCount||0)||0),
+    ourOffsides:Math.max(0, Number(match.ourOffsides||0)||0),
+    theirOffsides:Math.max(0, Number(match.theirOffsides||0)||0),
+  }));
+  const parseFormationSlots = v => {
+    try {
+      const obj = typeof v === "string" ? JSON.parse(v || "{}") : (v || {});
+      return obj && typeof obj === "object" ? obj : {};
+    } catch (e) {
+      return {};
+    }
+  };
+  const sortMembersForFormation = () => [...(members || [])].sort((a,b)=>Number(a.number||999)-Number(b.number||999)||String(a.name||"").localeCompare(String(b.name||""),"ja"));
+  const buildFormationSlots = (formationKey, currentSlots={}) => {
+    const slots = MATCH_FORMATION_PRESETS[formationKey] || [];
+    const candidates = sortMembersForFormation();
+    const used = {};
+    const next = {};
+    slots.forEach(slot => {
+      const keep = String(currentSlots[slot.id] || "").trim();
+      if (keep && candidates.some(m => m.id === keep) && !used[keep]) {
+        next[slot.id] = keep;
+        used[keep] = true;
+        return;
+      }
+      const free = candidates.find(m => !used[m.id]);
+      next[slot.id] = free ? free.id : "";
+      if (free) used[free.id] = true;
+    });
+    return next;
+  };
+  const [formation,setFormation]=useState(()=>String(match.formation||""));
+  const [formationSlots,setFormationSlots]=useState(()=>{
+    const key = String(match.formation || "");
+    const saved = parseFormationSlots(match.formationSlots);
+    return key ? buildFormationSlots(key, saved) : {};
+  });
 
   const ourT=goals.length, thT=theirG.length;
+  const getStatValue=(field)=>Math.max(0, Number(matchStats[field]||0)||0);
+  const bumpStat=(field,delta)=>setMatchStats(prev=>({
+    ...prev,
+    [field]:Math.max(0, (Number(prev[field]||0)||0)+delta),
+  }));
+  const applyFormationPreset=(nextFormation)=>{
+    const key = String(nextFormation || "");
+    setFormation(key);
+    setFormationSlots(prev=>key ? buildFormationSlots(key, prev) : {});
+  };
   const won=ourT>thT,draw=ourT===thT,rc=won?"#4CAF50":draw?"#FFC107":"#F44336";
   // PK集計
   const pkOurScore=pkKickers.filter(k=>k.success).length;
@@ -1000,8 +1077,25 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     const parsedShot = parseShotStatsDetail(match?.shotStats || {}, match?.theirShots || 0);
     setShotByHalf(parsedShot.byHalf);
     setTheirShotsByHalf(parsedShot.theirByHalf);
+    setMatchMemo(String(match.memo||""));
+    setMatchStats({
+      ourShots:Math.max(0, Number(match.ourShots||0)||0),
+      theirShots:Math.max(0, Number(match.theirShots||0)||0),
+      ourCorners:Math.max(0, Number(match.ourCorners||0)||0),
+      theirCorners:Math.max(0, Number(match.theirCorners||0)||0),
+      ourFreeKicks:Math.max(0, Number(match.ourFreeKicks||0)||0),
+      theirFreeKicks:Math.max(0, Number(match.theirFreeKicks||0)||0),
+      ourPkCount:Math.max(0, Number(match.ourPkCount||0)||0),
+      theirPkCount:Math.max(0, Number(match.theirPkCount||0)||0),
+      ourOffsides:Math.max(0, Number(match.ourOffsides||0)||0),
+      theirOffsides:Math.max(0, Number(match.theirOffsides||0)||0),
+    });
+    const key = String(match.formation || "");
+    const saved = parseFormationSlots(match.formationSlots);
+    setFormation(key);
+    setFormationSlots(key ? buildFormationSlots(key, saved) : {});
     setShotSavedTick(0);
-  }, [match?.id]);
+  }, [match?.id, match?.memo, match?.shotStats, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.formation, match?.formationSlots]);
   useEffect(() => {
     let active = true;
     if (!scheduleIdForAttend) {
@@ -1079,8 +1173,19 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       await api("saveGoals",{
         resultId:match.id,goals,theirGoals:theirG,
         youtubeUrl:ytUrls.full,youtubeUrl1st:ytUrls.first,youtubeUrl2nd:ytUrls.second,
-        ourShots:ourShotsTotal,
-        theirShots:theirShotsTotal,
+        ourShots:getStatValue("ourShots"),
+        theirShots:getStatValue("theirShots"),
+        ourCorners:getStatValue("ourCorners"),
+        theirCorners:getStatValue("theirCorners"),
+        ourFreeKicks:getStatValue("ourFreeKicks"),
+        theirFreeKicks:getStatValue("theirFreeKicks"),
+        ourPkCount:getStatValue("ourPkCount"),
+        theirPkCount:getStatValue("theirPkCount"),
+        ourOffsides:getStatValue("ourOffsides"),
+        theirOffsides:getStatValue("theirOffsides"),
+        formation:formation || "",
+        formationSlots:formation ? formationSlots : {},
+        memo:matchMemo,
         shotStats:shotStatsPayload,
         pkKickers:hasPk?pkKickers:null,
         pkTheirSeq:hasPk?pkTheirSeq:null,
@@ -1122,81 +1227,49 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
           ...ourScoreCellsView.map((v,i)=>h("div",{key:i,style:{fontSize:i===ourScoreCellsView.length-1?24:18,fontWeight:900,color:rc,textAlign:"center",lineHeight:1}},v)),
           h("div",{style:{fontSize:13,fontWeight:600,color:"#999"}},match.opponent),
           ...theirScoreCellsView.map((v,i)=>h("div",{key:i,style:{fontSize:i===theirScoreCellsView.length-1?24:18,fontWeight:900,color:"#bbb",textAlign:"center",lineHeight:1}},v)))),
-      h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"SHOTS"),
-          h("div",{style:{display:"flex",alignItems:"center",gap:8}},
-            !isViewer && h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B"}},`入力対象: ${safeActiveShotHalf}`),
-            isAdmin && h("button",{
-              onClick:saveShotsOnly,
-              disabled:shotSaving,
-              style:{
-                border:"none",borderRadius:10,padding:"6px 10px",
-                background:shotSavedTick?"#16A34A":"#1D4ED8",color:"#fff",
-                fontSize:11,fontWeight:800,cursor:shotSaving?"wait":"pointer",opacity:shotSaving?0.7:1
-              }
-            },shotSaving?"保存中...":(shotSavedTick?"保存済み":"シュート保存")))),
-        !isAdmin && h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:10}},"入力は管理者のみ"),
-        isAdmin && h("div",{style:{fontSize:11,color:"#64748B",marginBottom:10}},"前半を保存→後半を追加入力して再保存で累計されます"),
-        h("div",{style:{display:"grid",gridTemplateColumns:`110px ${shotHeadersView.map(()=> "1fr").join(" ")}`,gap:6,alignItems:"center",marginBottom:12}},
+      isAdmin&&h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"MATCH STATS（管理者テスト）"),
+        h("div",{style:{display:"grid",gridTemplateColumns:"86px 1fr 110px 1fr 86px",alignItems:"center",gap:8,marginBottom:10}},
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#1D4ED8",textAlign:"center"}},"塚口AFC"),
           h("div",{}),
-          ...shotHeadersView.map(lb=>h("div",{key:"shot-head-"+lb,style:{fontSize:11,color:"#94A3B8",textAlign:"center",fontWeight:700}},lb)),
-          h("div",{style:{fontSize:12,color:"#1D4ED8",fontWeight:700}},"塚口AFC シュート"),
-          ...ourShotCellsView.map((v,i)=>h("div",{key:"our-shot-"+i,style:{fontSize:i===ourShotCellsView.length-1?18:15,fontWeight:900,color:"#1D4ED8",textAlign:"center"}},v)),
-          h("div",{style:{fontSize:12,color:"#64748B",fontWeight:700}},(match.opponent||"相手")+" シュート"),
-          ...theirShotCellsView.map((v,i)=>h("div",{key:"their-shot-"+i,style:{fontSize:i===theirShotCellsView.length-1?18:15,fontWeight:900,color:"#334155",textAlign:"center"}},v))
-        ),
-        !isViewer && h("div",{style:{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}},
-          visibleHalfOptions.map(hf => h("button",{
-            key:"shot-half-"+hf,
-            onClick:()=>setActiveShotHalf(hf),
-            style:{
-              minWidth:64,padding:"7px 12px",border:`2px solid ${safeActiveShotHalf===hf?"#1D4ED8":"#E2E8F0"}`,
-              borderRadius:999,background:safeActiveShotHalf===hf?"#1D4ED8":"#fff",
-              color:safeActiveShotHalf===hf?"#fff":"#64748B",fontSize:12,fontWeight:800,cursor:"pointer"
-            }
-          },hf))
-        ),
-        isAdmin && h(Fragment,{},
-          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
-            h("div",{style:{fontSize:11,color:"#94A3B8",fontWeight:700}},"選手ごとのシュート数（出席○のみ）"),
-            h("div",{style:{display:"flex",alignItems:"center",gap:8}},
-              h("button",{
-                onClick:isAdmin?()=>bumpTheirShot(-1):undefined,
-                style:{width:28,height:28,border:"1px solid #CBD5E1",borderRadius:8,background:"#fff",color:"#334155",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
-              },"−"),
-              h("div",{style:{minWidth:28,textAlign:"center",fontSize:16,fontWeight:900,color:"#334155"}},activeTheirShots),
-              h("button",{
-                onClick:isAdmin?()=>bumpTheirShot(1):undefined,
-                style:{width:28,height:28,border:"1px solid #94A3B8",borderRadius:8,background:"#0F172A",color:"#fff",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
-              },"＋")
-            )),
-          attendLoading
-            ? h("div",{style:{fontSize:12,color:"#94A3B8",padding:"8px 0"}},"出欠情報を読み込み中...")
-            : (scheduleIdForAttend && shotTargetMembers.length===0
-                ? h("div",{style:{fontSize:12,color:"#94A3B8",padding:"8px 0"}},"出席○の選手がいません")
-                : h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}},
-            shotsByMember.map(row=>{
-              const m = row.member;
-              const val = Number(row.shots || 0);
-              return h("div",{key:"shot-member-"+m.id,style:{border:"1px solid #E2E8F0",background:"#F8FAFC",borderRadius:10,padding:"8px 8px"}},
-                h("div",{style:{fontSize:12,fontWeight:700,color:"#1E293B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginBottom:6}},
-                  "#"+(m.number||"-")+" "+(m.name||"")),
-                h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}},
-                  h("button",{
-                    onClick:isAdmin?()=>bumpMemberShot(m.id,-1):undefined,
-                    style:{width:28,height:28,border:"1px solid #CBD5E1",borderRadius:8,background:"#fff",color:"#334155",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
-                  },"−"),
-                  h("div",{style:{minWidth:24,textAlign:"center",fontSize:17,fontWeight:900,color:"#1D4ED8"}},val),
-                  h("button",{
-                    onClick:isAdmin?()=>bumpMemberShot(m.id,1):undefined,
-                    style:{width:28,height:28,border:"1px solid #93C5FD",borderRadius:8,background:"#DBEAFE",color:"#1D4ED8",fontSize:16,fontWeight:900,cursor:isAdmin?"pointer":"not-allowed",lineHeight:1,opacity:isAdmin?1:0.45}
-                  },"＋")
-                )
-              );
-            })
-          ))
-        )
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",textAlign:"center"}},"項目"),
+          h("div",{}),
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",textAlign:"center"}},match.opponent||"相手")),
+        MATCH_STAT_DEFS.map(def=>{
+          const ourField="our"+def.key;
+          const theirField="their"+def.key;
+          const ourVal=getStatValue(ourField);
+          const theirVal=getStatValue(theirField);
+          const counterStyle={display:"flex",alignItems:"center",justifyContent:"center",gap:6};
+          return h("div",{key:def.key,style:{display:"grid",gridTemplateColumns:"86px 1fr 110px 1fr 86px",alignItems:"center",gap:8,marginBottom:8}},
+            h("div",{style:counterStyle},
+              h("button",{onClick:()=>bumpStat(ourField,-1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"−"),
+              h("div",{style:{minWidth:18,textAlign:"center",fontSize:16,fontWeight:900,color:"#1D4ED8"}},ourVal),
+              h("button",{onClick:()=>bumpStat(ourField,1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"＋")),
+            h("div",{style:{height:1,background:"#F1F5F9"}}),
+            h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",textAlign:"center"}},def.label),
+            h("div",{style:{height:1,background:"#F1F5F9"}}),
+            h("div",{style:counterStyle},
+              h("button",{onClick:()=>bumpStat(theirField,-1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"−"),
+              h("div",{style:{minWidth:18,textAlign:"center",fontSize:16,fontWeight:900,color:"#64748B"}},theirVal),
+              h("button",{onClick:()=>bumpStat(theirField,1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"＋"));
+        })),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginTop:6,marginBottom:10}},"FORMATION"),
+        h("div",{style:{display:"flex",gap:8,marginBottom:12}},
+          Object.keys(MATCH_FORMATION_PRESETS).map(key=>
+            h("button",{key,onClick:()=>applyFormationPreset(key),
+              style:{flex:1,padding:"10px 8px",border:`2px solid ${formation===key?"#1D4ED8":"#E2E8F0"}`,borderRadius:10,background:formation===key?"#1D4ED8":"#fff",color:formation===key?"#fff":"#334155",fontSize:13,fontWeight:700,cursor:"pointer"}},key))),
+        formation&&h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}},
+          (MATCH_FORMATION_PRESETS[formation]||[]).map(slot=>{
+            const currentId=String(formationSlots[slot.id]||"");
+            const used=new Set(Object.entries(formationSlots).filter(([k,v])=>k!==slot.id&&v).map(([,v])=>String(v)));
+            const opts=membersSorted.filter(m=>!used.has(String(m.id))||String(m.id)===currentId);
+            return h("div",{key:slot.id,style:{background:"#F8FAFC",borderRadius:10,padding:"8px 10px"}},
+              h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},slot.label),
+              h("select",{value:currentId,onChange:e=>setFormationSlots(prev=>({...prev,[slot.id]:e.target.value})),style:{...css.inp,fontSize:13,padding:"8px 10px"}},
+                h("option",{value:""},"未設定"),
+                opts.map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name))));
+          }))),
       ),
       // ゴール一覧
       h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -1330,7 +1403,12 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
 
 
       isAdmin&&h("button",{onClick:save,style:{...css.bS,width:"100%",padding:16,fontSize:15,marginBottom:16}},"💾 試合全体を保存"),
-      match.memo&&h("div",{style:{background:"#fff",borderRadius:14,padding:14,fontSize:13,color:"#777",lineHeight:1.7,marginBottom:12}},"📝 "+match.memo),
+      h("div",{style:{background:"#fff",borderRadius:14,padding:14,fontSize:13,marginBottom:12}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"📝 試合メモ"),
+        isAdmin
+          ? h("textarea",{value:matchMemo,onChange:e=>setMatchMemo(e.target.value),
+              rows:4,placeholder:"この試合の補足メモを入力",style:{...css.inp,width:"100%",resize:"none"}})
+          : h("div",{style:{color:"#64748B",lineHeight:1.7,whiteSpace:"pre-wrap"}},matchMemo||"メモなし")),
 
       // YouTube セクション
       h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -2407,9 +2485,26 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
         })
       )
     ),
-    form.memo && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#EEF2FF", borderRadius: 10 } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", marginBottom: 4 } }, "📝 日程メモ"),
-      h("div", { style: { fontSize: 13, color: "#334155", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.memo)
+    (form.memo || isAdmin) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#EEF2FF", borderRadius: 10 } },
+      h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 } },
+        h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8" } }, "📝 日程メモ"),
+        isAdmin && h("button", {
+          type: "button",
+          onClick: () => setEditing(true),
+          style: {
+            border: "1px solid #BFDBFE",
+            background: "#fff",
+            color: "#1D4ED8",
+            borderRadius: 999,
+            padding: "2px 10px",
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: "pointer"
+          }
+        }, form.memo ? "編集" : "入力")
+      ),
+      h("div", { style: { fontSize: 13, color: form.memo ? "#334155" : "#64748B", lineHeight: 1.7, whiteSpace: "pre-wrap" } },
+        form.memo || "未入力")
     ),
     form.note && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8F9FA", borderRadius: 10, fontSize: 13, color: "#666", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.note)
   );
@@ -4514,6 +4609,7 @@ function EditResultModal({result, members, onSave, onClose}) {
     date:        result.date||"",
     type:        result.type||"",
     memo:        result.memo||"",
+    formation:   result.formation||"",
   });
   const save = () => {
     if (!fr.opponent) return alert("対戦相手を入力してください");
@@ -4555,6 +4651,12 @@ function EditResultModal({result, members, onSave, onClose}) {
       h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"試合メモ（自由記述）"),
       h("textarea",{value:fr.memo,onChange:e=>setFr(p=>({...p,memo:e.target.value})),
         rows:4,placeholder:"例: 相手の特徴、意識した点、次回対策など",style:{...css.inp,resize:"none"}})),
+    h("div",{style:{marginBottom:20}},
+      h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"フォーメーション"),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        Object.keys(MATCH_FORMATION_PRESETS).map(key=>
+          h("button",{key,onClick:()=>setFr(p=>({...p,formation:key})),
+            style:{padding:"10px 8px",border:`2px solid ${fr.formation===key?"#1D4ED8":"#E2E8F0"}`,borderRadius:10,background:fr.formation===key?"#1D4ED8":"#fff",color:fr.formation===key?"#fff":"#334155",fontSize:13,fontWeight:700,cursor:"pointer"}},key)))),
     h("div",{style:{display:"flex",gap:10}},
       h("button",{onClick:onClose,style:css.bG},"キャンセル"),
       h("button",{onClick:save,style:css.bS},"保存する")));
@@ -4803,7 +4905,36 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
 function AddMatchModal({schedule,results,onSave,onClose}) {
   const pastOpp=[...new Set(results.map(r=>r.opponent))];
   const initN=results.filter(r=>r.scheduleId===schedule?.id||nd(r.date)===nd(schedule?.date)).length+1;
-  const [fr,setFr]=useState({opponent:"",gameNumber:initN,formatLabel:"",formatTime:DEFAULT_FORMAT_TIME,formatMode:DEFAULT_FORMAT_MODE,memo:""});
+  const latestResult = useMemo(()=>{
+    const rows=[...(results||[])].filter(r=>r&&r.id);
+    rows.sort((a,b)=>{
+      const da=nd(a.date), db=nd(b.date);
+      if (da!==db) return db.localeCompare(da);
+      return Number(b.gameNumber||0)-Number(a.gameNumber||0);
+    });
+    return rows[0]||null;
+  },[results]);
+  const latestParsedFormat = parseFormatSelection(latestResult?.formatLabel || "");
+  const [fr,setFr]=useState({
+    opponent:"",
+    gameNumber:initN,
+    formatLabel:"",
+    formatTime:latestParsedFormat.time||DEFAULT_FORMAT_TIME,
+    formatMode:latestParsedFormat.mode||DEFAULT_FORMAT_MODE,
+    memo:"",
+    formation:latestResult?.formation||"3-2-2",
+    ourShots:Math.max(0, Number(latestResult?.ourShots||0)||0),
+    theirShots:Math.max(0, Number(latestResult?.theirShots||0)||0),
+    ourCorners:Math.max(0, Number(latestResult?.ourCorners||0)||0),
+    theirCorners:Math.max(0, Number(latestResult?.theirCorners||0)||0),
+    ourFreeKicks:Math.max(0, Number(latestResult?.ourFreeKicks||0)||0),
+    theirFreeKicks:Math.max(0, Number(latestResult?.theirFreeKicks||0)||0),
+    ourPkCount:Math.max(0, Number(latestResult?.ourPkCount||0)||0),
+    theirPkCount:Math.max(0, Number(latestResult?.theirPkCount||0)||0),
+    ourOffsides:Math.max(0, Number(latestResult?.ourOffsides||0)||0),
+    theirOffsides:Math.max(0, Number(latestResult?.theirOffsides||0)||0),
+    formationSlots:latestResult?.formationSlots||"",
+  });
   const save=()=>{
     if(!fr.opponent)return alert("対戦相手を入力してください");
     onSave({
@@ -4838,6 +4969,12 @@ function AddMatchModal({schedule,results,onSave,onClose}) {
       h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"試合メモ（自由記述）"),
       h("textarea",{value:fr.memo,onChange:e=>setFr(p=>({...p,memo:e.target.value})),
         rows:4,placeholder:"例: 相手の特徴、意識した点、次回対策など",style:{...css.inp,resize:"none"}})),
+    h("div",{style:{marginBottom:20}},
+      h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"フォーメーション（初期値）"),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        Object.keys(MATCH_FORMATION_PRESETS).map(key=>
+          h("button",{key,onClick:()=>setFr(p=>({...p,formation:key})),
+            style:{padding:"10px 8px",border:`2px solid ${fr.formation===key?"#1D4ED8":"#E2E8F0"}`,borderRadius:10,background:fr.formation===key?"#1D4ED8":"#fff",color:fr.formation===key?"#fff":"#334155",fontSize:13,fontWeight:700,cursor:"pointer"}},key)))),
     h("div",{style:{display:"flex",gap:10}},h("button",{onClick:onClose,style:css.bG},"キャンセル"),h("button",{onClick:save,style:css.bS},"追加する")));
 }
 
@@ -5024,6 +5161,8 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8,marginTop:4}},"期間"),
       h("div",{style:{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}},
         [{k:"alltime",l:"全期間"},{k:"grade3",l:periodGrade3Label},{k:"grade4",l:periodGrade4Label},{k:"month",l:"今月"},{k:"lastmonth",l:"先月"},{k:"custom",l:"期間指定"}].map(t=>h("button",{key:t.k,onClick:()=>setPeriodF(t.k),style:{padding:"6px 12px",border:`2px solid ${periodF===t.k?"#2196F3":"#eee"}`,borderRadius:20,background:periodF===t.k?"#2196F3":"#fff",color:periodF===t.k?"#fff":"#666",fontSize:12,fontWeight:periodF===t.k?700:400,cursor:"pointer"}},t.l))),
+      h("div",{style:{fontSize:11,fontWeight:600,color:"#64748B",marginBottom:8}},
+        "※ 試合記録は 2025年10月19日 以降が対象です"),
       periodF==="custom"&&h("div",{style:{display:"flex",gap:8,alignItems:"center",marginTop:4}},
         h("input",{type:"date",value:from,onChange:e=>setFrom(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}}),
         h("span",{style:{color:"#ccc",flexShrink:0}},"〜"),
@@ -6560,7 +6699,19 @@ function App() {
       await api("addResult",{result:{
         scheduleId:fr.scheduleId,date:fr.date,opponent:fr.opponent,
         formatLabel:fr.formatLabel||"",gameNumber:fr.gameNumber||1,
-        type:fr.type,memo:fr.memo||""
+        type:fr.type,memo:fr.memo||"",
+        formation:fr.formation||"",
+        formationSlots:fr.formationSlots||"",
+        ourShots:fr.ourShots,
+        theirShots:fr.theirShots,
+        ourCorners:fr.ourCorners,
+        theirCorners:fr.theirCorners,
+        ourFreeKicks:fr.ourFreeKicks,
+        theirFreeKicks:fr.theirFreeKicks,
+        ourPkCount:fr.ourPkCount,
+        theirPkCount:fr.theirPkCount,
+        ourOffsides:fr.ourOffsides,
+        theirOffsides:fr.theirOffsides
       }});
       await load("更新中...");
     }catch(e){alert("エラー: "+e.message);}
