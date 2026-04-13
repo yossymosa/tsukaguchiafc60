@@ -1526,7 +1526,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
               style:{display:"inline-flex",alignItems:"center",gap:5,background:"#FF0000",color:"#fff",borderRadius:10,padding:"10px 16px",fontSize:13,fontWeight:700,textDecoration:"none"}},x.label))
           );
         })()
-      ),
+      )),
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"⚽ 得点を追加",onClose:()=>setModal(null)},
