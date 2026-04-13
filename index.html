@@ -922,6 +922,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const [ytUrls,setYtUrls]=useState({full:match.youtubeUrl||"",first:match.youtubeUrl1st||"",second:match.youtubeUrl2nd||""});
   const [ytCopied,setYtCopied]=useState("");
   const [matchMemo,setMatchMemo]=useState(()=>String(match.memo||""));
+  useEffect(() => {
+    try { window.scrollTo({ top: 0, behavior: "auto" }); }
+    catch(e){ try { window.scrollTo(0,0); } catch(_){} }
+  }, [match?.id]);
   // PK戦
   const parseJson = v => { try{ return typeof v==="string"&&v?JSON.parse(v):v||[]; }catch(e){ return []; }};
   const initKickers  = parseJson(match.pkKickers);
