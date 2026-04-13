@@ -952,11 +952,18 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       } catch (e) {}
     };
     forceTop();
-    const raf = requestAnimationFrame(forceTop);
-    const timer = setTimeout(forceTop, 80);
+    const rafA = requestAnimationFrame(forceTop);
+    const rafB = requestAnimationFrame(() => requestAnimationFrame(forceTop));
+    let tick = 0;
+    const timer = setInterval(() => {
+      forceTop();
+      tick += 1;
+      if (tick >= 60) clearInterval(timer); // 約6秒間は先頭へ戻す
+    }, 100);
     return () => {
-      try { cancelAnimationFrame(raf); } catch (e) {}
-      clearTimeout(timer);
+      try { cancelAnimationFrame(rafA); } catch (e) {}
+      try { cancelAnimationFrame(rafB); } catch (e) {}
+      clearInterval(timer);
     };
   }, [match?.id, schedule?.id]);
   // PK戦
@@ -1451,7 +1458,16 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
             pkWin&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#4CAF50"}},"🎉 PK勝ち！"),
             pkLose&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#F44336"}},"😔 PK負け")))),
 
-
+      h("button",{
+        onClick:()=>{
+          scrollAppTop();
+          try{
+            const root=goalPageRef.current;
+            if(root&&typeof root.scrollTo==="function") root.scrollTo(0,0);
+          }catch(e){}
+        },
+        style:{width:"100%",padding:"10px 12px",fontSize:12,fontWeight:700,marginBottom:10,borderRadius:10,border:"1px solid #D1D5DB",background:"#fff",color:"#475569",cursor:"pointer"}
+      },"↑ 試合上部へ戻る"),
       isAdmin&&h("button",{onClick:save,style:{...css.bS,width:"100%",padding:16,fontSize:15,marginBottom:16}},"💾 試合全体を保存"),
       h("div",{style:{background:"#fff",borderRadius:14,padding:14,fontSize:13,marginBottom:12}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"📝 試合メモ"),
