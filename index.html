@@ -357,7 +357,7 @@ async function subscribeWebPush(user) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     throw new Error("この端末ではWeb Pushに対応していません");
   }
-  const swUrl = "/sw.js?v=13";
+  const swUrl = "/sw.js?v=14";
   const reg =
     (await navigator.serviceWorker.getRegistration()) ||
     (await navigator.serviceWorker.register(swUrl));
@@ -6907,8 +6907,22 @@ function App() {
 render(h(App,{}), document.getElementById("app"));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js?v=13").catch(() => {});
+  window.addEventListener("load", async () => {
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister().catch(() => {})));
+    } catch (e) {}
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter(k => String(k || "").startsWith("tsukaguchi-afc-"))
+            .map(k => caches.delete(k).catch(() => false))
+        );
+      }
+    } catch (e) {}
+    navigator.serviceWorker.register("/sw.js?v=14").catch(() => {});
   });
 }
 </script>
