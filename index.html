@@ -1378,7 +1378,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
                   return members.sort((a,b)=>Number(a.number)-Number(b.number)).map(m=>h("option",{key:m.id,value:m.id},"#"+m.number+" "+m.name));
                 }
                 return groups;
-              })())),
+              })()),
           h("div",{style:{borderTop:"2px solid #f5f5f5",paddingTop:14}},
             h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
               h("div",{style:{fontSize:13,fontWeight:800,color:"#666"}},match.opponent),
