@@ -932,6 +932,18 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const [pkSelectVal,setPkSelectVal]= useState("");             // selectの制御値
   const [pkOpen,setPkOpen]          = useState(false);            // PK折りたたみ
   const copyYt=(text,key)=>{copyToClipboard(text);setYtCopied(key);setTimeout(()=>setYtCopied(""),2000);};
+  const normalizeYoutubeLink = raw => {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    try {
+      const u = new URL(s);
+      const host = String(u.hostname || "").replace(/^www\./, "").toLowerCase();
+      if (host === "youtube.com" || host === "m.youtube.com" || host === "youtu.be" || host === "youtube-nocookie.com") {
+        return u.toString();
+      }
+    } catch (e) {}
+    return "";
+  };
   // editGoal: {type:"our"|"their", idx:number}
   const [editGoal,setEditGoal]=useState(null);
   const [editNg,setEditNg]=useState(null);
@@ -1411,52 +1423,24 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
               rows:4,placeholder:"この試合の補足メモを入力",style:{...css.inp,width:"100%",resize:"none"}})
           : h("div",{style:{color:"#64748B",lineHeight:1.7,whiteSpace:"pre-wrap"}},matchMemo||"メモなし")),
 
-      // YouTube セクション
+      // YouTube セクション（リンク表示のみ）
       h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:14}},"▶ YOUTUBE"),
-
-        // YouTubeリンクボタン（URLは非表示）
-        (match.youtubeUrl||match.youtubeUrl1st||match.youtubeUrl2nd)&&h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}},
-          [
-            match.youtubeUrl    &&{label:"▶ 通し",url:match.youtubeUrl},
-            match.youtubeUrl1st &&{label:"▶ 前半",url:match.youtubeUrl1st},
-            match.youtubeUrl2nd &&{label:"▶ 後半",url:match.youtubeUrl2nd},
-          ].filter(Boolean).map(x=>h("a",{key:x.label,href:x.url,target:"_blank",rel:"noopener",
-            style:{display:"inline-flex",alignItems:"center",gap:5,background:"#FF0000",color:"#fff",borderRadius:10,padding:"10px 20px",fontSize:14,fontWeight:700,textDecoration:"none"}},x.label))),
-
-        // URL入力（admin）- 折りたたみ式
-        isAdmin&&h("details",{style:{marginBottom:14}},
-          h("summary",{style:{fontSize:11,fontWeight:600,color:"#aaa",cursor:"pointer",padding:"4px 0"}},"URL編集"),
-          h("div",{style:{marginTop:8}},
-            [{l:"通しURL",k:"full"},{l:"前半URL",k:"first"},{l:"後半URL",k:"second"}].map(f=>
-              h("div",{key:f.k,style:{marginBottom:6,display:"flex",alignItems:"center",gap:8}},
-                h("div",{style:{fontSize:11,fontWeight:600,color:"#888",width:56,flexShrink:0}},f.l),
-                h("input",{value:ytUrls[f.k],onChange:e=>setYtUrls(p=>({...p,[f.k]:e.target.value})),placeholder:"https://youtube.com/...",style:{...css.inp,fontSize:11,padding:"6px 10px",flex:1}}))))),
-
-        // テンプレ生成（adminのみ）
-        isAdmin && h(Fragment, {},
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"テンプレコピー"),
-          [
-            ...(ytUrls.full ? [
-              {label:"通し タイトル", key:"t_full", text:()=>makeYtTitle(match,schedule,"通し")},
-              {label:"通し 説明欄",   key:"d_full", text:()=>makeYtDesc(match,members,"通し")},
-            ] : []),
-            {label:"前半 タイトル", key:"t_first",  text:()=>makeYtTitle(match,schedule,"1st")},
-            {label:"前半 説明欄",   key:"d_first",  text:()=>makeYtDesc(match,members,"1st")},
-            {label:"後半 タイトル", key:"t_second", text:()=>makeYtTitle(match,schedule,"2nd")},
-            {label:"後半 説明欄",   key:"d_second", text:()=>makeYtDesc(match,members,"2nd")},
-            {label:"3rd タイトル",  key:"t_third",  text:()=>makeYtTitle(match,schedule,"3rd")},
-            {label:"3rd 説明欄",    key:"d_third",  text:()=>makeYtDesc(match,members,"3rd")},
-          ].map(item =>
-            h("div",{key:item.key,style:{background:"#F8F9FA",borderRadius:10,padding:"10px 12px",marginBottom:8}},
-              h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}},
-                h("div",{style:{flex:1}},
-                  h("div",{style:{fontSize:10,fontWeight:700,color:"#aaa",marginBottom:4}},item.label),
-                  h("div",{style:{fontSize:12,color:"#333",lineHeight:1.6,wordBreak:"break-all",whiteSpace:"pre-wrap"}},item.text())),
-                h("button",{onClick:()=>copyYt(item.text(),item.key),style:{flexShrink:0,background:ytCopied===item.key?"#4CAF50":"#1a1a2e",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}},ytCopied===item.key?"✓ コピー済":"コピー"))
-            )
-          )
-        ),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"▶ YOUTUBE"),
+        (() => {
+          const links = [
+            {label:"▶ 通し",url:normalizeYoutubeLink(ytUrls.full || match.youtubeUrl)},
+            {label:"▶ 前半",url:normalizeYoutubeLink(ytUrls.first || match.youtubeUrl1st)},
+            {label:"▶ 後半",url:normalizeYoutubeLink(ytUrls.second || match.youtubeUrl2nd)},
+          ].filter(x=>x.url);
+          if (!links.length) {
+            return h("div",{style:{fontSize:12,color:"#94A3B8"}},"動画リンクは未登録です");
+          }
+          return h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+            links.map(x=>h("a",{key:x.label,href:x.url,target:"_blank",rel:"noopener noreferrer",
+              style:{display:"inline-flex",alignItems:"center",gap:5,background:"#FF0000",color:"#fff",borderRadius:10,padding:"10px 16px",fontSize:13,fontWeight:700,textDecoration:"none"}},x.label))
+          );
+        })()
+      ),
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"⚽ 得点を追加",onClose:()=>setModal(null)},
