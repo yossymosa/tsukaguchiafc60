@@ -1270,7 +1270,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
               h("select",{value:currentId,onChange:e=>setFormationSlots(prev=>({...prev,[slot.id]:e.target.value})),style:{...css.inp,fontSize:13,padding:"8px 10px"}},
                 h("option",{value:""},"未設定"),
                 opts.map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name))));
-          }))),
+          })))),
       ),
       // ゴール一覧
       h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -1456,7 +1456,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
                   h("div",{style:{fontSize:10,fontWeight:700,color:"#aaa",marginBottom:4}},item.label),
                   h("div",{style:{fontSize:12,color:"#333",lineHeight:1.6,wordBreak:"break-all",whiteSpace:"pre-wrap"}},text)),
                 h("button",{onClick:()=>copyYt(text,item.key),style:{flexShrink:0,background:copied?"#4CAF50":"#1a1a2e",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}},copied?"✓ コピー済":"コピー")));
-          }))),
+          })))),
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"⚽ 得点を追加",onClose:()=>setModal(null)},
