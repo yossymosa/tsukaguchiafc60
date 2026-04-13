@@ -946,30 +946,18 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       scrollAppTop();
       const root = goalPageRef.current;
       if (!root) return;
-      let node = root;
-      while (node) {
-        try {
-          node.scrollTop = 0;
-          if (typeof node.scrollTo === "function") node.scrollTo(0, 0);
-          const st = window.getComputedStyle(node);
-          const oy = String(st.overflowY || "");
-          const scrollable = (oy === "auto" || oy === "scroll" || oy === "overlay") && node.scrollHeight > node.clientHeight;
-          if (scrollable) {
-            node.scrollTop = 0;
-            if (typeof node.scrollTo === "function") node.scrollTo(0, 0);
-          }
-        } catch (e) {}
-        node = node.parentElement;
-      }
+      try {
+        root.scrollTop = 0;
+        if (typeof root.scrollTo === "function") root.scrollTo(0, 0);
+      } catch (e) {}
     };
     forceTop();
-    let tick = 0;
-    const timer = setInterval(() => {
-      forceTop();
-      tick += 1;
-      if (tick >= 10) clearInterval(timer);
-    }, 120);
-    return () => clearInterval(timer);
+    const raf = requestAnimationFrame(forceTop);
+    const timer = setTimeout(forceTop, 80);
+    return () => {
+      try { cancelAnimationFrame(raf); } catch (e) {}
+      clearTimeout(timer);
+    };
   }, [match?.id, schedule?.id]);
   // PK戦
   const parseJson = v => { try{ return typeof v==="string"&&v?JSON.parse(v):v||[]; }catch(e){ return []; }};
@@ -1258,7 +1246,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     setLoading(false);
   };
 
-  return h("div",{className:"page",ref:goalPageRef,style:{overflowY:"auto",WebkitOverflowScrolling:"touch"}},
+  return h("div",{className:"page",ref:goalPageRef},
     loading&&h(Loader,{msg:"保存中..."}),
     h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"20px 20px 52px"}},
       h("div",{style:{display:"flex",gap:8,marginBottom:16}},
@@ -6929,22 +6917,10 @@ function App() {
 render(h(App,{}), document.getElementById("app"));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  window.addEventListener("load", async () => {
-    try {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.unregister().catch(() => {})));
-    } catch (e) {}
-    try {
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(
-          keys
-            .filter(k => String(k || "").startsWith("tsukaguchi-afc-"))
-            .map(k => caches.delete(k).catch(() => false))
-        );
-      }
-    } catch (e) {}
-    navigator.serviceWorker.register("/sw.js?v=14").catch(() => {});
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js?v=15")
+      .then(reg => { try { reg.update(); } catch (e) {} })
+      .catch(() => {});
   });
 }
 </script>
