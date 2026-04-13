@@ -221,12 +221,18 @@ function parseFamilyMembers(value){
 }
 function scrollAppTop(){
   try{
-    const el=document.scrollingElement||document.documentElement||document.body;
-    if(el) el.scrollTop=0;
-  }catch(e){}
-  try{
-    const app=document.getElementById("app");
-    if(app) app.scrollTop=0;
+    const targets = [
+      document.scrollingElement,
+      document.documentElement,
+      document.body,
+      document.getElementById("app"),
+      document.querySelector(".page"),
+      ...Array.from(document.querySelectorAll(".page"))
+    ].filter(Boolean);
+    targets.forEach(el=>{
+      try{ el.scrollTop = 0; }catch(_){}
+      try{ if(typeof el.scrollTo === "function") el.scrollTo(0,0); }catch(_){}
+    });
   }catch(e){}
   try{ window.scrollTo({top:0,left:0,behavior:"auto"}); }
   catch(e){ try{ window.scrollTo(0,0); }catch(_){} }
@@ -936,8 +942,13 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const [matchMemo,setMatchMemo]=useState(()=>String(match.memo||""));
   useEffect(() => {
     scrollAppTop();
-    setTimeout(scrollAppTop, 0);
-  }, [match?.id]);
+    const t0 = setTimeout(scrollAppTop, 0);
+    const t1 = setTimeout(scrollAppTop, 120);
+    return () => {
+      clearTimeout(t0);
+      clearTimeout(t1);
+    };
+  }, [match?.id, schedule?.id]);
   // PK戦
   const parseJson = v => { try{ return typeof v==="string"&&v?JSON.parse(v):v||[]; }catch(e){ return []; }};
   const initKickers  = parseJson(match.pkKickers);
@@ -6808,6 +6819,7 @@ function App() {
   if(page?.type==="matchDetail") return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
     h(GoalPage,{
+      key:String(page?.match?.id||"")+"|"+String(page?.schedule?.id||""),
       match:page.match,schedule:page.schedule,members,isAdmin,canWrite,
       onHome:goBack,
       onBack:()=>{
