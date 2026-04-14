@@ -6294,6 +6294,8 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
   const [schForm,setSchForm]=useState({date:schedule.date||"",title:schedule.title||"",location:schedule.location||"",type:schedule.type||"practice",deadline:schedule.deadline||"",carpoolDeadline:schedule.carpoolDeadline||"",memo:schedule.memo||""});
   const [hpModal,setHpModal]=useState(false);
   const [hpText,setHpText]=useState("");
+  const [ytModal,setYtModal]=useState(false);
+  const [ytCopied,setYtCopied]=useState("");
   const [aiDraft,setAiDraft]=useState("");
   const [aiResult,setAiResult]=useState("");
   const [aiLoading,setAiLoading]=useState(false);
@@ -6381,6 +6383,11 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     copyToClipboard(getMergedHpText());
     setHpCopied(true);setTimeout(()=>setHpCopied(false),2000);
   };
+  const copyYtTemplateText=(text,key)=>{
+    copyToClipboard(text);
+    setYtCopied(key);
+    setTimeout(()=>setYtCopied(""),1800);
+  };
   const copyScheduleMemoToAi=()=>{
     if(!scheduleMemoText) return;
     setAiDraft(prev=>{
@@ -6439,6 +6446,43 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         },style:{flex:1,padding:14,border:"none",borderRadius:12,
           background:"#F59E0B",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}},
         "📧 メールで送る"))),
+    // YouTubeテンプレモーダル
+    ytModal&&h(Modal,{title:"🎬 YouTubeテンプレ",onClose:()=>setYtModal(false)},
+      dayR.length===0
+        ? h("div",{style:{fontSize:13,color:"#64748B",lineHeight:1.8}},"この日程に試合がないため、YouTubeテンプレを作成できません。")
+        : h("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+            dayR.map((r,idx)=>{
+              const halfs = getHalfOptionsByFormatLabel(r.formatLabel || "", r.goals || [], r.theirGoals || []);
+              const keys = ["full", ...halfs];
+              return h("div",{key:r.id||(`${schedule.id}-${idx}`),style:{border:"1px solid #E2E8F0",borderRadius:12,padding:10,background:"#F8FAFC"}},
+                h("div",{style:{fontSize:12,fontWeight:800,color:"#0F172A",marginBottom:8}},
+                  `第${r.gameNumber || (idx+1)}試合 vs ${r.opponent || "相手"}`),
+                h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+                  keys.map(k=>{
+                    const halfKey = k==="full" ? "" : k;
+                    const halfLabel = k==="full" ? "FULL" : k;
+                    const title = makeYtTitle(r, schedule, halfKey);
+                    const desc = makeYtDesc(r, members, halfKey);
+                    return h("div",{key:`${r.id||idx}-${k}`,style:{background:"#fff",border:"1px solid #E2E8F0",borderRadius:10,padding:"8px 10px"}},
+                      h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6}},
+                        h("div",{style:{fontSize:11,fontWeight:900,color:"#334155"}},halfLabel),
+                        h("div",{style:{display:"flex",gap:6}},
+                          h("button",{onClick:()=>copyYtTemplateText(title,`t-${r.id||idx}-${k}`),
+                            style:{border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#1D4ED8",borderRadius:8,padding:"5px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}},
+                            ytCopied===`t-${r.id||idx}-${k}`?"✓ タイトル":"タイトル"),
+                          h("button",{onClick:()=>copyYtTemplateText(desc,`d-${r.id||idx}-${k}`),
+                            style:{border:"1px solid #FECACA",background:"#FFF1F2",color:"#DC2626",borderRadius:8,padding:"5px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}},
+                            ytCopied===`d-${r.id||idx}-${k}`?"✓ 概要":"概要")
+                        )
+                      ),
+                      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.5,wordBreak:"break-all"}},title)
+                    );
+                  })
+                )
+              );
+            })
+          )
+    ),
     // 日程編集モーダル
     editSch&&h(Modal,{title:"📅 日程を編集",onClose:()=>!editSchSaving&&setEditSch(false)},
       h("div",{style:{marginBottom:12}},
@@ -6493,11 +6537,17 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
             style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
               background:dayTab===t.k?"#1D4ED8":"transparent",
               color:dayTab===t.k?"#fff":"#aaa",fontSize:13,fontWeight:700,cursor:"pointer"}},t.l))),
-      // HP用テンプレボタン（admin、試合あり）
-      dayTab==="matches"&&dayR.length>0&&h("button",{onClick:openHpModal,
-        style:{width:"100%",padding:"11px",marginBottom:10,border:"2px solid #0F172A",borderRadius:12,
-          background:"#E2E8F0",color:"#0F172A",fontSize:13,fontWeight:700,cursor:"pointer"}},
-        "📋 HP用テンプレ"),
+      // テンプレボタン（admin）
+      isAdmin&&dayTab==="matches"&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
+        h("button",{onClick:openHpModal,
+          style:{flex:1,padding:"11px",border:"2px solid #0F172A",borderRadius:12,
+            background:"#E2E8F0",color:"#0F172A",fontSize:13,fontWeight:700,cursor:"pointer"}},
+          "📋 HP用テンプレ"),
+        h("button",{onClick:()=>setYtModal(true),
+          style:{flex:1,padding:"11px",border:"2px solid #B91C1C",borderRadius:12,
+            background:"#FEE2E2",color:"#B91C1C",fontSize:13,fontWeight:700,cursor:"pointer"}},
+          "🎬 YouTubeテンプレ")
+      ),
       // 試合一覧・成績（matches タブ）
       dayTab==="matches"&&dayR.length>0&&h("div",{style:{background:"#fff",borderRadius:18,padding:"16px 20px",marginBottom:14,boxShadow:"0 4px 20px rgba(0,0,0,0.12)"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"本日の成績"),
