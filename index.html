@@ -1410,12 +1410,52 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     if (id.startsWith("mf")) return "MF";
     return "FW";
   };
-  const formationColumns = {GK:[], DF:[], MF:[], FW:[]};
-  formationSlotsDef.forEach(slot => {
-    const role = formationRoleOfSlot(slot);
-    if (!formationColumns[role]) formationColumns[role] = [];
-    formationColumns[role].push(slot);
-  });
+  const formationRoleJa = role => {
+    if (role === "GK") return "ゴールキーパー";
+    if (role === "DF") return "ディフェンス";
+    if (role === "MF") return "ミッドフィルダー";
+    return "フォワード";
+  };
+  const getFormationNodes = (formationKey, slots) => {
+    if (formationKey === "3-2-2") {
+      const pos = {
+        gk:{x:50,y:86},
+        df1:{x:22,y:62}, df2:{x:50,y:62}, df3:{x:78,y:62},
+        mf1:{x:34,y:38}, mf2:{x:66,y:38},
+        fw1:{x:38,y:18}, fw2:{x:62,y:18},
+      };
+      return slots.map(slot=>({slot, ...(pos[slot.id] || {x:50,y:50})}));
+    }
+    if (formationKey === "3-3-1") {
+      const pos = {
+        gk:{x:50,y:86},
+        df1:{x:22,y:62}, df2:{x:50,y:62}, df3:{x:78,y:62},
+        mf1:{x:25,y:38}, mf2:{x:50,y:38}, mf3:{x:75,y:38},
+        fw1:{x:50,y:18},
+      };
+      return slots.map(slot=>({slot, ...(pos[slot.id] || {x:50,y:50})}));
+    }
+    const grouped = {GK:[], DF:[], MF:[], FW:[]};
+    slots.forEach(slot => {
+      const role = formationRoleOfSlot(slot);
+      grouped[role] = grouped[role] || [];
+      grouped[role].push(slot);
+    });
+    const lines = [
+      {role:"FW", y:18},
+      {role:"MF", y:38},
+      {role:"DF", y:62},
+      {role:"GK", y:86},
+    ];
+    const nodes = [];
+    lines.forEach(line => {
+      const arr = grouped[line.role] || [];
+      const step = 100 / (arr.length + 1);
+      arr.forEach((slot, i) => nodes.push({slot, x:Math.round(step * (i + 1)), y:line.y}));
+    });
+    return nodes;
+  };
+  const formationNodes = getFormationNodes(formation, formationSlotsDef);
   const formationBlock = (isAdmin || !!formationSlotsDef.length) && h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
     h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"FORMATION"),
     isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
@@ -1424,29 +1464,35 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
           style:{flex:1,padding:"10px 8px",border:`2px solid ${formation===key?"#1D4ED8":"#E2E8F0"}`,borderRadius:10,background:formation===key?"#1D4ED8":"#fff",color:formation===key?"#fff":"#334155",fontSize:13,fontWeight:700,cursor:"pointer"}},key))
     ),
     !formationSlotsDef.length && h("div",{style:{fontSize:12,color:"#94A3B8"}},"フォーメーション未設定"),
-    !!formationSlotsDef.length && h("div",{style:{background:"linear-gradient(180deg,#22C55E,#16A34A)",borderRadius:14,padding:10,border:"2px solid #16A34A"}},
-      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8}},
-        ["GK","DF","MF","FW"].map(role=>h("div",{key:role,style:{background:"rgba(255,255,255,0.22)",border:"1px dashed rgba(255,255,255,0.55)",borderRadius:10,padding:8,minHeight:120}},
-          h("div",{style:{fontSize:11,fontWeight:900,color:"#fff",letterSpacing:1,marginBottom:6,textAlign:"center"}},role),
-          (formationColumns[role]||[]).length===0
-            ? h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.7)",textAlign:"center",marginTop:10}},"-")
-            : (formationColumns[role]||[]).map(slot=>{
-                const currentId=String(formationSlots[slot.id]||"");
-                const used=new Set(Object.entries(formationSlots).filter(([k,v])=>k!==slot.id&&v).map(([,v])=>String(v)));
-                const opts=membersSorted.filter(m=>!used.has(String(m.id))||String(m.id)===currentId);
-                const currentMember = membersSorted.find(m=>String(m.id)===currentId);
-                return h("div",{key:slot.id,style:{marginBottom:6}},
-                  h("div",{style:{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.9)",marginBottom:3,textAlign:"center"}},slot.label),
-                  isAdmin
-                    ? h("select",{value:currentId,onChange:e=>setFormationSlots(prev=>({...prev,[slot.id]:e.target.value})),style:{...css.inp,fontSize:12,padding:"7px 8px",background:"rgba(255,255,255,0.95)"}},
-                        h("option",{value:""},"未設定"),
-                        opts.map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name))
-                      )
-                    : h("div",{style:{fontSize:12,fontWeight:700,color:"#0F172A",background:"rgba(255,255,255,0.92)",borderRadius:8,padding:"7px 8px",textAlign:"center"}},
-                        currentMember ? ("#"+(currentMember.number||"-")+" "+currentMember.name) : "未設定")
-                );
-              })
-        ))
+    !!formationSlotsDef.length && h("div",{style:{background:"#F8FAFC",borderRadius:14,padding:10,border:"1px solid #DBEAFE"}},
+      h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:8,letterSpacing:1}},formation),
+      h("div",{style:{position:"relative",height:470,borderRadius:12,overflow:"hidden",background:"linear-gradient(180deg,#89C52B 0%,#73B023 100%)",border:"3px solid #ffffff"}},
+        h("div",{style:{position:"absolute",left:0,top:0,right:0,bottom:0,border:"2px solid rgba(255,255,255,0.95)"}}),
+        h("div",{style:{position:"absolute",left:0,right:0,top:"50%",height:2,background:"rgba(255,255,255,0.95)"}}),
+        h("div",{style:{position:"absolute",left:"50%",top:"50%",width:88,height:88,transform:"translate(-50%,-50%)",borderRadius:"50%",border:"2px solid rgba(255,255,255,0.95)"}}),
+        h("div",{style:{position:"absolute",left:"50%",top:0,width:170,height:80,transform:"translateX(-50%)",border:"2px solid rgba(255,255,255,0.95)",borderTop:"none"}}),
+        h("div",{style:{position:"absolute",left:"50%",bottom:0,width:170,height:80,transform:"translateX(-50%)",border:"2px solid rgba(255,255,255,0.95)",borderBottom:"none"}}),
+        h("div",{style:{position:"absolute",left:"50%",top:0,width:70,height:26,transform:"translateX(-50%)",border:"2px solid rgba(255,255,255,0.95)",borderTop:"none"}}),
+        h("div",{style:{position:"absolute",left:"50%",bottom:0,width:70,height:26,transform:"translateX(-50%)",border:"2px solid rgba(255,255,255,0.95)",borderBottom:"none"}}),
+        formationNodes.map(node=>{
+          const slot = node.slot;
+          const currentId = String(formationSlots[slot.id] || "");
+          const usedByOthers = new Set(Object.entries(formationSlots).filter(([k,v]) => k !== slot.id && v).map(([,v]) => String(v)));
+          const slotOptions = membersSorted.filter(m => !usedByOthers.has(String(m.id)) || String(m.id) === currentId);
+          const currentMember = membersSorted.find(m => String(m.id) === currentId);
+          const role = formationRoleOfSlot(slot);
+          return h("div",{key:slot.id,style:{position:"absolute",left:node.x+"%",top:node.y+"%",transform:"translate(-50%,-50%)",display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:96}},
+            h("div",{style:{width:34,height:34,borderRadius:"50%",background:"#2563EB",border:"2px solid #fff",boxShadow:"0 2px 6px rgba(0,0,0,0.25)",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}},slot.label),
+            h("div",{style:{fontSize:10,fontWeight:800,color:"#fff",textShadow:"0 1px 2px rgba(0,0,0,0.35)",whiteSpace:"nowrap"}},formationRoleJa(role)),
+            isAdmin
+              ? h("select",{value:currentId,onChange:e=>setFormationSlots(prev=>({...prev,[slot.id]:e.target.value})),style:{...css.inp,padding:"6px 8px",fontSize:12,minWidth:90,maxWidth:112,background:"rgba(255,255,255,0.95)"}},
+                  h("option",{value:""},"未設定"),
+                  slotOptions.map(m=>h("option",{key:m.id,value:m.id},m.name))
+                )
+              : h("div",{style:{fontSize:11,fontWeight:800,color:"#0F172A",background:"rgba(255,255,255,0.92)",borderRadius:8,padding:"6px 8px",minWidth:90,textAlign:"center"}},
+                  currentMember ? currentMember.name : "未設定")
+          );
+        })
       )
     )
   );
