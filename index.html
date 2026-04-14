@@ -1001,6 +1001,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     ourOffsides:Math.max(0, Number(match.ourOffsides||0)||0),
     theirOffsides:Math.max(0, Number(match.theirOffsides||0)||0),
   }));
+  const scheduleIdForAttend = String(schedule?.id || match?.scheduleId || "").trim();
   const parseFormationSlots = v => {
     try {
       const obj = typeof v === "string" ? JSON.parse(v || "{}") : (v || {});
@@ -1009,7 +1010,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       return {};
     }
   };
-  const sortMembersForFormation = () => [...(members || [])].sort((a,b)=>Number(a.number||999)-Number(b.number||999)||String(a.name||"").localeCompare(String(b.name||""),"ja"));
+  const sortMembersForFormation = () => {
+    const sorted = [...(members || [])].sort((a,b)=>Number(a.number||999)-Number(b.number||999)||String(a.name||"").localeCompare(String(b.name||""),"ja"));
+    if (!scheduleIdForAttend || attendMap === null) return sorted;
+    return sorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
+  };
   const buildFormationSlots = (formationKey, currentSlots={}) => {
     const slots = MATCH_FORMATION_PRESETS[formationKey] || [];
     const candidates = sortMembersForFormation();
@@ -1066,11 +1071,14 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const normHalf=normalizeHalfLabel;
   const our1=goals.filter(g=>isFirst(g.half)).length, our2=goals.filter(g=>isSecond(g.half)).length, our3=goals.filter(g=>isThird(g.half)).length;
   const th1=theirG.filter(g=>isFirst(g.half)).length, th2=theirG.filter(g=>isSecond(g.half)).length, th3=theirG.filter(g=>isThird(g.half)).length;
-  const scheduleIdForAttend = String(schedule?.id || match?.scheduleId || "").trim();
   const membersSorted = useMemo(
     () => [...(members || [])].sort((a,b)=>Number(a.number||999)-Number(b.number||999)||String(a.name||"").localeCompare(String(b.name||""),"ja")),
     [members]
   );
+  const formationSelectableMembers = useMemo(() => {
+    if (!scheduleIdForAttend || attendMap === null) return membersSorted;
+    return membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
+  }, [membersSorted, scheduleIdForAttend, attendMap]);
   const shotTargetMembers = useMemo(() => {
     if (!scheduleIdForAttend || !attendMap) return membersSorted;
     return membersSorted.filter(m => String(attendMap[m.id] || "") === "○");
@@ -1172,6 +1180,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       });
     return () => { active = false; };
   }, [scheduleIdForAttend, match?.id]);
+  useEffect(() => {
+    if (!formation) return;
+    setFormationSlots(prev => buildFormationSlots(formation, prev || {}));
+  }, [formation, formationSelectableMembers.map(m => String(m.id || "").trim()).join("|")]);
   const bumpMemberShot = (memberId, delta) => {
     if (!isAdmin) return;
     const id = String(memberId || "").trim();
@@ -1466,6 +1478,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     !formationSlotsDef.length && h("div",{style:{fontSize:12,color:"#94A3B8"}},"フォーメーション未設定"),
     !!formationSlotsDef.length && h("div",{style:{background:"#F8FAFC",borderRadius:14,padding:10,border:"1px solid #DBEAFE"}},
       h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:8,letterSpacing:1}},formation),
+      isAdmin&&scheduleIdForAttend&&attendMap!==null&&formationSelectableMembers.length===0
+        && h("div",{style:{fontSize:12,fontWeight:700,color:"#B91C1C",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"8px 10px",marginBottom:8}},
+          "当日の出席者（○）がいないため、選手を選択できません"),
       h("div",{style:{position:"relative",height:470,borderRadius:12,overflow:"hidden",background:"linear-gradient(180deg,#89C52B 0%,#73B023 100%)",border:"3px solid #ffffff"}},
         h("div",{style:{position:"absolute",left:0,top:0,right:0,bottom:0,border:"2px solid rgba(255,255,255,0.95)"}}),
         h("div",{style:{position:"absolute",left:0,right:0,top:"50%",height:2,background:"rgba(255,255,255,0.95)"}}),
@@ -1478,7 +1493,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
           const slot = node.slot;
           const currentId = String(formationSlots[slot.id] || "");
           const usedByOthers = new Set(Object.entries(formationSlots).filter(([k,v]) => k !== slot.id && v).map(([,v]) => String(v)));
-          const slotOptions = membersSorted.filter(m => !usedByOthers.has(String(m.id)) || String(m.id) === currentId);
+          const slotOptions = formationSelectableMembers.filter(m => !usedByOthers.has(String(m.id)) || String(m.id) === currentId);
           const currentMember = membersSorted.find(m => String(m.id) === currentId);
           const role = formationRoleOfSlot(slot);
           return h("div",{key:slot.id,style:{position:"absolute",left:node.x+"%",top:node.y+"%",transform:"translate(-50%,-50%)",display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:96}},
