@@ -1422,12 +1422,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     if (id.startsWith("mf")) return "MF";
     return "FW";
   };
-  const formationRoleJa = role => {
-    if (role === "GK") return "ゴールキーパー";
-    if (role === "DF") return "ディフェンス";
-    if (role === "MF") return "ミッドフィルダー";
-    return "フォワード";
-  };
   const getFormationNodes = (formationKey, slots) => {
     if (formationKey === "3-2-2") {
       const pos = {
@@ -1495,17 +1489,14 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
           const usedByOthers = new Set(Object.entries(formationSlots).filter(([k,v]) => k !== slot.id && v).map(([,v]) => String(v)));
           const slotOptions = formationSelectableMembers.filter(m => !usedByOthers.has(String(m.id)) || String(m.id) === currentId);
           const currentMember = membersSorted.find(m => String(m.id) === currentId);
-          const role = formationRoleOfSlot(slot);
-          return h("div",{key:slot.id,style:{position:"absolute",left:node.x+"%",top:node.y+"%",transform:"translate(-50%,-50%)",display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:96}},
-            h("div",{style:{width:34,height:34,borderRadius:"50%",background:"#2563EB",border:"2px solid #fff",boxShadow:"0 2px 6px rgba(0,0,0,0.25)",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center"}},slot.label),
-            h("div",{style:{fontSize:10,fontWeight:800,color:"#fff",textShadow:"0 1px 2px rgba(0,0,0,0.35)",whiteSpace:"nowrap"}},formationRoleJa(role)),
+          return h("div",{key:slot.id,style:{position:"absolute",left:node.x+"%",top:node.y+"%",transform:"translate(-50%,-50%)",display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:90}},
             isAdmin
-              ? h("select",{value:currentId,onChange:e=>setFormationSlots(prev=>({...prev,[slot.id]:e.target.value})),style:{...css.inp,padding:"6px 8px",fontSize:12,minWidth:90,maxWidth:112,background:"rgba(255,255,255,0.95)"}},
-                  h("option",{value:""},"未設定"),
+              ? h("select",{value:currentId,onChange:e=>setFormationSlots(prev=>({...prev,[slot.id]:e.target.value})),style:{...css.inp,padding:"6px 8px",fontSize:12,minWidth:90,maxWidth:120,background:"rgba(255,255,255,0.95)",fontWeight:800,textAlign:"center"}},
+                  h("option",{value:""},"選手を選択"),
                   slotOptions.map(m=>h("option",{key:m.id,value:m.id},m.name))
                 )
-              : h("div",{style:{fontSize:11,fontWeight:800,color:"#0F172A",background:"rgba(255,255,255,0.92)",borderRadius:8,padding:"6px 8px",minWidth:90,textAlign:"center"}},
-                  currentMember ? currentMember.name : "未設定")
+              : h("div",{style:{fontSize:12,fontWeight:900,color:"#0F172A",background:"rgba(255,255,255,0.92)",borderRadius:999,padding:"6px 10px",minWidth:86,textAlign:"center",border:"1px solid rgba(255,255,255,0.65)",boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}},
+                  currentMember ? currentMember.name : "—")
           );
         })
       )
