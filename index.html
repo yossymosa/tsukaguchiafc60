@@ -1251,6 +1251,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     {key:"first",label:"前半",url:normalizeYoutubeLink(ytUrls.first || match.youtubeUrl1st)},
     {key:"second",label:"後半",url:normalizeYoutubeLink(ytUrls.second || match.youtubeUrl2nd)},
   ].filter(x=>x.url);
+  const primaryYoutubeLink = (youtubeLinks[0] && youtubeLinks[0].url) || "";
   const halfLabelMap = {"1st":"前半","2nd":"後半","3rd":"3rd"};
   const scoreboardCols = ["total","1st","2nd", ...(visibleHalfOptions.includes("3rd") ? ["3rd"] : [])];
   const scoreboardColLabel = col => col==="total" ? "合計" : (halfLabelMap[col] || col);
@@ -1269,13 +1270,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
         h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
         h("button",{onClick:onHome,style:{background:"rgba(29,78,216,0.75)",border:"1px solid rgba(29,78,216,0.45)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"🏠 ホーム")
-      ),
-      h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}},
-        youtubeLinks.length
-          ? youtubeLinks.map(x=>h("a",{key:x.key,href:x.url,target:"_blank",rel:"noopener noreferrer",
-              style:{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.35)",borderRadius:999,padding:"6px 12px",color:"#fff",fontSize:11,fontWeight:800,textDecoration:"none"}},
-              "▶ "+x.label))
-          : h("span",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.45)"}},"YouTube未登録")
       )
     ),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:12,flexWrap:"wrap"}},
@@ -1289,6 +1283,13 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
         h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.55)",marginTop:4}},dt.full+(schedule?.location?" · "+schedule.location:""))
       ),
       h("div",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.55)",letterSpacing:1.2}},match.formatLabel||"")
+    ),
+    h("div",{style:{display:"flex",justifyContent:"flex-end",marginTop:12}},
+      primaryYoutubeLink
+        ? h("a",{href:primaryYoutubeLink,target:"_blank",rel:"noopener noreferrer",
+            style:{display:"inline-flex",alignItems:"center",gap:6,background:"#FF0033",border:"1px solid #C7002A",borderRadius:999,padding:"7px 14px",color:"#fff",fontSize:12,fontWeight:800,textDecoration:"none",boxShadow:"0 4px 10px rgba(199,0,42,0.35)"}},
+            "▶ 試合動画はこちら")
+        : h("span",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.45)"}},"試合動画未登録")
     )
   );
 
