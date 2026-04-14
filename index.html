@@ -942,7 +942,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const [matchMemo,setMatchMemo]=useState(()=>String(match.memo||""));
   const goalPageRef = useRef(null);
   useEffect(() => {
-    const forceTop = () => {
+    const forceTopOnce = () => {
       scrollAppTop();
       const root = goalPageRef.current;
       if (!root) return;
@@ -951,19 +951,12 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
         if (typeof root.scrollTo === "function") root.scrollTo(0, 0);
       } catch (e) {}
     };
-    forceTop();
-    const rafA = requestAnimationFrame(forceTop);
-    const rafB = requestAnimationFrame(() => requestAnimationFrame(forceTop));
-    let tick = 0;
-    const timer = setInterval(() => {
-      forceTop();
-      tick += 1;
-      if (tick >= 60) clearInterval(timer); // 約6秒間は先頭へ戻す
-    }, 100);
+    forceTopOnce();
+    const rafA = requestAnimationFrame(forceTopOnce);
+    const rafB = requestAnimationFrame(() => requestAnimationFrame(forceTopOnce));
     return () => {
       try { cancelAnimationFrame(rafA); } catch (e) {}
       try { cancelAnimationFrame(rafB); } catch (e) {}
-      clearInterval(timer);
     };
   }, [match?.id, schedule?.id]);
   // PK戦
@@ -1253,10 +1246,32 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     setLoading(false);
   };
 
+  const youtubeLinks = [
+    {key:"full",label:"通し",url:normalizeYoutubeLink(ytUrls.full || match.youtubeUrl)},
+    {key:"first",label:"前半",url:normalizeYoutubeLink(ytUrls.first || match.youtubeUrl1st)},
+    {key:"second",label:"後半",url:normalizeYoutubeLink(ytUrls.second || match.youtubeUrl2nd)},
+  ].filter(x=>x.url);
+  const halfLabelMap = {"1st":"前半","2nd":"後半","3rd":"3rd"};
+  const scoreboardCols = ["total","1st","2nd", ...(visibleHalfOptions.includes("3rd") ? ["3rd"] : [])];
+  const scoreboardColLabel = col => col==="total" ? "合計" : (halfLabelMap[col] || col);
+  const scoreboardValue = (team, col) => {
+    if (col === "total") return team === "our" ? ourT : thT;
+    return team === "our" ? (halfScoreMapOur[col] || 0) : (halfScoreMapTheir[col] || 0);
+  };
+
   const headerBlock = h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"20px 20px 52px"}},
-    h("div",{style:{display:"flex",gap:8,marginBottom:16}},
-      h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
-      h("button",{onClick:onHome,style:{background:"rgba(29,78,216,0.75)",border:"1px solid rgba(29,78,216,0.45)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"🏠 ホーム")
+    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}},
+      h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+        h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
+        h("button",{onClick:onHome,style:{background:"rgba(29,78,216,0.75)",border:"1px solid rgba(29,78,216,0.45)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"🏠 ホーム")
+      ),
+      h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}},
+        youtubeLinks.length
+          ? youtubeLinks.map(x=>h("a",{key:x.key,href:x.url,target:"_blank",rel:"noopener noreferrer",
+              style:{display:"inline-flex",alignItems:"center",background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.35)",borderRadius:999,padding:"6px 12px",color:"#fff",fontSize:11,fontWeight:800,textDecoration:"none"}},
+              "▶ "+x.label))
+          : h("span",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.45)"}},"YouTube未登録")
+      )
     ),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:12,flexWrap:"wrap"}},
       h("div",{},
@@ -1272,43 +1287,39 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     )
   );
 
-  const scoreHeroBlock = h("div",{style:{background:"#fff",borderRadius:18,padding:"16px 18px",marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:10}},
+  const scoreboardBlock = h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+    h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"SCOREBOARD"),
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:10,marginBottom:12}},
       h("div",{style:{textAlign:"left"}},
-        h("div",{style:{fontSize:16,fontWeight:900,color:"#1D4ED8"}},"塚口AFC"),
+        h("div",{style:{fontSize:15,fontWeight:900,color:"#1D4ED8"}},"塚口AFC"),
         h("div",{style:{fontSize:10,color:"#94A3B8",fontWeight:700,letterSpacing:1}},"HOME")
       ),
       h("div",{style:{textAlign:"center"}},
-        h("div",{style:{fontSize:36,fontWeight:900,color:finalColor,lineHeight:1}},
+        h("div",{style:{fontSize:34,fontWeight:900,color:finalColor,lineHeight:1}},
           ourT,
           h("span",{style:{color:"#CBD5E1",fontSize:22,fontWeight:800,margin:"0 6px"}},"-"),
           thT
         ),
-        pkOn&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:2,fontWeight:700}},"PK "+pkOurScore+"-"+pkTheirScore),
-        pkWin&&h("div",{style:{color:"#16A34A",fontSize:11,fontWeight:800,marginTop:2}},"PK勝ち"),
-        pkLose&&h("div",{style:{color:"#DC2626",fontSize:11,fontWeight:800,marginTop:2}},"PK負け"),
-        !pkOn&&h("div",{style:{marginTop:3}},h(RWdg,{our:ourT,their:thT}))
+        pkOn&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:2,fontWeight:700}},"PK "+pkOurScore+"-"+pkTheirScore)
       ),
       h("div",{style:{textAlign:"right"}},
-        h("div",{style:{fontSize:16,fontWeight:900,color:"#334155"}},match.opponent||"相手"),
+        h("div",{style:{fontSize:15,fontWeight:900,color:"#334155"}},match.opponent||"相手"),
         h("div",{style:{fontSize:10,color:"#94A3B8",fontWeight:700,letterSpacing:1}},"AWAY")
       )
-    )
+    ),
+    h("div",{style:{display:"grid",gridTemplateColumns:`88px repeat(${scoreboardCols.length}, minmax(0,1fr))`,gap:6,alignItems:"center"}},
+      h("div",{}),
+      ...scoreboardCols.map(col=>h("div",{key:"h-"+col,style:{fontSize:11,fontWeight:700,color:"#94A3B8",textAlign:"center"}},scoreboardColLabel(col))),
+      h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4ED8"}},"塚口"),
+      ...scoreboardCols.map(col=>h("div",{key:"our-"+col,style:{fontSize:col==="total"?22:16,fontWeight:900,color:"#1D4ED8",textAlign:"center",lineHeight:1.2}},scoreboardValue("our",col))),
+      h("div",{style:{fontSize:12,fontWeight:800,color:"#64748B"}},match.opponent||"相手"),
+      ...scoreboardCols.map(col=>h("div",{key:"their-"+col,style:{fontSize:col==="total"?22:16,fontWeight:900,color:"#64748B",textAlign:"center",lineHeight:1.2}},scoreboardValue("their",col)))
+    ),
+    !pkOn&&h("div",{style:{marginTop:8,display:"flex",justifyContent:"center"}},h(RWdg,{our:ourT,their:thT}))
   );
 
-  const scoreboardBlock = h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-    h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"SCOREBOARD"),
-    h("div",{style:{display:"grid",gridTemplateColumns:`1fr ${scoreHeadersView.map(()=> "48px").join(" ")}`,gap:8,alignItems:"center"}},
-      h("div",{}),scoreHeadersView.map(lb=>h("div",{key:lb,style:{fontSize:11,color:"#999",textAlign:"center",fontWeight:600}},lb)),
-      h("div",{style:{fontSize:13,fontWeight:700}},"塚口AFC"),
-      ...ourScoreCellsView.map((v,i)=>h("div",{key:i,style:{fontSize:i===ourScoreCellsView.length-1?24:18,fontWeight:900,color:rc,textAlign:"center",lineHeight:1}},v)),
-      h("div",{style:{fontSize:13,fontWeight:600,color:"#999"}},match.opponent),
-      ...theirScoreCellsView.map((v,i)=>h("div",{key:i,style:{fontSize:i===theirScoreCellsView.length-1?24:18,fontWeight:900,color:"#bbb",textAlign:"center",lineHeight:1}},v))
-    )
-  );
-
-  const matchStatsBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-    h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"MATCH STATS（管理者テスト）"),
+  const matchStatsBlock = h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+    h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"STATS"),
     h("div",{style:{display:"grid",gridTemplateColumns:"86px 1fr 110px 1fr 86px",alignItems:"center",gap:8,marginBottom:10}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#1D4ED8",textAlign:"center"}},"塚口AFC"),
       h("div",{}),
@@ -1324,40 +1335,20 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       const counterStyle={display:"flex",alignItems:"center",justifyContent:"center",gap:6};
       return h("div",{key:def.key,style:{display:"grid",gridTemplateColumns:"86px 1fr 110px 1fr 86px",alignItems:"center",gap:8,marginBottom:8}},
         h("div",{style:counterStyle},
-          h("button",{onClick:()=>bumpStat(ourField,-1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"−"),
+          isAdmin&&h("button",{onClick:()=>bumpStat(ourField,-1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"−"),
           h("div",{style:{minWidth:18,textAlign:"center",fontSize:16,fontWeight:900,color:"#1D4ED8"}},ourVal),
-          h("button",{onClick:()=>bumpStat(ourField,1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"＋")
+          isAdmin&&h("button",{onClick:()=>bumpStat(ourField,1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"＋")
         ),
         h("div",{style:{height:1,background:"#F1F5F9"}}),
         h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",textAlign:"center"}},def.label),
         h("div",{style:{height:1,background:"#F1F5F9"}}),
         h("div",{style:counterStyle},
-          h("button",{onClick:()=>bumpStat(theirField,-1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"−"),
+          isAdmin&&h("button",{onClick:()=>bumpStat(theirField,-1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"−"),
           h("div",{style:{minWidth:18,textAlign:"center",fontSize:16,fontWeight:900,color:"#64748B"}},theirVal),
-          h("button",{onClick:()=>bumpStat(theirField,1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"＋")
+          isAdmin&&h("button",{onClick:()=>bumpStat(theirField,1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"＋")
         )
       );
-    }),
-    h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginTop:6,marginBottom:10}},"FORMATION"),
-    h("div",{style:{display:"flex",gap:8,marginBottom:12}},
-      Object.keys(MATCH_FORMATION_PRESETS).map(key=>
-        h("button",{key,onClick:()=>applyFormationPreset(key),
-          style:{flex:1,padding:"10px 8px",border:`2px solid ${formation===key?"#1D4ED8":"#E2E8F0"}`,borderRadius:10,background:formation===key?"#1D4ED8":"#fff",color:formation===key?"#fff":"#334155",fontSize:13,fontWeight:700,cursor:"pointer"}},key))
-    ),
-    formation&&h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}},
-      (MATCH_FORMATION_PRESETS[formation]||[]).map(slot=>{
-        const currentId=String(formationSlots[slot.id]||"");
-        const used=new Set(Object.entries(formationSlots).filter(([k,v])=>k!==slot.id&&v).map(([,v])=>String(v)));
-        const opts=membersSorted.filter(m=>!used.has(String(m.id))||String(m.id)===currentId);
-        return h("div",{key:slot.id,style:{background:"#F8FAFC",borderRadius:10,padding:"8px 10px"}},
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},slot.label),
-          h("select",{value:currentId,onChange:e=>setFormationSlots(prev=>({...prev,[slot.id]:e.target.value})),style:{...css.inp,fontSize:13,padding:"8px 10px"}},
-            h("option",{value:""},"未設定"),
-            opts.map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name))
-          )
-        );
-      })
-    )
+    })
   );
 
   const goalsTimelineBlock = h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -1369,55 +1360,94 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       )
     ),
     all.length===0&&h("div",{style:{textAlign:"center",padding:"20px",color:"#ccc",fontSize:13}},"ゴール記録なし"),
-    visibleHalfOptions.map(half=>{
-      const items=all.filter(g=>normHalf(g.half)===half);
-      if(!items.length) return null;
-      return h(Fragment,{key:half},
-        h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
-          h("div",{style:{flex:1,height:1,background:"#f0f0f0"}}),
-          h("span",{style:{fontSize:11,color:"#bbb",fontWeight:700}},half),
-          h("div",{style:{flex:1,height:1,background:"#f0f0f0"}})
+    all.map((g,i)=>{
+      const isUs=g.team==="us";
+      const sc=members.find(m=>m.id===g.scorerId);
+      const as=members.find(m=>m.id===g.assistId);
+      const scorerName = isUs ? (sc?.name||g.scorerName||"不明") : (match.opponent||"相手");
+      const assistName = isUs ? (as?.name||g.assistName||"") : "";
+      const halfLabel = halfLabelMap[normHalf(g.half)] || normHalf(g.half) || "";
+      const minuteLabel = `${halfLabel} ${String(g.minute||0)}'` + (Number(g.second||0)>0 ? String(g.second).padStart(2,"0")+"\"" : "");
+      return h("div",{key:`goal-${g.team}-${g.sourceIdx}-${i}`,style:{display:"grid",gridTemplateColumns:isAdmin?"1fr 86px 1fr 82px":"1fr 86px 1fr",alignItems:"center",gap:8,marginBottom:8}},
+        h("div",{style:{display:"flex",justifyContent:"flex-end",minHeight:46}},
+          isUs&&h("div",{style:{background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:10,padding:"7px 10px",maxWidth:"100%",textAlign:"right"}},
+            h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4ED8",lineHeight:1.3}},scorerName),
+            assistName&&h("div",{style:{fontSize:11,color:"#3B82F6",marginTop:2}},"🅰 "+assistName),
+            g.goalType&&g.goalType!=="通常"&&h("div",{style:{marginTop:3}},
+              h("span",{style:{background:g.goalType==="PK"?"#FCD34D":"#0F172A",color:g.goalType==="PK"?"#78350F":"#fff",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:800}},g.goalType))
+          )
         ),
-        items.map((g,i)=>{
-          const isUs=g.team==="us";
-          const sc=members.find(m=>m.id===g.scorerId);
-          const as=members.find(m=>m.id===g.assistId);
-          const scorerName = isUs ? (sc?.name||g.scorerName||"不明") : (match.opponent||"相手");
-          const assistName = isUs ? (as?.name||g.assistName||"") : "";
-          const minuteLabel = String(g.minute||0)+"'" + (Number(g.second||0)>0 ? String(g.second).padStart(2,"0")+"\"" : "");
-          return h("div",{key:`${half}-${g.team}-${g.sourceIdx}-${i}`,style:{display:"grid",gridTemplateColumns:isAdmin?"1fr 72px 1fr 82px":"1fr 72px 1fr",alignItems:"center",gap:8,marginBottom:8}},
-            h("div",{style:{display:"flex",justifyContent:"flex-end",minHeight:46}},
-              isUs&&h("div",{style:{background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:10,padding:"7px 10px",maxWidth:"100%",textAlign:"right"}},
-                h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4ED8",lineHeight:1.3}},scorerName),
-                assistName&&h("div",{style:{fontSize:11,color:"#3B82F6",marginTop:2}},"🅰 "+assistName),
-                g.goalType&&g.goalType!=="通常"&&h("div",{style:{marginTop:3}},
-                  h("span",{style:{background:g.goalType==="PK"?"#FCD34D":"#0F172A",color:g.goalType==="PK"?"#78350F":"#fff",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:800}},g.goalType))
-              )
-            ),
-            h("div",{style:{textAlign:"center",fontSize:12,fontWeight:900,color:isUs?"#1D4ED8":"#607D8B"}},minuteLabel),
-            h("div",{style:{display:"flex",justifyContent:"flex-start",minHeight:46}},
-              !isUs&&h("div",{style:{background:"#F1F5F9",border:"1px solid #CBD5E1",borderRadius:10,padding:"7px 10px",maxWidth:"100%"}},
-                h("div",{style:{fontSize:12,fontWeight:800,color:"#475569",lineHeight:1.3}},scorerName),
-                g.goalType&&g.goalType!=="通常"&&h("div",{style:{marginTop:3}},
-                  h("span",{style:{background:g.goalType==="オウンゴール"?"#16A34A":"#64748B",color:"#fff",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:800}},g.goalType))
-              )
-            ),
-            isAdmin&&h("div",{style:{display:"flex",flexDirection:"column",gap:3,alignItems:"stretch"}},
-              h("button",{onClick:()=>{
-                  const baseG={...normalizeGoalItem(g),minute:String(g.minute),second:String(g.second||0)};
-                  setEditGoal({type:isUs?"our":"their",idx:g.sourceIdx});
-                  setEditNg(baseG);
-                  setModal("editGoal");
-                },style:{background:"none",border:"1px solid #ddd",borderRadius:6,color:"#aaa",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"編集"),
-              h("button",{onClick:()=>{
-                  if(isUs)setGoals(p=>p.filter((_,j)=>j!==g.sourceIdx));
-                  else setTheirG(p=>p.filter((_,j)=>j!==g.sourceIdx));
-                },style:{background:"none",border:"1px solid #ffcccc",borderRadius:6,color:"#F44336",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"削除")
-            )
-          );
-        })
+        h("div",{style:{textAlign:"center",fontSize:11,fontWeight:900,color:"#64748B",lineHeight:1.3}},minuteLabel),
+        h("div",{style:{display:"flex",justifyContent:"flex-start",minHeight:46}},
+          !isUs&&h("div",{style:{background:"#F1F5F9",border:"1px solid #CBD5E1",borderRadius:10,padding:"7px 10px",maxWidth:"100%"}},
+            h("div",{style:{fontSize:12,fontWeight:800,color:"#475569",lineHeight:1.3}},scorerName),
+            g.goalType&&g.goalType!=="通常"&&h("div",{style:{marginTop:3}},
+              h("span",{style:{background:g.goalType==="オウンゴール"?"#16A34A":"#64748B",color:"#fff",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:800}},g.goalType))
+          )
+        ),
+        isAdmin&&h("div",{style:{display:"flex",flexDirection:"column",gap:3,alignItems:"stretch"}},
+          h("button",{onClick:()=>{
+              const baseG={...normalizeGoalItem(g),minute:String(g.minute),second:String(g.second||0)};
+              setEditGoal({type:isUs?"our":"their",idx:g.sourceIdx});
+              setEditNg(baseG);
+              setModal("editGoal");
+            },style:{background:"none",border:"1px solid #ddd",borderRadius:6,color:"#aaa",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"編集"),
+          h("button",{onClick:()=>{
+              if(isUs)setGoals(p=>p.filter((_,j)=>j!==g.sourceIdx));
+              else setTheirG(p=>p.filter((_,j)=>j!==g.sourceIdx));
+            },style:{background:"none",border:"1px solid #ffcccc",borderRadius:6,color:"#F44336",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"削除")
+        )
       );
     })
+  );
+
+  const formationSlotsDef = MATCH_FORMATION_PRESETS[formation] || [];
+  const formationRoleOfSlot = slot => {
+    const id = String(slot?.id || "").toLowerCase();
+    if (id.startsWith("gk")) return "GK";
+    if (id.startsWith("df")) return "DF";
+    if (id.startsWith("mf")) return "MF";
+    return "FW";
+  };
+  const formationColumns = {GK:[], DF:[], MF:[], FW:[]};
+  formationSlotsDef.forEach(slot => {
+    const role = formationRoleOfSlot(slot);
+    if (!formationColumns[role]) formationColumns[role] = [];
+    formationColumns[role].push(slot);
+  });
+  const formationBlock = (isAdmin || !!formationSlotsDef.length) && h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+    h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"FORMATION"),
+    isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
+      Object.keys(MATCH_FORMATION_PRESETS).map(key=>
+        h("button",{key,onClick:()=>applyFormationPreset(key),
+          style:{flex:1,padding:"10px 8px",border:`2px solid ${formation===key?"#1D4ED8":"#E2E8F0"}`,borderRadius:10,background:formation===key?"#1D4ED8":"#fff",color:formation===key?"#fff":"#334155",fontSize:13,fontWeight:700,cursor:"pointer"}},key))
+    ),
+    !formationSlotsDef.length && h("div",{style:{fontSize:12,color:"#94A3B8"}},"フォーメーション未設定"),
+    !!formationSlotsDef.length && h("div",{style:{background:"linear-gradient(180deg,#22C55E,#16A34A)",borderRadius:14,padding:10,border:"2px solid #16A34A"}},
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8}},
+        ["GK","DF","MF","FW"].map(role=>h("div",{key:role,style:{background:"rgba(255,255,255,0.22)",border:"1px dashed rgba(255,255,255,0.55)",borderRadius:10,padding:8,minHeight:120}},
+          h("div",{style:{fontSize:11,fontWeight:900,color:"#fff",letterSpacing:1,marginBottom:6,textAlign:"center"}},role),
+          (formationColumns[role]||[]).length===0
+            ? h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.7)",textAlign:"center",marginTop:10}},"-")
+            : (formationColumns[role]||[]).map(slot=>{
+                const currentId=String(formationSlots[slot.id]||"");
+                const used=new Set(Object.entries(formationSlots).filter(([k,v])=>k!==slot.id&&v).map(([,v])=>String(v)));
+                const opts=membersSorted.filter(m=>!used.has(String(m.id))||String(m.id)===currentId);
+                const currentMember = membersSorted.find(m=>String(m.id)===currentId);
+                return h("div",{key:slot.id,style:{marginBottom:6}},
+                  h("div",{style:{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.9)",marginBottom:3,textAlign:"center"}},slot.label),
+                  isAdmin
+                    ? h("select",{value:currentId,onChange:e=>setFormationSlots(prev=>({...prev,[slot.id]:e.target.value})),style:{...css.inp,fontSize:12,padding:"7px 8px",background:"rgba(255,255,255,0.95)"}},
+                        h("option",{value:""},"未設定"),
+                        opts.map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name))
+                      )
+                    : h("div",{style:{fontSize:12,fontWeight:700,color:"#0F172A",background:"rgba(255,255,255,0.92)",borderRadius:8,padding:"7px 8px",textAlign:"center"}},
+                        currentMember ? ("#"+(currentMember.number||"-")+" "+currentMember.name) : "未設定")
+                );
+              })
+        ))
+      )
+    )
   );
 
   const matchInputBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -1469,10 +1499,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     loading&&h(Loader,{msg:"保存中..."}),
     headerBlock,
     h("div",{style:{padding:"0 16px",marginTop:-24}},
-      scoreHeroBlock,
       scoreboardBlock,
       matchStatsBlock,
       goalsTimelineBlock,
+      formationBlock,
       matchInputBlock,
       // PK戦セクション（折りたたみ）
       (isAdmin||pkOn)&&h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -1583,25 +1613,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
           ? h("textarea",{value:matchMemo,onChange:e=>setMatchMemo(e.target.value),
               rows:4,placeholder:"この試合の補足メモを入力",style:{...css.inp,width:"100%",resize:"none"}})
           : h("div",{style:{color:"#64748B",lineHeight:1.7,whiteSpace:"pre-wrap"}},matchMemo||"メモなし")),
-
-      // YouTube セクション（リンク表示のみ）
-      h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"▶ YOUTUBE"),
-        (() => {
-          const links = [
-            {label:"▶ 通し",url:normalizeYoutubeLink(ytUrls.full || match.youtubeUrl)},
-            {label:"▶ 前半",url:normalizeYoutubeLink(ytUrls.first || match.youtubeUrl1st)},
-            {label:"▶ 後半",url:normalizeYoutubeLink(ytUrls.second || match.youtubeUrl2nd)},
-          ].filter(x=>x.url);
-          if (!links.length) {
-            return h("div",{style:{fontSize:12,color:"#94A3B8"}},"動画リンクは未登録です");
-          }
-          return h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
-            links.map(x=>h("a",{key:x.label,href:x.url,target:"_blank",rel:"noopener noreferrer",
-              style:{display:"inline-flex",alignItems:"center",gap:5,background:"#FF0000",color:"#fff",borderRadius:10,padding:"10px 16px",fontSize:13,fontWeight:700,textDecoration:"none"}},x.label))
-          );
-        })()
-      )),
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"⚽ 得点を追加",onClose:()=>setModal(null)},
