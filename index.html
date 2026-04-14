@@ -1288,37 +1288,24 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   );
 
   const scoreboardBlock = h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:8,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-    h("div",{style:{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:6}},"SCOREBOARD"),
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,marginBottom:8}},
+    h("div",{style:{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"SCOREBOARD"),
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:10,marginBottom:6}},
       h("div",{style:{textAlign:"left"}},
-        h("div",{style:{fontSize:14,fontWeight:900,color:"#1D4ED8"}},"塚口AFC")
+        h("div",{style:{fontSize:14,fontWeight:900,color:"#1D4ED8",lineHeight:1.2}},"塚口AFC")
       ),
       h("div",{style:{textAlign:"center"}},
-        h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,lineHeight:1}},
-          h("span",{style:{fontSize:34,fontWeight:900,color:finalColor}},ourT),
-          h("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",minWidth:46}},
-            h("span",{style:{fontSize:9,color:"#94A3B8",fontWeight:800,letterSpacing:0.4}},"前半"),
-            h("span",{style:{fontSize:12,color:"#64748B",fontWeight:900}},`${halfScoreMapOur["1st"]||0}-${halfScoreMapTheir["1st"]||0}`)
-          ),
-          h("span",{style:{fontSize:34,fontWeight:900,color:finalColor}},thT)
+        h("div",{style:{display:"flex",alignItems:"baseline",justifyContent:"center",gap:8,lineHeight:1}},
+          h("span",{style:{fontSize:38,fontWeight:900,color:finalColor}},ourT),
+          h("span",{style:{fontSize:18,fontWeight:900,color:"#94A3B8"}},"-"),
+          h("span",{style:{fontSize:38,fontWeight:900,color:finalColor}},thT)
         ),
-        h("div",{style:{fontSize:10,color:"#94A3B8",fontWeight:800,marginTop:2}},
-          `後半 ${halfScoreMapOur["2nd"]||0}-${halfScoreMapTheir["2nd"]||0}` + (visibleHalfOptions.includes("3rd") ? ` / 3rd ${halfScoreMapOur["3rd"]||0}-${halfScoreMapTheir["3rd"]||0}` : "")),
         pkOn&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:2,fontWeight:700}},"PK "+pkOurScore+"-"+pkTheirScore)
       ),
       h("div",{style:{textAlign:"right"}},
-        h("div",{style:{fontSize:14,fontWeight:900,color:"#334155"}},match.opponent||"相手")
+        h("div",{style:{fontSize:14,fontWeight:900,color:"#334155",lineHeight:1.2}},match.opponent||"相手")
       )
     ),
-    h("div",{style:{display:"grid",gridTemplateColumns:`72px repeat(${scoreboardCols.length}, minmax(0,1fr))`,gap:5,alignItems:"center"}},
-      h("div",{}),
-      ...scoreboardCols.map(col=>h("div",{key:"h-"+col,style:{fontSize:10,fontWeight:700,color:"#94A3B8",textAlign:"center"}},scoreboardColLabel(col))),
-      h("div",{style:{fontSize:11,fontWeight:800,color:"#1D4ED8"}},"塚口"),
-      ...scoreboardCols.map(col=>h("div",{key:"our-"+col,style:{fontSize:col==="total"?20:15,fontWeight:900,color:"#1D4ED8",textAlign:"center",lineHeight:1.15}},scoreboardValue("our",col))),
-      h("div",{style:{fontSize:11,fontWeight:800,color:"#64748B"}},match.opponent||"相手"),
-      ...scoreboardCols.map(col=>h("div",{key:"their-"+col,style:{fontSize:col==="total"?20:15,fontWeight:900,color:"#64748B",textAlign:"center",lineHeight:1.15}},scoreboardValue("their",col)))
-    ),
-    !pkOn&&h("div",{style:{marginTop:6,display:"flex",justifyContent:"center"}},h(RWdg,{our:ourT,their:thT}))
+    !pkOn&&h("div",{style:{marginTop:4,display:"flex",justifyContent:"center"}},h(RWdg,{our:ourT,their:thT}))
   );
 
   const matchStatsBlock = h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:8,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
