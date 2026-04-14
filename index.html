@@ -57,6 +57,7 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbwsYbqZ4PvB6nJex-GsCjdk
 const HOME_LINKS = [
   {label:"チームHP",  url:"https://afcjr.xsrv.jp/", icon:"🌐", sub:"公式ホームページ"},
   {label:"試合動画", url:"https://youtube.com/playlist?list=PLLo2VVDM0WelHQk4YEdf-dvejZLkVbJ2N&si=xEJa9OEtTiQmKHWU", icon:"▶️", sub:"動画・ハイライト"},
+  {label:"インスタグラム", url:"https://www.instagram.com/tsukaguch.afc.jr/", icon:"📷", sub:"Instagram"},
 ];
 const FORMAT_TIME_OPTIONS = [7,10,12,15,20];
 const FORMAT_MODE_OPTIONS = [
@@ -4883,7 +4884,7 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
     const linked = findLinkedScheduleForResult(r, schedules);
     return linked?.type || r.type || "";
   };
-  // 月別グループ作成（降順）
+  // 月別グループ作成（昇順）
   const groups = useMemo(() => {
     const map = {};
     results.forEach(r => {
@@ -4893,13 +4894,13 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
       if (!map[ym]) map[ym] = [];
       map[ym].push(r);
     });
-    // 降順ソート
+    // 昇順ソート
     return Object.entries(map)
-      .sort((a,b) => b[0].localeCompare(a[0]))
+      .sort((a,b) => a[0].localeCompare(b[0]))
       .map(([ym, rs]) => ({
         ym,
         label: Number(ym.slice(0,4)) + "年" + Number(ym.slice(5,7)) + "月",
-        rs: rs.sort((a,b) => nd(b.date).localeCompare(nd(a.date))),
+        rs: rs.sort((a,b) => nd(a.date).localeCompare(nd(b.date))),
       }));
   }, [results]);
 
@@ -4917,7 +4918,7 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
     }
     if (selYm && groups.some(g => g.ym === selYm)) return;
     const nowGroup = groups.find(g => g.ym === currentYm);
-    setSelYm((nowGroup || groups[0]).ym);
+    setSelYm((nowGroup || groups[groups.length-1]).ym);
   }, [groups, selYm, currentYm]);
 
   if (results.length === 0) {
@@ -4988,7 +4989,7 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
         const t = normalizeType(s.type);
         return t !== "practice" && t !== "event";
       })
-      .sort((a,b) => nd(b.date).localeCompare(nd(a.date)))
+      .sort((a,b) => nd(a.date).localeCompare(nd(b.date)))
   , [schedules]);
 
   const getResultsForSchedule = (schedule) => {
@@ -5010,11 +5011,11 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
       map[ym].push(s);
     });
     return Object.entries(map)
-      .sort((a,b) => b[0].localeCompare(a[0]))
+      .sort((a,b) => a[0].localeCompare(b[0]))
       .map(([ym, scheds]) => ({
         ym,
         label: Number(ym.slice(0,4)) + "年" + Number(ym.slice(5,7)) + "月",
-        scheds: scheds.sort((a,b) => nd(b.date).localeCompare(nd(a.date))),
+        scheds: scheds.sort((a,b) => nd(a.date).localeCompare(nd(b.date))),
       }));
   }, [matchSchedules]);
 
@@ -5030,7 +5031,7 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
     }
     if (selYm && monthGroups.some(g => g.ym === selYm)) return;
     const nowGroup = monthGroups.find(g => g.ym === currentYm);
-    setSelYm((nowGroup || monthGroups[0]).ym);
+    setSelYm((nowGroup || monthGroups[monthGroups.length-1]).ym);
   }, [monthGroups, selYm, currentYm]);
 
   if (matchSchedules.length === 0) {
