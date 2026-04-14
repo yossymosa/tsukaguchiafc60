@@ -1258,6 +1258,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     if (col === "total") return team === "our" ? ourT : thT;
     return team === "our" ? (halfScoreMapOur[col] || 0) : (halfScoreMapTheir[col] || 0);
   };
+  const phaseScores = [
+    `${halfScoreMapOur["1st"]||0}-${halfScoreMapTheir["1st"]||0}`,
+    `${halfScoreMapOur["2nd"]||0}-${halfScoreMapTheir["2nd"]||0}`,
+    ...(visibleHalfOptions.includes("3rd") ? [`${halfScoreMapOur["3rd"]||0}-${halfScoreMapTheir["3rd"]||0}`] : []),
+  ];
 
   const headerBlock = h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"20px 20px 52px"}},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}},
@@ -1294,9 +1299,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
         h("div",{style:{fontSize:14,fontWeight:900,color:"#1D4ED8",lineHeight:1.2}},"塚口AFC")
       ),
       h("div",{style:{textAlign:"center"}},
-        h("div",{style:{display:"flex",alignItems:"baseline",justifyContent:"center",gap:8,lineHeight:1}},
+        h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:10,lineHeight:1}},
           h("span",{style:{fontSize:38,fontWeight:900,color:finalColor}},ourT),
-          h("span",{style:{fontSize:18,fontWeight:900,color:"#94A3B8"}},"-"),
+          h("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minWidth:44,padding:"4px 6px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0",gap:2}},
+            phaseScores.map((s,idx)=>h("div",{key:`phase-${idx}`,style:{fontSize:11,fontWeight:900,color:"#64748B",lineHeight:1.1}},s))
+          ),
           h("span",{style:{fontSize:38,fontWeight:900,color:finalColor}},thT)
         ),
         pkOn&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:2,fontWeight:700}},"PK "+pkOurScore+"-"+pkTheirScore)
