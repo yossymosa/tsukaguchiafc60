@@ -1534,7 +1534,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
             if(editGoal.type==="our") setGoals(p=>p.map((g,j)=>j===editGoal.idx?updated:g));
             else setTheirG(p=>p.map((g,j)=>j===editGoal.idx?updated:g));
             setModal(null);setEditGoal(null);setEditNg(null);
-          },style:css.bS},"保存")))
+          },style:css.bS},"保存")
+        )
       )
     : null;
 
