@@ -5705,19 +5705,19 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
 
   return h(Fragment,{},
 // ── カレンダー本体
-h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
 
-  h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}},
+  h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}},
     h("button",{onClick:prev,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"‹"),
     h("div",{style:{fontSize:17,fontWeight:800,color:"#1a1a2e"}},year+"年 "+(month+1)+"月"),
     h("button",{onClick:next,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"›")
   ),
 
-  h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",marginBottom:6}},
+  h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",marginBottom:4}},
     ["日","月","火","水","木","金","土"].map((d,i)=>h("div",{key:d,style:{textAlign:"center",fontSize:11,fontWeight:700,color:i===0?"#F44336":i===6?"#2196F3":"#aaa",padding:"4px 0"}},d))
   ),
 
-  weeks.map((wk,wi)=>h("div",{key:wi,style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:2}},
+  weeks.map((wk,wi)=>h("div",{key:wi,style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:1}},
     wk.map((d,di)=>{
       if(!d) return h("div",{key:di});
       const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
@@ -5735,10 +5735,10 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
       const clickDay=()=>{
         setDayModal({date:dStr,events:evs});
       };
-      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"6px 3px",borderRadius:8,background:isToday?"#1D4ED8":evs.length>0?typeSoftBg:"transparent",minHeight:70,minWidth:0,width:"100%",overflow:"hidden",cursor:"pointer"}},
+      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"4px 2px",borderRadius:8,background:isToday?"#1D4ED8":evs.length>0?typeSoftBg:"transparent",minHeight:60,minWidth:0,width:"100%",overflow:"hidden",cursor:"pointer"}},
         h("div",{style:{fontSize:13,fontWeight:isToday?900:400,color:isToday?"#fff":isHoliday?"#F44336":di===0?"#F44336":di===6?"#2196F3":"#1a1a2e"}},d),
         isHoliday&&h("div",{style:{fontSize:8,fontWeight:700,lineHeight:1.2,color:isToday?"rgba(255,255,255,0.95)":"#EF4444",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginTop:2}},holidayName),
-        evs.length>0&&h("div",{style:{marginTop:4,padding:"4px 4px",borderRadius:7,background:isToday?"rgba(255,255,255,0.22)":"#fff",border:isToday?"1px solid rgba(255,255,255,0.35)":`1px solid ${typeColor}44`,textAlign:"left",width:"100%",boxSizing:"border-box",overflow:"hidden"}},
+        evs.length>0&&h("div",{style:{marginTop:3,padding:"3px 4px",borderRadius:7,background:isToday?"rgba(255,255,255,0.22)":"#fff",border:isToday?"1px solid rgba(255,255,255,0.35)":`1px solid ${typeColor}44`,textAlign:"left",width:"100%",boxSizing:"border-box",overflow:"hidden"}},
           h("div",{style:{fontSize:8,fontWeight:800,color:isToday?"#fff":typeColor,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden"}},
             typeLabel+(moreCount>0?` +${moreCount}`:"")),
           h("div",{style:{fontSize:9,fontWeight:700,color:isToday?"#fff":"#1E293B",lineHeight:1.25,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",maxWidth:"100%"}},
@@ -5749,9 +5749,9 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,box
   )),
 
   // 凡例＋追加ボタン
-  h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
+  h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}},
     h("div",{style:{display:"flex",gap:10,flexWrap:"wrap"}},
-      [{c:"#EF4444",l:"祝日"},{c:"#4CAF50",l:"練習"},{c:"#1D4ED8",l:"公式戦"},{c:"#2563EB",l:"トレマ"},{c:"#0F172A",l:"カップ戦"},{c:"#009688",l:"イベント"}].map(x=>
+      [{c:"#4CAF50",l:"練習"},{c:"#1D4ED8",l:"公式戦"},{c:"#2563EB",l:"トレマ"},{c:"#0F172A",l:"カップ戦"},{c:"#009688",l:"イベント"}].map(x=>
         h("div",{key:x.l,style:{display:"flex",alignItems:"center",gap:5}},
           h("div",{style:{width:10,height:10,borderRadius:"50%",background:x.c}}),
           h("span",{style:{fontSize:11,color:"#888"}},x.l)
