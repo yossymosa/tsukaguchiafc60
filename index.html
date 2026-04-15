@@ -1857,6 +1857,13 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
             pkWin&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#4CAF50"}},"🎉 PK勝ち！"),
             pkLose&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#F44336"}},"😔 PK負け")))),
 
+      isAdmin&&h("button",{onClick:save,style:{...css.bS,width:"100%",padding:16,fontSize:15,marginBottom:16}},"💾 試合全体を保存"),
+      h("div",{style:{background:"#fff",borderRadius:14,padding:14,fontSize:13,marginBottom:12}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"📝 試合メモ"),
+        isAdmin
+          ? h("textarea",{value:matchMemo,onChange:e=>setMatchMemo(e.target.value),
+              rows:4,placeholder:"この試合の補足メモを入力",style:{...css.inp,width:"100%",resize:"none"}})
+          : h("div",{style:{color:"#64748B",lineHeight:1.7,whiteSpace:"pre-wrap"}},matchMemo||"メモなし")),
       h("button",{
         onClick:()=>{
           scrollAppTop();
@@ -1867,13 +1874,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
         },
         style:{width:"100%",padding:"10px 12px",fontSize:12,fontWeight:700,marginBottom:10,borderRadius:10,border:"1px solid #D1D5DB",background:"#fff",color:"#475569",cursor:"pointer"}
       },"↑ 試合上部へ戻る"),
-      isAdmin&&h("button",{onClick:save,style:{...css.bS,width:"100%",padding:16,fontSize:15,marginBottom:16}},"💾 試合全体を保存"),
-      h("div",{style:{background:"#fff",borderRadius:14,padding:14,fontSize:13,marginBottom:12}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"📝 試合メモ"),
-        isAdmin
-          ? h("textarea",{value:matchMemo,onChange:e=>setMatchMemo(e.target.value),
-              rows:4,placeholder:"この試合の補足メモを入力",style:{...css.inp,width:"100%",resize:"none"}})
-          : h("div",{style:{color:"#64748B",lineHeight:1.7,whiteSpace:"pre-wrap"}},matchMemo||"メモなし")),
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"⚽ 得点を追加",onClose:()=>setModal(null)},
