@@ -1454,9 +1454,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const goalsTimelineBlock = h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:8,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
       h("div",{style:{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:2}},"GOALS TIMELINE"),
-      h("div",{style:{display:"flex",gap:14,fontSize:11,fontWeight:700}},
-        h("span",{style:{color:"#1D4ED8"}},"塚口"),
-        h("span",{style:{color:"#64748B"}},match.opponent||"相手")
+      h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}},
+        h("div",{style:{display:"flex",gap:14,fontSize:11,fontWeight:700}},
+          h("span",{style:{color:"#1D4ED8"}},"塚口"),
+          h("span",{style:{color:"#64748B"}},match.opponent||"相手")
+        ),
+        isAdmin&&h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}},
+          h("button",{onClick:()=>setModal("our"),style:{background:"#1D4ED8",color:"#fff",border:"none",borderRadius:9,padding:"7px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}},"⚽ 得点・アシスト入力"),
+          h("button",{onClick:()=>setModal("their"),style:{background:"#607D8B",color:"#fff",border:"none",borderRadius:9,padding:"7px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}},"💀 失点入力")
+        )
       )
     ),
     all.length===0&&h("div",{style:{textAlign:"center",padding:"14px",color:"#ccc",fontSize:12}},"ゴール記録なし"),
@@ -1624,10 +1630,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
 
   const matchInputBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
     h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"INPUT"),
-    h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}},
-      h("button",{onClick:()=>setModal("our"),style:{background:"#1D4ED8",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}},"⚽ 得点・アシスト入力"),
-      h("button",{onClick:()=>setModal("their"),style:{background:"#607D8B",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}},"💀 失点入力")
-    ),
     h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:12,border:"1px solid #E2E8F0"}},
       h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:8}},"シュート入力"),
       h("div",{style:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}},
