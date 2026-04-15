@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwsYbqZ4PvB6nJex-GsCjdkk7CrQxg2X8gMrZaiu1VP4IkZiTR-45D0ho2Cb3J6dyyH/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzw9DYvhXllSUsmYlPZ7SuVpUzCQ4hekoWR_os1faCyJ4mD72asa9CHEYWDOw0xIYY9/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -942,6 +942,25 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const [ytUrls,setYtUrls]=useState({full:match.youtubeUrl||"",first:match.youtubeUrl1st||"",second:match.youtubeUrl2nd||""});
   const [ytCopied,setYtCopied]=useState("");
   const [matchMemo,setMatchMemo]=useState(()=>String(match.memo||""));
+  const parseSubstitutions = v => {
+    try {
+      const arr = typeof v === "string" ? JSON.parse(v || "[]") : (Array.isArray(v) ? v : []);
+      if (!Array.isArray(arr)) return [];
+      return arr.map(item => ({
+        half: normalizeHalfLabel(item?.half || "1st"),
+        minute: Math.max(0, Number(item?.minute || 0) || 0),
+        second: Math.max(0, Math.min(59, Number(item?.second || 0) || 0)),
+        outMemberId: String(item?.outMemberId || ""),
+        inMemberId: String(item?.inMemberId || ""),
+        note: String(item?.note || "")
+      }));
+    } catch (e) {
+      return [];
+    }
+  };
+  const [substitutions,setSubstitutions]=useState(()=>parseSubstitutions(match.substitutions));
+  const [subEdit,setSubEdit]=useState(null);
+  const [subForm,setSubForm]=useState({half:"1st",minute:"",second:"00",outMemberId:"",inMemberId:"",note:""});
   const goalPageRef = useRef(null);
   useEffect(() => {
     const forceTopOnce = () => {
@@ -1081,10 +1100,21 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     if (!scheduleIdForAttend || attendMap === null) return membersSorted;
     return membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
   }, [membersSorted, scheduleIdForAttend, attendMap]);
+  const substitutionSelectableMembers = useMemo(() => {
+    if (!scheduleIdForAttend || attendMap === null) return membersSorted;
+    const attending = membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
+    return attending.length ? attending : membersSorted;
+  }, [membersSorted, scheduleIdForAttend, attendMap]);
   const shotTargetMembers = useMemo(() => {
     if (!scheduleIdForAttend || !attendMap) return membersSorted;
     return membersSorted.filter(m => String(attendMap[m.id] || "") === "○");
   }, [membersSorted, scheduleIdForAttend, attendMap]);
+  const memberNameById = mid => {
+    const id = String(mid || "").trim();
+    if (!id) return "";
+    const found = membersSorted.find(m => String(m.id || "") === id);
+    return found ? found.name : "";
+  };
   const safeActiveShotHalf = visibleHalfOptions.includes(activeShotHalf) ? activeShotHalf : (visibleHalfOptions[0] || "1st");
   const shotsByMember = shotTargetMembers.map(m => ({
     member: m,
@@ -1137,6 +1167,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     setShotByHalf(parsedShot.byHalf);
     setTheirShotsByHalf(parsedShot.theirByHalf);
     setMatchMemo(String(match.memo||""));
+    setSubstitutions(parseSubstitutions(match?.substitutions || []));
+    setSubEdit(null);
+    setSubForm({half:"1st",minute:"",second:"00",outMemberId:"",inMemberId:"",note:""});
     setMatchStats({
       ourShots:Math.max(0, Number(match.ourShots||0)||0),
       theirShots:Math.max(0, Number(match.theirShots||0)||0),
@@ -1154,7 +1187,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     setFormation(key);
     setFormationSlots(key ? buildFormationSlots(key, saved) : {});
     setShotSavedTick(0);
-  }, [match?.id, match?.memo, match?.shotStats, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.formation, match?.formationSlots]);
+  }, [match?.id, match?.memo, match?.shotStats, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.formation, match?.formationSlots, match?.substitutions]);
   useEffect(() => {
     let active = true;
     if (!scheduleIdForAttend) {
@@ -1227,6 +1260,57 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     }
     setShotSaving(false);
   };
+  const openAddSub = () => {
+    const firstHalf = visibleHalfOptions[0] || "1st";
+    setSubEdit(null);
+    setSubForm({half:firstHalf,minute:"",second:"00",outMemberId:"",inMemberId:"",note:""});
+    setModal("substitution");
+  };
+  const openEditSub = idx => {
+    const item = substitutions[idx];
+    if (!item) return;
+    setSubEdit(idx);
+    setSubForm({
+      half: normalizeHalfLabel(item.half || "1st"),
+      minute: String(Math.max(0, Number(item.minute || 0) || 0)),
+      second: String(Math.max(0, Math.min(59, Number(item.second || 0) || 0))).padStart(2, "0"),
+      outMemberId: String(item.outMemberId || ""),
+      inMemberId: String(item.inMemberId || ""),
+      note: String(item.note || "")
+    });
+    setModal("substitution");
+  };
+  const saveSubstitution = () => {
+    if (!isAdmin) return;
+    if (!subForm.outMemberId || !subForm.inMemberId) {
+      alert("交代 OUT / IN を選んでください");
+      return;
+    }
+    if (String(subForm.outMemberId) === String(subForm.inMemberId)) {
+      alert("OUT と IN は別の選手にしてください");
+      return;
+    }
+    const item = {
+      half: normalizeHalfLabel(subForm.half || "1st"),
+      minute: Math.max(0, Number(subForm.minute || 0) || 0),
+      second: Math.max(0, Math.min(59, Number(subForm.second || 0) || 0)),
+      outMemberId: String(subForm.outMemberId || ""),
+      inMemberId: String(subForm.inMemberId || ""),
+      note: String(subForm.note || "").trim()
+    };
+    setSubstitutions(prev => {
+      const next = [...(prev || [])];
+      if (subEdit === null || subEdit === undefined) next.push(item);
+      else if (next[subEdit]) next[subEdit] = item;
+      return next;
+    });
+    setSubEdit(null);
+    setModal(null);
+  };
+  const removeSubstitution = idx => {
+    if (!isAdmin) return;
+    setSubstitutions(prev => (prev || []).filter((_, i) => i !== idx));
+  };
 
   const addOur=()=>{if(!ng.scorerId)return alert("得点者を選んでください");if(ng.minute==="")return alert("時間を入力してください");setGoals(p=>[...p,{...ng,minute:+ng.minute,second:+(ng.second||0)}]);setNg(p=>({...p,scorerId:"",assistId:"",minute:"",second:"00"}));setModal(null);};
   const addTheir=()=>{if(ntg.minute==="")return alert("時間を入力してください");setTheirG(p=>[...p,{...ntg,minute:+ntg.minute,second:+(ntg.second||0)}]);setNtg(p=>({...p,minute:"",second:"00"}));setModal(null);};
@@ -1248,6 +1332,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
         theirOffsides:getStatValue("theirOffsides"),
         formation:formation || "",
         formationSlots:formation ? formationSlots : {},
+        substitutions,
         memo:matchMemo,
         shotStats:shotStatsPayload,
         pkKickers:hasPk?pkKickers:null,
@@ -1415,6 +1500,38 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       );
     })
   );
+  const substitutionTimeline = [...(substitutions || [])]
+    .map((s, idx) => ({...s, _idx: idx}))
+    .sort((a,b)=>halfSortOrder(a.half)-halfSortOrder(b.half)||Number(a.minute)-Number(b.minute)||Number(a.second)-Number(b.second)||a._idx-b._idx);
+  const substitutionsBlock = h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:8,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
+      h("div",{style:{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:2}},"SUBSTITUTIONS"),
+      isAdmin && h("button",{onClick:openAddSub,style:{border:"1px solid #1D4ED8",background:"#EFF6FF",color:"#1D4ED8",borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},"＋ 交代を追加")
+    ),
+    substitutionTimeline.length===0
+      ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"交代履歴なし")
+      : substitutionTimeline.map((s,i)=>{
+          const outName = memberNameById(s.outMemberId) || "未設定";
+          const inName = memberNameById(s.inMemberId) || "未設定";
+          const halfLabel = halfLabelMap[normHalf(s.half)] || normHalf(s.half) || "";
+          const sec = String(Math.max(0, Math.min(59, Number(s.second || 0) || 0))).padStart(2,"0");
+          return h("div",{key:`sub-${s._idx}-${i}`,style:{display:"grid",gridTemplateColumns:isAdmin?"86px 1fr auto":"86px 1fr",gap:8,alignItems:"center",padding:"8px 0",borderBottom:i===substitutionTimeline.length-1?"none":"1px solid #F1F5F9"}},
+            h("div",{style:{fontSize:11,fontWeight:800,color:"#64748B"}},`${halfLabel} ${Number(s.minute||0)}:${sec}`),
+            h("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
+              h("span",{style:{background:"#FEE2E2",color:"#B91C1C",borderRadius:999,padding:"2px 8px",fontSize:11,fontWeight:800}},"OUT"),
+              h("span",{style:{fontSize:12,fontWeight:700,color:"#334155"}},outName),
+              h("span",{style:{color:"#94A3B8",fontSize:12,fontWeight:800}},"→"),
+              h("span",{style:{background:"#DCFCE7",color:"#166534",borderRadius:999,padding:"2px 8px",fontSize:11,fontWeight:800}},"IN"),
+              h("span",{style:{fontSize:12,fontWeight:700,color:"#334155"}},inName),
+              s.note && h("span",{style:{fontSize:11,color:"#64748B"}},"(" + s.note + ")")
+            ),
+            isAdmin && h("div",{style:{display:"flex",gap:6}},
+              h("button",{onClick:()=>openEditSub(s._idx),style:{border:"1px solid #CBD5E1",background:"#fff",color:"#64748B",borderRadius:8,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}},"編集"),
+              h("button",{onClick:()=>removeSubstitution(s._idx),style:{border:"1px solid #FECACA",background:"#FEF2F2",color:"#DC2626",borderRadius:8,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}},"削除")
+            )
+          );
+        })
+  );
 
   const formationSlotsDef = MATCH_FORMATION_PRESETS[formation] || [];
   const formationRoleOfSlot = slot => {
@@ -1549,6 +1666,48 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       )
     )
   );
+  const substitutionModal = modal==="substitution"
+    ? h(Modal,{title:subEdit===null?"🔁 交代を追加":"🔁 交代を編集",onClose:()=>{setModal(null);setSubEdit(null);}},
+        h("div",{style:{marginBottom:12}},
+          h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:6}},"ハーフ"),
+          h("div",{style:{display:"flex",gap:8}},
+            visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setSubForm(p=>({...p,half:hf})),style:{flex:1,padding:"9px 8px",border:`2px solid ${subForm.half===hf?"#1D4ED8":"#E2E8F0"}`,borderRadius:9,background:subForm.half===hf?"#1D4ED8":"#fff",color:subForm.half===hf?"#fff":"#475569",fontSize:12,fontWeight:800,cursor:"pointer"}},hf))
+          )
+        ),
+        h("div",{style:{display:"flex",gap:10,marginBottom:12}},
+          h("div",{style:{flex:1}},
+            h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:6}},"分"),
+            h("input",{value:subForm.minute,onChange:e=>setSubForm(p=>({...p,minute:e.target.value})),type:"number",min:"0",max:"120",style:{...css.inp,textAlign:"center",fontSize:20,fontWeight:900}})
+          ),
+          h("div",{style:{flex:1}},
+            h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:6}},"秒"),
+            h("input",{value:subForm.second,onChange:e=>setSubForm(p=>({...p,second:e.target.value})),onBlur:e=>setSubForm(p=>({...p,second:(String(e.target.value||"").trim()===""?"00":String(Math.max(0,Math.min(59,Number(e.target.value)||0))).padStart(2,"0"))})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:20,fontWeight:900}})
+          )
+        ),
+        h("div",{style:{marginBottom:12}},
+          h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:6}},"OUT"),
+          h("select",{value:subForm.outMemberId,onChange:e=>setSubForm(p=>({...p,outMemberId:e.target.value})),style:css.inp},
+            h("option",{value:""},"選手を選択"),
+            substitutionSelectableMembers.map(m=>h("option",{key:`out-${m.id}`,value:m.id},"#"+(m.number||"-")+" "+m.name))
+          )
+        ),
+        h("div",{style:{marginBottom:12}},
+          h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:6}},"IN"),
+          h("select",{value:subForm.inMemberId,onChange:e=>setSubForm(p=>({...p,inMemberId:e.target.value})),style:css.inp},
+            h("option",{value:""},"選手を選択"),
+            substitutionSelectableMembers.map(m=>h("option",{key:`in-${m.id}`,value:m.id},"#"+(m.number||"-")+" "+m.name))
+          )
+        ),
+        h("div",{style:{marginBottom:18}},
+          h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:6}},"メモ（任意）"),
+          h("input",{value:subForm.note,onChange:e=>setSubForm(p=>({...p,note:e.target.value})),placeholder:"例: 負傷対応",style:css.inp})
+        ),
+        h("div",{style:{display:"flex",gap:10}},
+          h("button",{onClick:()=>{setModal(null);setSubEdit(null);},style:css.bG},"キャンセル"),
+          h("button",{onClick:saveSubstitution,style:css.bS},"保存")
+        )
+      )
+    : null;
   const editGoalModal = (modal==="editGoal"&&editNg&&editGoal)
     ? h(Modal,{title:"✏️ ゴールを編集",onClose:()=>setModal(null)},
         editGoal.type==="our"&&h("div",{style:{marginBottom:14}},
@@ -1601,6 +1760,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       scoreboardBlock,
       matchStatsBlock,
       goalsTimelineBlock,
+      substitutionsBlock,
       formationBlock,
       matchInputBlock,
       // PK戦セクション（折りたたみ）
@@ -1744,8 +1904,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
         h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#607D8B"},{v:"オウンゴール",c:"#4CAF50"}].map(x=>h("button",{key:x.v,onClick:()=>setNtg(p=>({...p,goalType:x.v})),style:{flex:1,padding:10,border:`2px solid ${ntg.goalType===x.v?x.c:"#eee"}`,borderRadius:10,background:ntg.goalType===x.v?x.c:"#fff",color:ntg.goalType===x.v?"#fff":"#666",fontSize:12,fontWeight:700,cursor:"pointer"}},x.v)))),
       h("div",{style:{display:"flex",gap:10}},h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),h("button",{onClick:addTheir,style:{...css.bS,background:"#607D8B"}},"追加"))),
 
+    substitutionModal,
+
     // ゴール編集モーダル
-    editGoalModal)));
+    editGoalModal));
 }
 
 // ── ホームタブ ─────────────────────────────────────────────────
