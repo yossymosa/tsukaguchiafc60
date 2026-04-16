@@ -52,6 +52,28 @@ function getHostFromUrl(url) {
   }
 }
 
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function getNextSunday0900Local() {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0, 0, 0);
+  const day = d.getDay(); // 0 Sun
+  const add = day === 0 ? 0 : 7 - day;
+  d.setDate(d.getDate() + add);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T09:00:00`;
+}
+
+function normalizeStartTime(value) {
+  const s = String(value || "").trim();
+  if (!s) return "";
+  const t = s.replace(" ", "T");
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(t)) return `${t}:00`;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) return t;
+  return "";
+}
+
 function buildHeaders(effectiveHost) {
   const headers = { Accept: "application/json" };
   const rapidKey = String(process.env.NAVITIME_RAPIDAPI_KEY || "").trim();
@@ -133,6 +155,10 @@ module.exports = async function handler(req, res) {
   const fromWord = String(body.fromWord || "").trim();
   const toWord = String(body.toWord || "").trim();
   const condition = String(body.condition || "toll_time").trim() || "toll_time";
+  const useEtc = body.useEtc === true || String(body.useEtc || "").toLowerCase() === "true";
+  const holidayMode = body.holidayMode === true || String(body.holidayMode || "").toLowerCase() === "true";
+  const normalizedStart = normalizeStartTime(body.departAt);
+  const startTime = normalizedStart || (holidayMode ? getNextSunday0900Local() : "");
   if (!fromWord || !toWord) {
     return res.status(400).json({ ok: false, error: "fromWord and toWord are required" });
   }
@@ -177,6 +203,8 @@ module.exports = async function handler(req, res) {
       start,
       goal,
       condition,
+      etc: useEtc ? "use" : "unuse",
+      start_time: startTime,
       format: "json",
     });
     const routeJson = await fetchNavitimeJson(routeUrl, headers);
@@ -208,6 +236,8 @@ module.exports = async function handler(req, res) {
       distanceKm,
       timeMin,
       tollRoadDistanceKm: Math.round((tollRoadDistanceM / 1000) * 10) / 10,
+      etcUsed: useEtc,
+      startTime: startTime || null,
     });
   } catch (e) {
     const status = Number(e && e.status);
