@@ -179,7 +179,6 @@ module.exports = async function handler(req, res) {
       condition,
       order: "time",
       format: "json",
-      lang: "ja",
     });
     const routeJson = await fetchNavitimeJson(routeUrl, headers);
 
@@ -225,4 +224,3 @@ module.exports = async function handler(req, res) {
     });
   }
 };
-
