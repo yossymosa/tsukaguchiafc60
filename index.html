@@ -2973,6 +2973,15 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
         .map(v => String(v || "").trim())
         .filter(Boolean)
     )];
+  const toParentToken = name => {
+    const n = normalizeName(name);
+    if (!n) return "";
+    if (n === "父" || /父$/.test(n)) return "父";
+    if (n === "母" || /母$/.test(n)) return "母";
+    return "";
+  };
+  const pickParentMembers = list =>
+    [...new Set(parseFamilyMembers(list || []).map(toParentToken).filter(Boolean))];
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user || {};
   const profileFamilyChoices = parseFamilyMembers(currentUserProfile.familyMembers || currentUserProfile.familyComposition || []);
   const luggageLabel = String(schedule.luggagePerson || "").trim();
@@ -3237,14 +3246,17 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
       return alert("家族で行く場合の受け入れ人数（0以上）を選択してください");
     }
     setSaving(true);
-    const selectedFamilyMembers = parseFamilyMembers(my.familyMembers || []);
+    let selectedFamilyMembers = parseFamilyMembers(my.familyMembers || []);
+    if (isCurrentLuggageCar) {
+      selectedFamilyMembers = pickParentMembers(selectedFamilyMembers);
+    }
     if(!isCurrentLuggageCar && selectedFamilyMembers.length===0){
       setSaving(false);
       return alert("配車可否に関わらず、行く人（家族）を選択してください");
     }
-    if(isCurrentLuggageCar && my.familyPlan==="行く" && selectedFamilyMembers.length===0){
+    if(isCurrentLuggageCar && selectedFamilyMembers.length===0){
       setSaving(false);
-      return alert("荷物車で家族と行く場合は、行く家族を選択してください");
+      return alert("荷物車でも、行く人（家族）を選択してください");
     }
     const isFamilyRide = normalizedAvailable === "家族で行く";
     const payload = {
@@ -3511,7 +3523,14 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
   };
   const getPreferredDriverIds = car => {
     const familyDisplay = getFamilyDisplayNamesForCar(car);
-    const parentDisplay = familyDisplay.filter(name => /父$|母$/.test(normalizeName(name)));
+    const parentDisplay = familyDisplay
+      .filter(name => /父$|母$/.test(normalizeName(name)))
+      .sort((a,b)=>{
+        const na = normalizeName(a);
+        const nb = normalizeName(b);
+        const rank = n => /父$/.test(n) ? 0 : (/母$/.test(n) ? 1 : 9);
+        return rank(na) - rank(nb);
+      });
     const ids = [
       ...parentDisplay.map(findPersonOptionId),
       ...familyDisplay.map(findPersonOptionId),
@@ -3850,8 +3869,8 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
                           ...p,
                           available:"家族で行く",
                           familyPlan:"行く",
-                          capacity:(p.capacity==="" ? "1" : String(p.capacity ?? "1")),
-                          familyMembers: parseFamilyMembers(p.familyMembers || [])
+                          capacity:(p.capacity==="" ? "0" : String(p.capacity ?? "0")),
+                          familyMembers: pickParentMembers(p.familyMembers || [])
                         };
                       }
                       return {
@@ -3859,7 +3878,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
                         available:"可",
                         familyPlan:"行かない",
                         capacity:(p.capacity==="" ? "1" : String(p.capacity ?? "1")),
-                        familyMembers:[]
+                        familyMembers: pickParentMembers(p.familyMembers || [])
                       };
                     }),
                     style:{flex:1,padding:"11px 0",border:`2px solid ${my.familyPlan===v?col:"#eee"}`,
@@ -3886,31 +3905,35 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
                       borderRadius:12,background:my.available===v?col:"#fff",
                       color:my.available===v?"#fff":"#aaa",fontSize:14,fontWeight:700,cursor:"pointer"}},v))))
       ),
-      (((!isCurrentLuggageCar) && !!my.available) || (isCurrentLuggageCar && my.familyPlan==="行く")) && h("div",{style:{marginBottom:14,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
+      (((!isCurrentLuggageCar) && !!my.available) || (isCurrentLuggageCar && !!my.familyPlan)) && h("div",{style:{marginBottom:14,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
         h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",marginBottom:8}},
-          isCurrentLuggageCar ? "行く家族を選択" : "行く人（家族）を選択"),
-        familyChoices.length===0
+          "行く人（家族）を選択"),
+        (isCurrentLuggageCar ? ["父","母"] : familyChoices).length===0
           ? h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700,marginBottom:8}},"家族名を追加してください")
           : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
-              familyChoices.map(name=>{
-                const checked=(my.familyMembers||[]).includes(name);
+              (isCurrentLuggageCar ? ["父","母"] : familyChoices).map(name=>{
+                const checked = isCurrentLuggageCar
+                  ? pickParentMembers(my.familyMembers || []).includes(name)
+                  : (my.familyMembers||[]).includes(name);
                 const displayName = formatFamilyDisplayName(name, currentUserProfile.name || user.name || "");
                 return h("button",{
                   key:"fm-"+name,
                   onClick:()=>setMy(p=>{
-                    const cur=parseFamilyMembers(p.familyMembers||[]);
+                    const cur = isCurrentLuggageCar
+                      ? pickParentMembers(p.familyMembers || [])
+                      : parseFamilyMembers(p.familyMembers||[]);
                     const next=checked ? cur.filter(x=>x!==name) : [...cur,name];
                     return {
                       ...p,
                       familyMembers:next,
-                      familyPlan: next.length > 0 ? "行く" : "行かない"
+                      familyPlan: isCurrentLuggageCar ? p.familyPlan : (next.length > 0 ? "行く" : "行かない")
                     };
                   }),
                   style:{border:`1px solid ${checked?"#1D4ED8":"#CBD5E1"}`,background:checked?"#DBEAFE":"#fff",color:checked?"#1D4ED8":"#334155",borderRadius:999,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}
                 },(checked?"✓ ":"")+displayName);
               })
             ),
-        h("div",{style:{display:"flex",gap:6,marginTop:6}},
+        !isCurrentLuggageCar && h("div",{style:{display:"flex",gap:6,marginTop:6}},
           h("input",{
             value:familyDraft,
             onChange:e=>setFamilyDraft(e.target.value),
@@ -3927,9 +3950,11 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
       ),
       (((!isCurrentLuggageCar) && (my.available==="可" || my.available==="家族で行く")) || (isCurrentLuggageCar && !!my.familyPlan))&&h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:4}},
-          (isCurrentLuggageCar || my.available==="可")
-            ? "何人乗せられますか？（運転手を含む）"
-            : "空きがある場合何人載せれますか（事情があり載せれない場合は0を選んでください）"),
+          (isCurrentLuggageCar && my.familyPlan==="行く")
+            ? "家族を乗せた後、残り何人載せられますか？（0以上）"
+            : ((isCurrentLuggageCar || my.available==="可")
+              ? "何人乗せられますか？（運転手を含む）"
+              : "空きがある場合何人載せれますか（事情があり載せれない場合は0を選んでください）")),
         h("div",{style:{display:"flex",gap:8}},
           [0,1,2,3,4,5,6,7].map(n=>
             h("button",{key:n,onClick:()=>setMy(p=>({...p,capacity:String(n)})),
