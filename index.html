@@ -4720,11 +4720,12 @@ function AlbumSection({schedule, isAdmin, canWrite=true}) {
 
 // ── 精算セクション（adminのみ） ────────────────────────────────
 function SettlementSection({schedule}) {
-  const ORIGIN = "塚口小学校";
+  const DEFAULT_ORIGIN = "塚口小学校";
   const storageKey = "afc_settlement_" + String(schedule?.id || "");
   const defaultDestination = String(schedule?.location || "").trim();
   const defaultForm = {
     mode: "dispatch", // dispatch | luggage
+    origin: DEFAULT_ORIGIN,
     destination: defaultDestination,
     oneWayKm: "",
     returnKm: "",
@@ -4744,6 +4745,8 @@ function SettlementSection({schedule}) {
   const [form, setForm] = useState(defaultForm);
   const [icFetchBusy, setIcFetchBusy] = useState("");
   const [icFetchMsg, setIcFetchMsg] = useState("");
+  const [distanceFetchBusy, setDistanceFetchBusy] = useState(false);
+  const [distanceFetchMsg, setDistanceFetchMsg] = useState("");
   const toNum = (v, fallback = 0) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
@@ -4783,6 +4786,9 @@ function SettlementSection({schedule}) {
       if (!String(nextForm.destination || "").trim() && defaultDestination) {
         nextForm.destination = defaultDestination;
       }
+      if (!String(nextForm.origin || "").trim()) {
+        nextForm.origin = DEFAULT_ORIGIN;
+      }
       setForm(nextForm);
     } catch (_e) {
       setForm(defaultForm);
@@ -4805,15 +4811,42 @@ function SettlementSection({schedule}) {
     });
   };
 
-  const openGoogleMaps = () => {
+  const openNavitimeRoute = () => {
+    const from = String(form.origin || "").trim() || DEFAULT_ORIGIN;
     const dest = String(form.destination || "").trim();
     if (!dest) return alert("目的地を入力してください");
-    const url =
-      "https://www.google.com/maps/dir/?api=1"
-      + "&origin=" + encodeURIComponent(ORIGIN)
-      + "&destination=" + encodeURIComponent(dest)
-      + "&travelmode=driving";
-    window.open(url, "_blank", "noopener,noreferrer");
+    const startJson = encodeURIComponent(JSON.stringify({ name: from, "road-type": "default" }));
+    const goalJson = encodeURIComponent(JSON.stringify({ name: dest, "road-type": "default" }));
+    const guidanceUrl = `https://www.navitime.co.jp/drive/route/guidance?start=${startJson}&goal=${goalJson}`;
+    const routeUrl = `https://www.navitime.co.jp/drive/route/?start=${encodeURIComponent(from)}&goal=${encodeURIComponent(dest)}`;
+    const w = window.open(guidanceUrl, "_blank", "noopener,noreferrer");
+    if (!w) {
+      window.open(routeUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const fetchDistanceOnly = async () => {
+    const from = String(form.origin || "").trim() || DEFAULT_ORIGIN;
+    const dest = String(form.destination || "").trim();
+    if (!dest) return alert("目的地を入力してください");
+    setDistanceFetchBusy(true);
+    setDistanceFetchMsg("");
+    try {
+      const res = await fetch("/api/maps-route-estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin: from, destination: dest }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "距離取得に失敗しました");
+      const distanceKm = Number(json.distanceKm || 0);
+      if (!(distanceKm > 0)) throw new Error("距離が取得できませんでした");
+      patchForm({ oneWayKm: String(distanceKm) });
+      setDistanceFetchMsg(`距離取得: ${from} → ${dest} / ${distanceKm}km（往路kmに反映）`);
+    } catch (e) {
+      setDistanceFetchMsg(`距離取得エラー: ${String((e && e.message) || e || "")}`);
+    }
+    setDistanceFetchBusy(false);
   };
 
   const fetchIcToll = async direction => {
@@ -4868,7 +4901,12 @@ function SettlementSection({schedule}) {
     h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"💴 精算（仮）"),
     h("div",{style:{marginBottom:10,padding:"10px 12px",border:"1px solid #E2E8F0",borderRadius:10,background:"#F8FAFC"}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"出発地"),
-      h("div",{style:{fontSize:14,fontWeight:800,color:"#0F172A"}},ORIGIN)
+      h("input",{
+        value:form.origin,
+        onChange:e=>patchForm({origin:e.target.value}),
+        placeholder:DEFAULT_ORIGIN,
+        style:{...css.inp,width:"100%"}
+      })
     ),
     h("div",{style:{marginBottom:10}},
       h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"精算区分"),
@@ -4896,8 +4934,11 @@ function SettlementSection({schedule}) {
       h("input",{value:form.destination,onChange:e=>patchForm({destination:e.target.value}),placeholder:"例：三木防災公園",style:{...css.inp,width:"100%"}})
     ),
     h("div",{style:{display:"flex",gap:8,marginBottom:10}},
-      h("button",{onClick:openGoogleMaps,style:{...css.bG,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10}},"🗺 Googleマップで確認")
+      h("button",{onClick:openNavitimeRoute,style:{...css.bG,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10}},"🧭 NAVITIMEでルート確認"),
+      h("button",{onClick:fetchDistanceOnly,disabled:distanceFetchBusy,style:{...css.bS,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10,opacity:distanceFetchBusy?0.7:1,cursor:distanceFetchBusy?"wait":"pointer"}},
+        distanceFetchBusy ? "取得中..." : "📏 距離を取得")
     ),
+    distanceFetchMsg&&h("div",{style:{marginBottom:10,fontSize:11,fontWeight:700,color:distanceFetchMsg.startsWith("距離取得エラー")?"#DC2626":"#1D4ED8",whiteSpace:"pre-wrap"}},distanceFetchMsg),
     dispatchRule&&h(Fragment,{},
       h("div",{style:{marginBottom:10,padding:"10px 12px",border:"1px solid #E2E8F0",borderRadius:10,background:"#F8FAFC"}},
         h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",marginBottom:8}},"ICから高速代取得（任意 / NAVITIME）"),
@@ -4935,7 +4976,13 @@ function SettlementSection({schedule}) {
           h("input",{type:"number",min:"0",step:"0.1",value:form.oneWayKm,onChange:e=>patchForm({oneWayKm:e.target.value}),placeholder:"例: 12.4",style:{...css.inp,width:"100%"}})
         ),
         h("div",{style:{flex:1}},
-          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"復路km"),
+          h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6}},
+            h("span",{style:{fontSize:12,fontWeight:600,color:"#666"}},"復路km"),
+            h("button",{
+              onClick:()=>patchForm({returnKm:String(form.oneWayKm||"")}),
+              style:{...css.bG,padding:"5px 8px",fontSize:11,borderRadius:8,flex:"0 0 auto"}
+            },"往路と同じ")
+          ),
           h("input",{type:"number",min:"0",step:"0.1",value:form.returnKm,onChange:e=>patchForm({returnKm:e.target.value}),placeholder:"例: 12.4",style:{...css.inp,width:"100%"}})
         )
       ),
@@ -4951,7 +4998,13 @@ function SettlementSection({schedule}) {
           h("input",{type:"number",min:"0",step:"1",value:form.highwayOutYen,onChange:e=>patchForm({highwayOutYen:e.target.value}),style:{...css.inp,width:"100%"}})
         ),
         h("div",{style:{flex:1}},
-          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"高速代（復路円）"),
+          h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6}},
+            h("span",{style:{fontSize:12,fontWeight:600,color:"#666"}},"高速代（復路円）"),
+            h("button",{
+              onClick:()=>patchForm({highwayReturnYen:String(form.highwayOutYen||"0")}),
+              style:{...css.bG,padding:"5px 8px",fontSize:11,borderRadius:8,flex:"0 0 auto"}
+            },"往路と同じ")
+          ),
           h("input",{type:"number",min:"0",step:"1",value:form.highwayReturnYen,onChange:e=>patchForm({highwayReturnYen:e.target.value}),style:{...css.inp,width:"100%"}})
         )
       ),
