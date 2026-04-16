@@ -26,15 +26,32 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function pickFareYen(fare) {
+function pickFareYen(fare, preferredVehicleClass = "2") {
   if (!fare || typeof fare !== "object") return null;
-  const values = Object.entries(fare)
-    .map(([key, value]) => ({ key, value: toNumber(value, NaN) }))
+  const parsed = Object.entries(fare)
+    .map(([key, value]) => {
+      const m = String(key).match(/^unit_(\d+)(?:_(\d+))?$/);
+      return {
+        key: String(key),
+        value: toNumber(value, NaN),
+        fareId: m ? String(m[1]) : "",
+        vehicleClass: m && m[2] ? String(m[2]) : "",
+      };
+    })
     .filter(v => Number.isFinite(v.value) && v.value >= 0);
-  if (!values.length) return null;
-  const carClass = values.filter(v => /_1$/.test(v.key));
-  const pool = carClass.length ? carClass : values;
-  return Math.round(Math.min(...pool.map(v => v.value)));
+  if (!parsed.length) return null;
+
+  const byPreferredVehicle = parsed.filter(v => v.vehicleClass === String(preferredVehicleClass));
+  const byNormalVehicle = parsed.filter(v => v.vehicleClass === "2");
+  const byLightVehicle = parsed.filter(v => v.vehicleClass === "1");
+  const pool = byPreferredVehicle.length
+    ? byPreferredVehicle
+    : (byNormalVehicle.length ? byNormalVehicle : (byLightVehicle.length ? byLightVehicle : parsed));
+
+  // 複数候補がある場合は最小値を採用（契約・条件により複数運賃区分が返るため）
+  const best = pool.reduce((acc, cur) => (acc == null || cur.value < acc.value ? cur : acc), null);
+  if (!best) return null;
+  return { yen: Math.round(best.value), key: best.key, fareId: best.fareId, vehicleClass: best.vehicleClass || "" };
 }
 
 function normalizeEndpoint(url) {
@@ -219,7 +236,8 @@ module.exports = async function handler(req, res) {
     const distanceMeters = toNumber(summaryMove.distance, 0);
     const distanceKm = Math.round((distanceMeters / 1000) * 10) / 10;
     const timeMin = toNumber(summaryMove.time, 0);
-    const tollYen = pickFareYen(summaryMove.fare);
+    const pickedFare = pickFareYen(summaryMove.fare, "2");
+    const tollYen = pickedFare ? pickedFare.yen : null;
     const tollRoadDistanceM = toNumber(summaryMove.toll_road_distance, 0);
 
     return res.status(200).json({
@@ -233,6 +251,8 @@ module.exports = async function handler(req, res) {
         name: String(toIc.name || toWord),
       },
       tollYen: tollYen == null ? null : Math.max(0, Math.round(tollYen)),
+      fareKeyUsed: pickedFare ? pickedFare.key : "",
+      fareVehicleClass: pickedFare ? pickedFare.vehicleClass : "",
       distanceKm,
       timeMin,
       tollRoadDistanceKm: Math.round((tollRoadDistanceM / 1000) * 10) / 10,
