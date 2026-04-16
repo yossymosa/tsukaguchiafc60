@@ -177,7 +177,6 @@ module.exports = async function handler(req, res) {
       start,
       goal,
       condition,
-      order: "time",
       format: "json",
     });
     const routeJson = await fetchNavitimeJson(routeUrl, headers);
