@@ -4856,7 +4856,7 @@ function SettlementSection({schedule}) {
           returnToIcWord: String((json.toIc && json.toIc.name) || toWord),
         });
       }
-      const modeText = `${form.useEtc ? "ETC" : "一般"}${form.holidayMode ? " / 休日条件ON" : ""}`;
+      const modeText = `普通車 / ${form.useEtc ? "ETC" : "一般"}${form.holidayMode ? " / 休日条件ON" : ""}`;
       setIcFetchMsg(
         `${isOut ? "往路" : "復路"}: ${(json.fromIc && json.fromIc.name) || fromWord} → ${(json.toIc && json.toIc.name) || toWord} / ${modeText} / 高速代 ${Math.max(0, Math.round(tollYen)).toLocaleString()}円`
       );
