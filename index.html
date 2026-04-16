@@ -4732,10 +4732,16 @@ function SettlementSection({schedule}) {
     parkingYen: "0",
     highwayOutYen: "0",
     highwayReturnYen: "0",
+    outFromIcWord: "",
+    outToIcWord: "",
+    returnFromIcWord: "",
+    returnToIcWord: "",
     luggageCarriesPeople: false,
     luggageBikeArea: true,
   };
   const [form, setForm] = useState(defaultForm);
+  const [icFetchBusy, setIcFetchBusy] = useState("");
+  const [icFetchMsg, setIcFetchMsg] = useState("");
   const toNum = (v, fallback = 0) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
@@ -4750,7 +4756,9 @@ function SettlementSection({schedule}) {
   const dispatchRule = form.mode === "dispatch" || (form.mode === "luggage" && (form.luggageCarriesPeople || !form.luggageBikeArea));
   const nearRule = dispatchRule && !!form.withinAmagasaki && oneWayKm > 0 && oneWayKm < 11;
   const isFarRule = dispatchRule && !nearRule;
-  const gasYen = isFarRule ? Math.round((totalKm / 8) * 175) : 0;
+  const gasOutYen = isFarRule ? Math.round((Math.max(0, oneWayKm) / 8) * 175) : 0;
+  const gasReturnYen = isFarRule ? Math.round((Math.max(0, returnKm) / 8) * 175) : 0;
+  const gasYen = gasOutYen + gasReturnYen;
   const thanksYen = isFarRule ? (oneWayKm < 15 ? 500 : 1000) : 0;
   const luggageBaseYen = (!dispatchRule) ? 200 : 0;
   const totalYen = dispatchRule
@@ -4806,6 +4814,51 @@ function SettlementSection({schedule}) {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  const fetchIcToll = async direction => {
+    const isOut = direction === "out";
+    const fromWord = String(isOut ? form.outFromIcWord : form.returnFromIcWord).trim();
+    const toWord = String(isOut ? form.outToIcWord : form.returnToIcWord).trim();
+    if (!fromWord || !toWord) return alert("入口IC名と出口IC名を入力してください");
+    setIcFetchBusy(direction);
+    setIcFetchMsg("");
+    try {
+      const res = await fetch("/api/navitime-ic-toll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fromWord,
+          toWord,
+          condition: "toll_time",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "NAVITIME取得に失敗しました");
+      const tollYen = Number(json.tollYen || 0);
+      const distanceKm = Number(json.distanceKm || 0);
+      if (isOut) {
+        patchForm({
+          highwayOutYen: String(Math.max(0, Math.round(tollYen))),
+          oneWayKm: form.oneWayKm || (distanceKm > 0 ? String(distanceKm) : form.oneWayKm),
+          outFromIcWord: String((json.fromIc && json.fromIc.name) || fromWord),
+          outToIcWord: String((json.toIc && json.toIc.name) || toWord),
+        });
+      } else {
+        patchForm({
+          highwayReturnYen: String(Math.max(0, Math.round(tollYen))),
+          returnKm: form.returnKm || (distanceKm > 0 ? String(distanceKm) : form.returnKm),
+          returnFromIcWord: String((json.fromIc && json.fromIc.name) || fromWord),
+          returnToIcWord: String((json.toIc && json.toIc.name) || toWord),
+        });
+      }
+      setIcFetchMsg(
+        `${isOut ? "往路" : "復路"}: ${(json.fromIc && json.fromIc.name) || fromWord} → ${(json.toIc && json.toIc.name) || toWord} / 高速代 ${Math.max(0, Math.round(tollYen)).toLocaleString()}円`
+      );
+    } catch (e) {
+      setIcFetchMsg(`取得エラー: ${String((e && e.message) || e || "")}`);
+    }
+    setIcFetchBusy("");
+  };
+
   return h("div",{style:{background:"#fff",borderRadius:16,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
     h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"💴 精算（仮）"),
     h("div",{style:{marginBottom:10,padding:"10px 12px",border:"1px solid #E2E8F0",borderRadius:10,background:"#F8FAFC"}},
@@ -4841,6 +4894,22 @@ function SettlementSection({schedule}) {
       h("button",{onClick:openGoogleMaps,style:{...css.bG,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10}},"🗺 Googleマップで確認")
     ),
     dispatchRule&&h(Fragment,{},
+      h("div",{style:{marginBottom:10,padding:"10px 12px",border:"1px solid #E2E8F0",borderRadius:10,background:"#F8FAFC"}},
+        h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",marginBottom:8}},"ICから高速代取得（任意 / NAVITIME）"),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"往路（入口IC → 出口IC）"),
+        h("div",{style:{display:"flex",gap:6,marginBottom:6}},
+          h("input",{value:form.outFromIcWord,onChange:e=>patchForm({outFromIcWord:e.target.value}),placeholder:"入口IC 例: 尼崎IC",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("input",{value:form.outToIcWord,onChange:e=>patchForm({outToIcWord:e.target.value}),placeholder:"出口IC 例: 三木東IC",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("button",{onClick:()=>fetchIcToll("out"),disabled:icFetchBusy==="out",style:{...css.bS,padding:"8px 10px",fontSize:12,borderRadius:10,flex:"0 0 auto",opacity:icFetchBusy==="out"?0.7:1,cursor:icFetchBusy==="out"?"wait":"pointer"}},icFetchBusy==="out"?"取得中":"往路取得")
+        ),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"復路（入口IC → 出口IC）"),
+        h("div",{style:{display:"flex",gap:6}},
+          h("input",{value:form.returnFromIcWord,onChange:e=>patchForm({returnFromIcWord:e.target.value}),placeholder:"入口IC 例: 三木東IC",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("input",{value:form.returnToIcWord,onChange:e=>patchForm({returnToIcWord:e.target.value}),placeholder:"出口IC 例: 尼崎IC",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("button",{onClick:()=>fetchIcToll("return"),disabled:icFetchBusy==="return",style:{...css.bS,padding:"8px 10px",fontSize:12,borderRadius:10,flex:"0 0 auto",opacity:icFetchBusy==="return"?0.7:1,cursor:icFetchBusy==="return"?"wait":"pointer"}},icFetchBusy==="return"?"取得中":"復路取得")
+        ),
+        icFetchMsg&&h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:icFetchMsg.startsWith("取得エラー")?"#DC2626":"#1D4ED8",whiteSpace:"pre-wrap"}},icFetchMsg)
+      ),
       h("div",{style:{display:"flex",gap:8,marginBottom:10}},
         h("div",{style:{flex:1}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"往路km"),
@@ -4891,7 +4960,7 @@ function SettlementSection({schedule}) {
                   h("br",{}),
                   `駐車場代: ${parkingYen.toLocaleString()}円`)
               : h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.7}},
-                  `ガソリン代: ${totalKm.toFixed(1)}km ÷ 8 × 175 = ${gasYen.toLocaleString()}円`,
+                  `ガソリン代: 往路${oneWayKm.toFixed(1)}km→${gasOutYen.toLocaleString()}円 + 復路${returnKm.toFixed(1)}km→${gasReturnYen.toLocaleString()}円 = ${gasYen.toLocaleString()}円`,
                   h("br",{}),
                   `駐車場代: ${parkingYen.toLocaleString()}円`,
                   h("br",{}),
@@ -6723,9 +6792,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     const fallback = isSimpleDay ? "detail" : "matches";
     const v = String(raw || "").trim();
     if (isSimpleDay) return (v === "detail" || v === "attend") ? v : fallback;
-    const allowed = isAdmin
-      ? ["matches","detail","attend","carpool","settlement","album"]
-      : ["matches","detail","attend","carpool","album"];
+    const allowed = ["matches","detail","attend","carpool","settlement","album"];
     return allowed.includes(v) ? v : fallback;
   };
   const [dayTab,setDayTab]=useState(()=>resolveDayTab(initialTab)); // "matches"|"detail"|"attend"|"carpool"|"settlement"|"album"
@@ -6988,7 +7055,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
         (isSimpleDay
           ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"}]
-          : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},...(isAdmin?[{k:"settlement",l:"💴 精算"}]:[]),{k:"album",l:"🖼 アルバム"}]
+          : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"}]
         ).map(t=>
           h("button",{key:t.k,onClick:()=>setDayTab(t.k),
             style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
@@ -7077,8 +7144,8 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       // 配車タブ
       dayTab==="carpool"&&h(CarpoolSection,{schedule,user,isAdmin,canWrite,members,users}),
 
-      // 精算タブ（adminのみ）
-      dayTab==="settlement"&&isAdmin&&h(SettlementSection,{schedule}),
+      // 精算タブ
+      dayTab==="settlement"&&h(SettlementSection,{schedule}),
 
       // アルバムタブ
       dayTab==="album"&&h(AlbumSection,{schedule,isAdmin,canWrite}),
