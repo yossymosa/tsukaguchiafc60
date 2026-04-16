@@ -4730,23 +4730,23 @@ function SettlementSection({schedule}) {
     returnKm: "",
     withinAmagasaki: false,
     parkingYen: "0",
-    highwayYen: "0",
+    highwayOutYen: "0",
+    highwayReturnYen: "0",
     luggageCarriesPeople: false,
     luggageBikeArea: true,
   };
   const [form, setForm] = useState(defaultForm);
-  const [estimate, setEstimate] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const toNum = (v, fallback = 0) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
   };
-  const oneWayKm = toNum(form.oneWayKm || (estimate ? estimate.distanceKm : 0), 0);
-  const returnKm = toNum(form.returnKm || form.oneWayKm || (estimate ? estimate.distanceKm : 0), 0);
+  const oneWayKm = toNum(form.oneWayKm, 0);
+  const returnKm = toNum(form.returnKm, 0);
   const totalKm = Math.max(0, oneWayKm) + Math.max(0, returnKm);
   const parkingYen = Math.max(0, toNum(form.parkingYen, 0));
-  const highwayYen = Math.max(0, toNum(form.highwayYen, 0));
+  const highwayOutYen = Math.max(0, toNum(form.highwayOutYen, 0));
+  const highwayReturnYen = Math.max(0, toNum(form.highwayReturnYen, 0));
+  const highwayYen = highwayOutYen + highwayReturnYen;
   const dispatchRule = form.mode === "dispatch" || (form.mode === "luggage" && (form.luggageCarriesPeople || !form.luggageBikeArea));
   const nearRule = dispatchRule && !!form.withinAmagasaki && oneWayKm > 0 && oneWayKm < 11;
   const isFarRule = dispatchRule && !nearRule;
@@ -4763,7 +4763,6 @@ function SettlementSection({schedule}) {
       const raw = localStorage.getItem(storageKey);
       if (!raw) {
         setForm(defaultForm);
-        setEstimate(null);
         return;
       }
       const parsed = JSON.parse(raw);
@@ -4775,18 +4774,15 @@ function SettlementSection({schedule}) {
         nextForm.destination = defaultDestination;
       }
       setForm(nextForm);
-      setEstimate(parsed.estimate || null);
     } catch (_e) {
       setForm(defaultForm);
-      setEstimate(null);
     }
   }, [storageKey, defaultDestination]);
 
-  const persist = (nextForm, nextEstimate) => {
+  const persist = (nextForm) => {
     try {
       localStorage.setItem(storageKey, JSON.stringify({
         form: nextForm,
-        estimate: nextEstimate || null,
         updatedAt: new Date().toISOString(),
       }));
     } catch (_e) {}
@@ -4794,7 +4790,7 @@ function SettlementSection({schedule}) {
   const patchForm = patch => {
     setForm(prev => {
       const next = { ...prev, ...patch };
-      persist(next, estimate);
+      persist(next);
       return next;
     });
   };
@@ -4808,41 +4804,6 @@ function SettlementSection({schedule}) {
       + "&destination=" + encodeURIComponent(dest)
       + "&travelmode=driving";
     window.open(url, "_blank", "noopener,noreferrer");
-  };
-
-  const fetchEstimate = async () => {
-    const dest = String(form.destination || "").trim();
-    if (!dest) return alert("目的地を入力してください");
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/maps-route-estimate", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ origin: ORIGIN, destination: dest }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "精算情報の取得に失敗しました");
-      const next = {
-        distanceKm: Number(json.distanceKm || 0),
-        tollYen: json.tollYen == null ? null : Number(json.tollYen || 0),
-        durationText: String(json.durationText || ""),
-      };
-      setEstimate(next);
-      setForm(prev => {
-        const patched = {
-          ...prev,
-          oneWayKm: prev.oneWayKm || String(next.distanceKm || ""),
-          returnKm: prev.returnKm || (prev.oneWayKm || String(next.distanceKm || "")),
-          highwayYen: prev.highwayYen || (next.tollYen == null ? "" : String(Math.max(0, Math.round(Number(next.tollYen || 0) * 2)))),
-        };
-        persist(patched, next);
-        return patched;
-      });
-    } catch (e) {
-      setError(String(e.message || e));
-    }
-    setLoading(false);
   };
 
   return h("div",{style:{background:"#fff",borderRadius:16,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -4877,14 +4838,12 @@ function SettlementSection({schedule}) {
       h("input",{value:form.destination,onChange:e=>patchForm({destination:e.target.value}),placeholder:"例：三木防災公園",style:{...css.inp,width:"100%"}})
     ),
     h("div",{style:{display:"flex",gap:8,marginBottom:10}},
-      h("button",{onClick:openGoogleMaps,style:{...css.bG,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10}},"🗺 Googleマップで確認"),
-      h("button",{onClick:fetchEstimate,disabled:loading,style:{...css.bS,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10,opacity:loading?0.75:1,cursor:loading?"wait":"pointer"}},
-        loading?"取得中...":"距離・高速代を取得")
+      h("button",{onClick:openGoogleMaps,style:{...css.bG,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10}},"🗺 Googleマップで確認")
     ),
     dispatchRule&&h(Fragment,{},
       h("div",{style:{display:"flex",gap:8,marginBottom:10}},
         h("div",{style:{flex:1}},
-          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"片道km"),
+          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"往路km"),
           h("input",{type:"number",min:"0",step:"0.1",value:form.oneWayKm,onChange:e=>patchForm({oneWayKm:e.target.value}),placeholder:"例: 12.4",style:{...css.inp,width:"100%"}})
         ),
         h("div",{style:{flex:1}},
@@ -4896,10 +4855,16 @@ function SettlementSection({schedule}) {
         h("div",{style:{flex:1}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"駐車場代（円）"),
           h("input",{type:"number",min:"0",step:"1",value:form.parkingYen,onChange:e=>patchForm({parkingYen:e.target.value}),style:{...css.inp,width:"100%"}})
+        )
+      ),
+      h("div",{style:{display:"flex",gap:8,marginBottom:10}},
+        h("div",{style:{flex:1}},
+          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"高速代（往路円）"),
+          h("input",{type:"number",min:"0",step:"1",value:form.highwayOutYen,onChange:e=>patchForm({highwayOutYen:e.target.value}),style:{...css.inp,width:"100%"}})
         ),
         h("div",{style:{flex:1}},
-          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"高速代（円）"),
-          h("input",{type:"number",min:"0",step:"1",value:form.highwayYen,onChange:e=>patchForm({highwayYen:e.target.value}),style:{...css.inp,width:"100%"}})
+          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"高速代（復路円）"),
+          h("input",{type:"number",min:"0",step:"1",value:form.highwayReturnYen,onChange:e=>patchForm({highwayReturnYen:e.target.value}),style:{...css.inp,width:"100%"}})
         )
       ),
       h("label",{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:"#334155",fontWeight:700,cursor:"pointer",marginBottom:10}},
@@ -4913,26 +4878,13 @@ function SettlementSection({schedule}) {
         h("input",{type:"number",min:"0",step:"1",value:form.parkingYen,onChange:e=>patchForm({parkingYen:e.target.value}),style:{...css.inp,width:"100%"}})
       )
     ),
-    error&&h("div",{style:{fontSize:12,color:"#DC2626",marginBottom:8,whiteSpace:"pre-wrap"}},"⚠ "+error),
-    (!calcReady)&&h("div",{style:{fontSize:12,color:"#B45309",marginBottom:8,whiteSpace:"pre-wrap"}},"⚠ 距離（片道/復路）を入力すると計算できます"),
-    estimate&&h("div",{style:{background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:12,padding:"10px 12px"}},
-      h("div",{style:{display:"flex",justifyContent:"space-between",gap:8,fontSize:13,marginBottom:6}},
-        h("span",{style:{color:"#475569",fontWeight:700}},"距離"),
-        h("span",{style:{color:"#1D4ED8",fontWeight:900}},`${estimate.distanceKm} km`)),
-      h("div",{style:{display:"flex",justifyContent:"space-between",gap:8,fontSize:13,marginBottom:6}},
-        h("span",{style:{color:"#475569",fontWeight:700}},"高速代（目安）"),
-        h("span",{style:{color:"#1D4ED8",fontWeight:900}},
-          estimate.tollYen == null ? "取得なし" : `${estimate.tollYen.toLocaleString()} 円`)),
-      h("div",{style:{display:"flex",justifyContent:"space-between",gap:8,fontSize:12}},
-        h("span",{style:{color:"#64748B",fontWeight:700}},"所要時間（目安）"),
-        h("span",{style:{color:"#334155",fontWeight:700}},estimate.durationText || "-"))
-    ),
+    (!calcReady)&&h("div",{style:{fontSize:12,color:"#B45309",marginBottom:8,whiteSpace:"pre-wrap"}},"⚠ 距離（往路/復路）を入力すると計算できます"),
     h("div",{style:{marginTop:10,background:"#FFFFFF",border:"1px solid #E2E8F0",borderRadius:12,padding:"10px 12px"}},
       h("div",{style:{fontSize:12,fontWeight:800,color:"#0F172A",marginBottom:8}},"計算結果"),
       dispatchRule
         ? h(Fragment,{},
             h("div",{style:{fontSize:12,color:"#334155",marginBottom:6,fontWeight:700}},
-              nearRule ? "近郊ルール（尼崎市内・片道11km未満）" : "遠方ルール（片道11km以上 or 近郊条件外）"),
+              nearRule ? "近郊ルール（尼崎市内・往路11km未満）" : "遠方ルール（往路11km以上 or 近郊条件外）"),
             nearRule
               ? h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.7}},
                   `謝礼+ガソリン代(定額): 500円`,
@@ -4943,9 +4895,9 @@ function SettlementSection({schedule}) {
                   h("br",{}),
                   `駐車場代: ${parkingYen.toLocaleString()}円`,
                   h("br",{}),
-                  `高速代: ${highwayYen.toLocaleString()}円`,
+                  `高速代: 往路${highwayOutYen.toLocaleString()}円 + 復路${highwayReturnYen.toLocaleString()}円 = ${highwayYen.toLocaleString()}円`,
                   h("br",{}),
-                  `謝礼: ${thanksYen.toLocaleString()}円（片道${oneWayKm.toFixed(1)}km）`)
+                  `謝礼: ${thanksYen.toLocaleString()}円（往路${oneWayKm.toFixed(1)}km）`)
           )
         : h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.7}},
             `荷物車代: 200円`,
