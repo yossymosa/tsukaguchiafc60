@@ -56,7 +56,7 @@ module.exports = async function handler(req, res) {
   }
 
   const body = await readJsonBody(req);
-  const origin = String(body.origin || "塚口小学校").trim() || "塚口小学校";
+  const origin = String(body.origin || "Tsukaguchi Elementary School").trim() || "Tsukaguchi Elementary School";
   const destination = String(body.destination || "").trim();
   if (!destination) {
     return res.status(400).json({ ok: false, error: "destination is required" });
