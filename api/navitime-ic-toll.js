@@ -37,10 +37,25 @@ function pickFareYen(fare) {
   return Math.round(Math.min(...pool.map(v => v.value)));
 }
 
-function buildHeaders() {
+function normalizeEndpoint(url) {
+  const s = String(url || "").trim();
+  if (!s) return "";
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://${s}`;
+}
+
+function getHostFromUrl(url) {
+  try {
+    return new URL(String(url || "")).host || "";
+  } catch (_e) {
+    return "";
+  }
+}
+
+function buildHeaders(effectiveHost) {
   const headers = { Accept: "application/json" };
   const rapidKey = String(process.env.NAVITIME_RAPIDAPI_KEY || "").trim();
-  const rapidHost = String(process.env.NAVITIME_RAPIDAPI_HOST || "").trim();
+  const rapidHost = String(effectiveHost || process.env.NAVITIME_RAPIDAPI_HOST || "").trim();
   if (rapidKey) headers["X-RapidAPI-Key"] = rapidKey;
   if (rapidHost) headers["X-RapidAPI-Host"] = rapidHost;
   return headers;
@@ -68,10 +83,14 @@ async function fetchNavitimeJson(url, headers) {
   }
   if (!res.ok) {
     const message =
+      (json && json.message) ||
       (json && json.error && (json.error.message || json.error.code)) ||
+      (json && Array.isArray(json.errors) && json.errors[0] && (json.errors[0].message || json.errors[0].code)) ||
       `NAVITIME API error (${res.status})`;
     const err = new Error(message);
     err.status = res.status;
+    err.payload = json;
+    err.url = url;
     throw err;
   }
   return json;
@@ -89,12 +108,24 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ ok: false, error: "POST only" });
   }
 
-  const icEndpoint = String(process.env.NAVITIME_IC_ENDPOINT || "").trim();
-  const routeEndpoint = String(process.env.NAVITIME_ROUTE_CAR_ENDPOINT || "").trim();
+  const icEndpoint = normalizeEndpoint(process.env.NAVITIME_IC_ENDPOINT || "");
+  const routeEndpoint = normalizeEndpoint(process.env.NAVITIME_ROUTE_CAR_ENDPOINT || "");
+  const rawRapidHost = String(process.env.NAVITIME_RAPIDAPI_HOST || "").trim();
+  const endpointHost = getHostFromUrl(icEndpoint) || getHostFromUrl(routeEndpoint);
+  const rapidHost = rawRapidHost && rawRapidHost.toLowerCase() !== "rapidapi.com"
+    ? rawRapidHost
+    : endpointHost;
+
   if (!icEndpoint || !routeEndpoint) {
     return res.status(500).json({
       ok: false,
       error: "NAVITIME_IC_ENDPOINT / NAVITIME_ROUTE_CAR_ENDPOINT is not set",
+    });
+  }
+  if (!rapidHost || rapidHost.toLowerCase() === "rapidapi.com" || !/rapidapi\.com$/i.test(rapidHost)) {
+    return res.status(500).json({
+      ok: false,
+      error: "RapidAPI Host is invalid (example: xxxxx.p.rapidapi.com). Check endpoint URLs.",
     });
   }
 
@@ -106,7 +137,7 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ ok: false, error: "fromWord and toWord are required" });
   }
 
-  const headers = buildHeaders();
+  const headers = buildHeaders(rapidHost);
 
   try {
     const fromIcUrl = buildUrl(icEndpoint, {
@@ -117,7 +148,7 @@ module.exports = async function handler(req, res) {
     const fromIcJson = await fetchNavitimeJson(fromIcUrl, headers);
     const fromIc = pickIcItem(fromIcJson.items, "entrance");
     if (!fromIc || !fromIc.id) {
-      return res.status(404).json({ ok: false, error: `入口ICが見つかりません: ${fromWord}` });
+      return res.status(404).json({ ok: false, error: `Entrance IC not found: ${fromWord}` });
     }
 
     const toIcUrl = buildUrl(icEndpoint, {
@@ -128,7 +159,7 @@ module.exports = async function handler(req, res) {
     const toIcJson = await fetchNavitimeJson(toIcUrl, headers);
     const toIc = pickIcItem(toIcJson.items, "exit");
     if (!toIc || !toIc.id) {
-      return res.status(404).json({ ok: false, error: `出口ICが見つかりません: ${toWord}` });
+      return res.status(404).json({ ok: false, error: `Exit IC not found: ${toWord}` });
     }
 
     const start = JSON.stringify({
@@ -181,9 +212,17 @@ module.exports = async function handler(req, res) {
       tollRoadDistanceKm: Math.round((tollRoadDistanceM / 1000) * 10) / 10,
     });
   } catch (e) {
+    const status = Number(e && e.status);
+    const hint = status === 403
+      ? " (403: likely API plan/subscription mismatch, or Host/Key mismatch)"
+      : "";
     return res.status(500).json({
       ok: false,
-      error: String((e && e.message) || e || "unknown error"),
+      error: String((e && e.message) || e || "unknown error") + hint,
+      status: Number.isFinite(status) ? status : null,
+      requestUrl: e && e.url ? String(e.url) : "",
+      response: e && e.payload ? e.payload : null,
     });
   }
 };
+
