@@ -1,17 +1,57 @@
 const webpush = require("web-push");
 
-function getRequestSecret(req) {
-  if (req.method === "POST" && req.body && typeof req.body === "object") {
-    return String(req.body.secret || "");
+function pickHeader(req, name) {
+  if (!req || !req.headers) return "";
+  const key = String(name || "").toLowerCase();
+  const raw = req.headers[key];
+  if (Array.isArray(raw)) return String(raw[0] || "");
+  return String(raw || "");
+}
+
+async function readJsonBody(req) {
+  if (!req) return {};
+  if (req.body && typeof req.body === "object") return req.body;
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch (_e) {
+      return {};
+    }
   }
-  const auth = req.headers.authorization || "";
-  const querySecret = req.query && req.query.secret ? String(req.query.secret) : "";
-  return auth.startsWith("Bearer ") ? auth.slice(7) : querySecret;
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  if (!chunks.length) return {};
+  const text = Buffer.concat(chunks).toString("utf8");
+  try {
+    return JSON.parse(text);
+  } catch (_e) {
+    return {};
+  }
+}
+
+function getRequestSecret(req, body) {
+  const fromBody = String((body && body.secret) || "").trim();
+  if (fromBody) return fromBody;
+
+  const fromHeader = String(
+    pickHeader(req, "x-push-secret")
+    || pickHeader(req, "x-sync-secret")
+  ).trim();
+  if (fromHeader) return fromHeader;
+
+  const auth = String(pickHeader(req, "authorization") || "");
+  if (auth.startsWith("Bearer ")) return auth.slice(7).trim();
+
+  return req.query && req.query.secret ? String(req.query.secret).trim() : "";
 }
 
 module.exports = async function handler(req, res) {
+  const body = await readJsonBody(req);
+
   const syncSecret = process.env.PUSH_SYNC_SECRET || "";
-  if (!syncSecret || getRequestSecret(req) !== syncSecret) {
+  if (!syncSecret || getRequestSecret(req, body) !== syncSecret) {
     return res.status(401).json({ error: "unauthorized" });
   }
 
@@ -23,12 +63,11 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: "missing env vars" });
   }
 
-  const body = req.body && typeof req.body === "object" ? req.body : {};
   const title = String(body.title || "Tsukaguchi AFC Jr");
   const message = String(body.body || "");
   const url = String(body.url || "/");
   const targetUserIds = Array.isArray(body.targetUserIds)
-    ? body.targetUserIds.map(v => String(v || "").trim()).filter(Boolean)
+    ? body.targetUserIds.map((v) => String(v || "").trim()).filter(Boolean)
     : [];
   const excludeUserId = String(body.excludeUserId || "").trim();
 
@@ -47,13 +86,13 @@ module.exports = async function handler(req, res) {
   let targets = gasJson.targets || [];
   if (targetUserIds.length) {
     const idSet = new Set(targetUserIds);
-    targets = targets.filter(t => idSet.has(String(t.userId || "").trim()));
+    targets = targets.filter((t) => idSet.has(String(t.userId || "").trim()));
   }
   if (excludeUserId) {
-    targets = targets.filter(t => String(t.userId || "").trim() !== excludeUserId);
+    targets = targets.filter((t) => String(t.userId || "").trim() !== excludeUserId);
   }
   if (!targets.length) {
-    return res.status(200).json({ sent: 0, skipped: true });
+    return res.status(200).json({ sent: 0, skipped: true, mode: gasJson.mode || "unknown" });
   }
 
   const payload = JSON.stringify({
@@ -88,5 +127,5 @@ module.exports = async function handler(req, res) {
     ));
   }
 
-  return res.status(200).json({ sent, expired: expired.length });
+  return res.status(200).json({ sent, mode: gasJson.mode || "unknown", expired: expired.length });
 };
