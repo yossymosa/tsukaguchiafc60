@@ -4851,7 +4851,7 @@ function SettlementSection({schedule}) {
     const isOut = direction === "out";
     const fromWord = String(isOut ? form.outFromIcWord : form.returnFromIcWord).trim();
     const toWord = String(isOut ? form.outToIcWord : form.returnToIcWord).trim();
-    if (!fromWord || !toWord) return alert("入口名と出口名を入力してください（IC省略可）");
+    if (!fromWord || !toWord) return alert("入口名と出口名を入力してください");
     setIcFetchBusy(direction);
     setIcFetchMsg("");
     try {
@@ -4932,9 +4932,7 @@ function SettlementSection({schedule}) {
       h("input",{value:form.destination,onChange:e=>patchForm({destination:e.target.value}),placeholder:"例：三木防災公園",style:{...css.inp,width:"100%"}})
     ),
     h("div",{style:{display:"flex",gap:8,marginBottom:10}},
-      h("button",{onClick:openGoogleMapsRoute,style:{...css.bG,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10}},"🗺 グーグルマップで距離を確認"),
-      h("button",{onClick:fetchDistanceOnly,disabled:distanceFetchBusy,style:{...css.bS,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10,opacity:distanceFetchBusy?0.7:1,cursor:distanceFetchBusy?"wait":"pointer"}},
-        distanceFetchBusy ? "取得中..." : "📏 往路kmへ反映")
+      h("button",{onClick:openGoogleMapsRoute,style:{...css.bG,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10}},"🗺 グーグルマップで距離を確認")
     ),
     distanceFetchMsg&&h("div",{style:{marginBottom:10,fontSize:11,fontWeight:700,color:distanceFetchMsg.startsWith("距離取得エラー")?"#DC2626":"#1D4ED8",whiteSpace:"pre-wrap"}},distanceFetchMsg),
     dispatchRule&&h(Fragment,{},
@@ -4948,22 +4946,32 @@ function SettlementSection({schedule}) {
           h("label",{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:"#334155",fontWeight:700,cursor:"pointer"}},
             h("input",{type:"checkbox",checked:!!form.holidayMode,onChange:e=>patchForm({holidayMode:!!e.target.checked})}),
             "休日条件"
-          )
+          ),
+          h("a",{
+            href:"https://www.navitime.co.jp/drive/",
+            target:"_blank",
+            rel:"noopener noreferrer",
+            style:{...css.bG,padding:"6px 10px",fontSize:11,borderRadius:10,flex:"0 0 auto",textDecoration:"none",display:"inline-flex",alignItems:"center",justifyContent:"center",color:"#1D4ED8",fontWeight:700}
+          },"条件該当しない場合は各自調べてください（NAVITIME）")
         ),
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"往路（入口 → 出口 / IC省略可）"),
+        h("div",{style:{marginTop:-2,fontSize:11,fontWeight:700,color:"#64748B"}},
+          "※ 普通車料金です"),
+        h("div",{style:{marginTop:4,fontSize:11,fontWeight:700,color:"#64748B"}},
+          "※ 例: 宝塚 / 龍野"),
+        h("div",{style:{marginTop:4,fontSize:11,fontWeight:700,color:"#64748B"}},
+          "※ ICなしで入力してください"),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"往路（入口 → 出口）"),
         h("div",{style:{display:"flex",gap:6,marginBottom:6}},
-          h("input",{value:form.outFromIcWord,onChange:e=>patchForm({outFromIcWord:e.target.value}),placeholder:"入口 例: 宝塚（または宝塚IC）",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
-          h("input",{value:form.outToIcWord,onChange:e=>patchForm({outToIcWord:e.target.value}),placeholder:"出口 例: 龍野（または龍野IC）",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("input",{value:form.outFromIcWord,onChange:e=>patchForm({outFromIcWord:e.target.value}),placeholder:"入口 例: 宝塚",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("input",{value:form.outToIcWord,onChange:e=>patchForm({outToIcWord:e.target.value}),placeholder:"出口 例: 龍野",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
           h("button",{onClick:()=>fetchIcToll("out"),disabled:icFetchBusy==="out",style:{...css.bS,padding:"8px 10px",fontSize:12,borderRadius:10,flex:"0 0 auto",opacity:icFetchBusy==="out"?0.7:1,cursor:icFetchBusy==="out"?"wait":"pointer"}},icFetchBusy==="out"?"取得中":"往路取得")
         ),
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"復路（入口 → 出口 / IC省略可）"),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"復路（入口 → 出口）"),
         h("div",{style:{display:"flex",gap:6}},
-          h("input",{value:form.returnFromIcWord,onChange:e=>patchForm({returnFromIcWord:e.target.value}),placeholder:"入口 例: 龍野（または龍野IC）",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
-          h("input",{value:form.returnToIcWord,onChange:e=>patchForm({returnToIcWord:e.target.value}),placeholder:"出口 例: 宝塚（または宝塚IC）",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("input",{value:form.returnFromIcWord,onChange:e=>patchForm({returnFromIcWord:e.target.value}),placeholder:"入口 例: 龍野",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("input",{value:form.returnToIcWord,onChange:e=>patchForm({returnToIcWord:e.target.value}),placeholder:"出口 例: 宝塚",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
           h("button",{onClick:()=>fetchIcToll("return"),disabled:icFetchBusy==="return",style:{...css.bS,padding:"8px 10px",fontSize:12,borderRadius:10,flex:"0 0 auto",opacity:icFetchBusy==="return"?0.7:1,cursor:icFetchBusy==="return"?"wait":"pointer"}},icFetchBusy==="return"?"取得中":"復路取得")
         ),
-        h("div",{style:{marginTop:6,fontSize:11,fontWeight:700,color:"#64748B"}},"※ 例: 宝塚 / 龍野"),
-        h("div",{style:{marginTop:4,fontSize:11,fontWeight:700,color:"#64748B"}},"※ ICなしで入力してください"),
         icFetchMsg&&h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:icFetchMsg.startsWith("取得エラー")?"#DC2626":"#1D4ED8",whiteSpace:"pre-wrap"}},icFetchMsg)
       ),
       h("div",{style:{display:"flex",gap:8,marginBottom:10}},
