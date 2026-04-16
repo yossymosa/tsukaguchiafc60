@@ -3565,6 +3565,19 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
     const fixedIds = getFixedSeatIdsForRow(row);
     return String(fixedIds[seatIdx] || "");
   };
+  const getUsedRiderIds = (excludeSeatKey = "", sourceAssignments = seatAssignments) => {
+    const used = new Set();
+    selectedFleetRows.forEach(row => {
+      const totalSeats = totalSeatsForRow(row);
+      for (let seatIdx = 0; seatIdx < totalSeats; seatIdx += 1) {
+        const key = seatKeyFor(row, seatIdx);
+        if (excludeSeatKey && key === excludeSeatKey) continue;
+        const rid = getSeatAssignedRid(row, seatIdx, sourceAssignments);
+        if (rid) used.add(String(rid));
+      }
+    });
+    return used;
+  };
   const selectedFleetRowsKey = selectedFleetRows.map(row => `${seatRowKey(row)}:${totalSeatsForRow(row)}`).join("|");
   const getRowAssignedIds = row => {
     const totalSeats = totalSeatsForRow(row);
@@ -3626,11 +3639,18 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
         if (fixedIds.length > 0) {
           fixedIds.forEach((rid, seatIdx) => {
             const sKey = seatKeyFor(row, seatIdx);
-            if (!next[sKey] && !used.has(rid)) {
+            if (!rid) return;
+            if (String(next[sKey] || "") !== String(rid)) {
               next[sKey] = rid;
-              used.add(rid);
               changed = true;
             }
+            Object.keys(next).forEach(key => {
+              if (key !== sKey && String(next[key] || "") === String(rid)) {
+                delete next[key];
+                changed = true;
+              }
+            });
+            used.add(String(rid));
           });
         }
         const profile = userById[String(row?.car?.userId || "")] || {};
@@ -4036,6 +4056,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
           const driverOptionIds = uniqDriverIds.length > 0 ? uniqDriverIds : fallbackDriverIds;
           const seatRows = seatLayoutRows(totalSeats);
           const rowKeyStr = seatRowKey(row);
+          const isLuggageFamilyRow = row.kind === "family" && isLuggageCar(car.userName);
           const fixedFamilyIds = row.kind === "family"
             ? getFixedFamilyRiderIds(car).slice(0, totalSeats)
             : [];
@@ -4070,15 +4091,51 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
                     h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8}},"家族枠（自動割り当て）"),
                     fixedFamilyIds.length===0
                       ? h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:8}},"行く家族が未設定です")
-                      : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
-                          fixedFamilyIds.map((rid, seatIdx)=>{
-                            const label = getAssignedLabel(String(seatAssignments[seatKeyFor(row, seatIdx)] || rid)) || "未設定";
-                            return h("span",{key:`fixed-family-${rowKeyStr}-${seatIdx}`,style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#0F172A",background:"#E0E7FF",border:"1px solid #C7D2FE",borderRadius:999,padding:"4px 10px"}},
-                              h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"1px 6px"}},seatShortLabel(seatIdx)),
-                              label
-                            );
-                          })
-                        ),
+                      : isLuggageFamilyRow
+                        ? h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8,marginBottom:8}},
+                            fixedFamilyIds.map((rid, seatIdx)=>{
+                              const key = seatKeyFor(row, seatIdx);
+                              const currentValue = String(seatAssignments[key] || rid || "");
+                              const usedElsewhere = getUsedRiderIds(key);
+                              const options = riderOptions;
+                              return h("div",{key:`fixed-family-select-${rowKeyStr}-${seatIdx}`,style:{background:"#fff",border:"1px solid #E2E8F0",borderRadius:10,padding:8}},
+                                h("div",{style:{fontSize:10,fontWeight:800,color:"#334155",marginBottom:4}},seatShortLabel(seatIdx)),
+                                h("select",{
+                                  value:currentValue,
+                                  onChange:e=>{
+                                    const nextId = String(e.target.value || "");
+                                    if (nextId && usedElsewhere.has(nextId)) {
+                                      alert("その人は別の席に割り当て済みです。");
+                                      return;
+                                    }
+                                    setSeatAssignments(prev=>{
+                                      const next = { ...(prev || {}) };
+                                      if (!nextId) delete next[key];
+                                      else next[key] = nextId;
+                                      return next;
+                                    });
+                                  },
+                                  style:{...css.inp,padding:"6px 8px",fontSize:12,width:"100%",margin:0}
+                                },
+                                  h("option",{value:""},"未設定"),
+                                  options.map(opt=>h("option",{
+                                    key:`fixed-seat-opt-${key}-${opt.id}`,
+                                    value:opt.id,
+                                    disabled:usedElsewhere.has(opt.id)
+                                  },opt.label))
+                                )
+                              );
+                            })
+                          )
+                        : h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
+                            fixedFamilyIds.map((rid, seatIdx)=>{
+                              const label = getAssignedLabel(String(seatAssignments[seatKeyFor(row, seatIdx)] || rid)) || "未設定";
+                              return h("span",{key:`fixed-family-${rowKeyStr}-${seatIdx}`,style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#0F172A",background:"#E0E7FF",border:"1px solid #C7D2FE",borderRadius:999,padding:"4px 10px"}},
+                                h("span",{style:{fontSize:10,fontWeight:800,color:"#334155",background:"#EEF2FF",borderRadius:999,padding:"1px 6px"}},seatShortLabel(seatIdx)),
+                                label
+                              );
+                            })
+                          ),
                     extraSeatIndices.length>0 && h("div",{style:{marginTop:4}},
                       h("button",{
                         onClick:()=>setFamilyExtraOpen(prev=>{
@@ -4092,11 +4149,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
                         visibleExtraSeatIndices.map(seatIdx=>{
                           const key = seatKeyFor(row, seatIdx);
                           const currentValue = String(seatAssignments[key] || "");
-                          const usedElsewhere = new Set(
-                            Object.entries(seatAssignments || {})
-                              .filter(([k, v]) => k !== key && !!v)
-                              .map(([, v]) => String(v || ""))
-                          );
+                          const usedElsewhere = getUsedRiderIds(key);
                           const options = riderOptions;
                           const filteredOptions = isLuggageCar(car.userName)
                             ? options
@@ -4136,11 +4189,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
                       seatRow.map(seatIdx=>{
                         const key = seatKeyFor(row, seatIdx);
                         const currentValue = String(seatAssignments[key] || "");
-                        const usedElsewhere = new Set(
-                          Object.entries(seatAssignments || {})
-                            .filter(([k, v]) => k !== key && !!v)
-                            .map(([, v]) => String(v || ""))
-                        );
+                        const usedElsewhere = getUsedRiderIds(key);
                         const options = seatIdx === 0
                           ? driverOptionIds.map(id => riderOptionMap[id]).filter(Boolean)
                           : riderOptions;
@@ -5411,6 +5460,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const [from,setFrom]=useState("");
   const [to,setTo]=useState("");
   const [oppFilter,setOppFilter]=useState("all"); // "all" or opponent name
+  const [oppSearch,setOppSearch]=useState("");
   useEffect(()=>{ if(initialDashTab) setDashTab(initialDashTab); },[initialDashTab]);
   const currentFiscalStart = useMemo(() => {
     const now = new Date();
@@ -5455,9 +5505,29 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     if(periodRange.t&&d>periodRange.t) return false;
     return true;
   }),[results,typeF,periodRange]);
+  const normalizeOppSearch = s => String(s||"").toLowerCase().replace(/\s+/g,"");
+  const opponentOptions=useMemo(()=>
+    [...new Set(filtered.map(r=>String(r?.opponent||"").trim()).filter(Boolean))].sort()
+  ,[filtered]);
+  const searchedResults=useMemo(()=>{
+    const key=normalizeOppSearch(oppSearch);
+    if(!key) return filtered;
+    return filtered.filter(r=>normalizeOppSearch(r?.opponent).includes(key));
+  },[filtered,oppSearch]);
+  const visibleOpponentOptions=useMemo(()=>{
+    const key=normalizeOppSearch(oppSearch);
+    if(!key) return opponentOptions;
+    return opponentOptions.filter(opp=>normalizeOppSearch(opp).includes(key));
+  },[opponentOptions,oppSearch]);
+  const selectOpponentOptions=useMemo(()=>{
+    if(oppFilter==="all") return visibleOpponentOptions;
+    return visibleOpponentOptions.includes(oppFilter)
+      ? visibleOpponentOptions
+      : [oppFilter, ...visibleOpponentOptions];
+  },[visibleOpponentOptions,oppFilter]);
   const oppFiltered=useMemo(()=>
-    oppFilter==="all"?filtered:filtered.filter(r=>r.opponent===oppFilter)
-  ,[filtered,oppFilter]);
+    oppFilter==="all"?searchedResults:searchedResults.filter(r=>r.opponent===oppFilter)
+  ,[searchedResults,oppFilter]);
   const st=calcStats(filtered);
   const tournamentFiltered=useMemo(()=>schedules.filter(s=>{
     if(!["official","cup","公式戦","カップ戦"].includes(s.type)) return false;
@@ -5576,10 +5646,15 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
         h("input",{type:"date",value:to,onChange:e=>setTo(e.target.value),style:{...css.inp,flex:1,fontSize:13,padding:"8px 10px"}})),
       dashTab==="result"&&h("div",{style:{marginTop:10,paddingTop:10,borderTop:"1px solid #f5f5f5"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",marginBottom:6}},"対戦相手"),
+        h("div",{style:{display:"flex",gap:8,marginBottom:8}},
+          h("input",{value:oppSearch,onChange:e=>setOppSearch(e.target.value),placeholder:"対戦相手を検索（部分一致）",
+            style:{...css.inp,flex:1,fontSize:13}}),
+          !!oppSearch&&h("button",{onClick:()=>setOppSearch(""),
+            style:{padding:"0 12px",border:"1px solid #E2E8F0",borderRadius:10,background:"#fff",fontSize:12,fontWeight:700,color:"#64748B",cursor:"pointer"}},"クリア")),
         h("select",{value:oppFilter,onChange:e=>setOppFilter(e.target.value),
           style:{...css.inp,width:"100%",fontSize:13}},
           h("option",{value:"all"},"全相手"),
-          [...new Set(filtered.map(r=>r.opponent).filter(Boolean))].sort().map(opp=>
+          selectOpponentOptions.map(opp=>
             h("option",{key:opp,value:opp},opp))))),
 
     // ── 対戦成績タブ ──
@@ -5587,7 +5662,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
       (()=>{
         const st2=calcStats(oppFiltered);
         const oppMap={};
-        filtered.forEach(r=>{
+        searchedResults.forEach(r=>{
           if(!r.opponent) return;
           if(!oppMap[r.opponent]) oppMap[r.opponent]={w:0,d:0,l:0,gf:0,ga:0};
           const o=oppMap[r.opponent];
