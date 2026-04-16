@@ -4811,18 +4811,16 @@ function SettlementSection({schedule}) {
     });
   };
 
-  const openNavitimeRoute = () => {
+  const openGoogleMapsRoute = () => {
     const from = String(form.origin || "").trim() || DEFAULT_ORIGIN;
     const dest = String(form.destination || "").trim();
     if (!dest) return alert("目的地を入力してください");
-    const startJson = encodeURIComponent(JSON.stringify({ name: from, "road-type": "default" }));
-    const goalJson = encodeURIComponent(JSON.stringify({ name: dest, "road-type": "default" }));
-    const guidanceUrl = `https://www.navitime.co.jp/drive/route/guidance?start=${startJson}&goal=${goalJson}`;
-    const routeUrl = `https://www.navitime.co.jp/drive/route/?start=${encodeURIComponent(from)}&goal=${encodeURIComponent(dest)}`;
-    const w = window.open(guidanceUrl, "_blank", "noopener,noreferrer");
-    if (!w) {
-      window.open(routeUrl, "_blank", "noopener,noreferrer");
-    }
+    const url =
+      "https://www.google.com/maps/dir/?api=1"
+      + "&origin=" + encodeURIComponent(from)
+      + "&destination=" + encodeURIComponent(dest)
+      + "&travelmode=driving";
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const fetchDistanceOnly = async () => {
@@ -4934,9 +4932,9 @@ function SettlementSection({schedule}) {
       h("input",{value:form.destination,onChange:e=>patchForm({destination:e.target.value}),placeholder:"例：三木防災公園",style:{...css.inp,width:"100%"}})
     ),
     h("div",{style:{display:"flex",gap:8,marginBottom:10}},
-      h("button",{onClick:openNavitimeRoute,style:{...css.bG,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10}},"🧭 NAVITIMEでルート確認"),
+      h("button",{onClick:openGoogleMapsRoute,style:{...css.bG,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10}},"🗺 グーグルマップで距離を確認"),
       h("button",{onClick:fetchDistanceOnly,disabled:distanceFetchBusy,style:{...css.bS,flex:1,padding:"10px 12px",fontSize:12,borderRadius:10,opacity:distanceFetchBusy?0.7:1,cursor:distanceFetchBusy?"wait":"pointer"}},
-        distanceFetchBusy ? "取得中..." : "📏 距離を取得")
+        distanceFetchBusy ? "取得中..." : "📏 往路kmへ反映")
     ),
     distanceFetchMsg&&h("div",{style:{marginBottom:10,fontSize:11,fontWeight:700,color:distanceFetchMsg.startsWith("距離取得エラー")?"#DC2626":"#1D4ED8",whiteSpace:"pre-wrap"}},distanceFetchMsg),
     dispatchRule&&h(Fragment,{},
@@ -4964,10 +4962,8 @@ function SettlementSection({schedule}) {
           h("input",{value:form.returnToIcWord,onChange:e=>patchForm({returnToIcWord:e.target.value}),placeholder:"出口 例: 宝塚（または宝塚IC）",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
           h("button",{onClick:()=>fetchIcToll("return"),disabled:icFetchBusy==="return",style:{...css.bS,padding:"8px 10px",fontSize:12,borderRadius:10,flex:"0 0 auto",opacity:icFetchBusy==="return"?0.7:1,cursor:icFetchBusy==="return"?"wait":"pointer"}},icFetchBusy==="return"?"取得中":"復路取得")
         ),
-        h("div",{style:{marginTop:6,fontSize:11,fontWeight:700,color:"#64748B"}},
-          "※ 例: 宝塚 / 龍野（ICなしでもOK）。候補が多いときは「宝塚IC」のように入力すると精度が上がります。"),
-        h("div",{style:{marginTop:4,fontSize:11,fontWeight:700,color:"#64748B"}},
-          "※ 休日条件ONでは、次の日曜 09:00 条件で取得します。"),
+        h("div",{style:{marginTop:6,fontSize:11,fontWeight:700,color:"#64748B"}},"※ 例: 宝塚 / 龍野"),
+        h("div",{style:{marginTop:4,fontSize:11,fontWeight:700,color:"#64748B"}},"※ ICなしで入力してください"),
         icFetchMsg&&h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:icFetchMsg.startsWith("取得エラー")?"#DC2626":"#1D4ED8",whiteSpace:"pre-wrap"}},icFetchMsg)
       ),
       h("div",{style:{display:"flex",gap:8,marginBottom:10}},
@@ -4976,15 +4972,15 @@ function SettlementSection({schedule}) {
           h("input",{type:"number",min:"0",step:"0.1",value:form.oneWayKm,onChange:e=>patchForm({oneWayKm:e.target.value}),placeholder:"例: 12.4",style:{...css.inp,width:"100%"}})
         ),
         h("div",{style:{flex:1}},
-          h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6}},
-            h("span",{style:{fontSize:12,fontWeight:600,color:"#666"}},"復路km"),
-            h("button",{
-              onClick:()=>patchForm({returnKm:String(form.oneWayKm||"")}),
-              style:{...css.bG,padding:"5px 8px",fontSize:11,borderRadius:8,flex:"0 0 auto"}
-            },"往路と同じ")
-          ),
+          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"復路km"),
           h("input",{type:"number",min:"0",step:"0.1",value:form.returnKm,onChange:e=>patchForm({returnKm:e.target.value}),placeholder:"例: 12.4",style:{...css.inp,width:"100%"}})
         )
+      ),
+      h("div",{style:{display:"flex",justifyContent:"flex-end",marginTop:-4,marginBottom:10}},
+        h("button",{
+          onClick:()=>patchForm({returnKm:String(form.oneWayKm||"")}),
+          style:{...css.bG,padding:"6px 10px",fontSize:11,borderRadius:8}
+        },"復路kmを往路と同じ")
       ),
       h("div",{style:{display:"flex",gap:8,marginBottom:10}},
         h("div",{style:{flex:1}},
@@ -4998,15 +4994,15 @@ function SettlementSection({schedule}) {
           h("input",{type:"number",min:"0",step:"1",value:form.highwayOutYen,onChange:e=>patchForm({highwayOutYen:e.target.value}),style:{...css.inp,width:"100%"}})
         ),
         h("div",{style:{flex:1}},
-          h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6}},
-            h("span",{style:{fontSize:12,fontWeight:600,color:"#666"}},"高速代（復路円）"),
-            h("button",{
-              onClick:()=>patchForm({highwayReturnYen:String(form.highwayOutYen||"0")}),
-              style:{...css.bG,padding:"5px 8px",fontSize:11,borderRadius:8,flex:"0 0 auto"}
-            },"往路と同じ")
-          ),
+          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"高速代（復路円）"),
           h("input",{type:"number",min:"0",step:"1",value:form.highwayReturnYen,onChange:e=>patchForm({highwayReturnYen:e.target.value}),style:{...css.inp,width:"100%"}})
         )
+      ),
+      h("div",{style:{display:"flex",justifyContent:"flex-end",marginTop:-4,marginBottom:10}},
+        h("button",{
+          onClick:()=>patchForm({highwayReturnYen:String(form.highwayOutYen||"0")}),
+          style:{...css.bG,padding:"6px 10px",fontSize:11,borderRadius:8}
+        },"復路高速代を往路と同じ")
       ),
       h("label",{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:"#334155",fontWeight:700,cursor:"pointer",marginBottom:10}},
         h("input",{type:"checkbox",checked:!!form.withinAmagasaki,onChange:e=>patchForm({withinAmagasaki:!!e.target.checked})}),
