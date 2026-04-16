@@ -82,15 +82,6 @@ function getNextSunday0900Local() {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T09:00:00`;
 }
 
-function normalizeStartTime(value) {
-  const s = String(value || "").trim();
-  if (!s) return "";
-  const t = s.replace(" ", "T");
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(t)) return `${t}:00`;
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(t)) return t;
-  return "";
-}
-
 function buildHeaders(effectiveHost) {
   const headers = { Accept: "application/json" };
   const rapidKey = String(process.env.NAVITIME_RAPIDAPI_KEY || "").trim();
@@ -174,8 +165,7 @@ module.exports = async function handler(req, res) {
   const condition = String(body.condition || "toll_time").trim() || "toll_time";
   const useEtc = body.useEtc === true || String(body.useEtc || "").toLowerCase() === "true";
   const holidayMode = body.holidayMode === true || String(body.holidayMode || "").toLowerCase() === "true";
-  const normalizedStart = normalizeStartTime(body.departAt);
-  const startTime = normalizedStart || (holidayMode ? getNextSunday0900Local() : "");
+  const startTime = holidayMode ? getNextSunday0900Local() : "";
   if (!fromWord || !toWord) {
     return res.status(400).json({ ok: false, error: "fromWord and toWord are required" });
   }
