@@ -4737,8 +4737,7 @@ function SettlementSection({schedule}) {
     returnFromIcWord: "",
     returnToIcWord: "",
     useEtc: true,
-    holidayMode: false,
-    departAt: "",
+    holidayMode: true,
     luggageCarriesPeople: false,
     luggageBikeArea: true,
   };
@@ -4834,7 +4833,6 @@ function SettlementSection({schedule}) {
           condition: "toll_time",
           useEtc: !!form.useEtc,
           holidayMode: !!form.holidayMode,
-          departAt: String(form.departAt || ""),
         }),
       });
       const json = await res.json();
@@ -4913,10 +4911,6 @@ function SettlementSection({schedule}) {
             "休日条件"
           )
         ),
-        h("div",{style:{marginBottom:8}},
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:5}},"出発日時（任意）"),
-          h("input",{type:"datetime-local",value:form.departAt,onChange:e=>patchForm({departAt:e.target.value}),style:{...css.inp,width:"100%",padding:"8px 10px",fontSize:12}})
-        ),
         h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"往路（入口 → 出口 / IC省略可）"),
         h("div",{style:{display:"flex",gap:6,marginBottom:6}},
           h("input",{value:form.outFromIcWord,onChange:e=>patchForm({outFromIcWord:e.target.value}),placeholder:"入口 例: 宝塚（または宝塚IC）",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
@@ -4932,7 +4926,7 @@ function SettlementSection({schedule}) {
         h("div",{style:{marginTop:6,fontSize:11,fontWeight:700,color:"#64748B"}},
           "※ 例: 宝塚 / 龍野（ICなしでもOK）。候補が多いときは「宝塚IC」のように入力すると精度が上がります。"),
         h("div",{style:{marginTop:4,fontSize:11,fontWeight:700,color:"#64748B"}},
-          "※ 休日条件ONで出発日時未入力の場合は、次の日曜 09:00 条件で取得します。"),
+          "※ 休日条件ONでは、次の日曜 09:00 条件で取得します。"),
         icFetchMsg&&h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:icFetchMsg.startsWith("取得エラー")?"#DC2626":"#1D4ED8",whiteSpace:"pre-wrap"}},icFetchMsg)
       ),
       h("div",{style:{display:"flex",gap:8,marginBottom:10}},
