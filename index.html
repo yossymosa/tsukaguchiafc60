@@ -4736,6 +4736,9 @@ function SettlementSection({schedule}) {
     outToIcWord: "",
     returnFromIcWord: "",
     returnToIcWord: "",
+    useEtc: true,
+    holidayMode: false,
+    departAt: "",
     luggageCarriesPeople: false,
     luggageBikeArea: true,
   };
@@ -4818,7 +4821,7 @@ function SettlementSection({schedule}) {
     const isOut = direction === "out";
     const fromWord = String(isOut ? form.outFromIcWord : form.returnFromIcWord).trim();
     const toWord = String(isOut ? form.outToIcWord : form.returnToIcWord).trim();
-    if (!fromWord || !toWord) return alert("入口IC名と出口IC名を入力してください");
+    if (!fromWord || !toWord) return alert("入口名と出口名を入力してください（IC省略可）");
     setIcFetchBusy(direction);
     setIcFetchMsg("");
     try {
@@ -4829,6 +4832,9 @@ function SettlementSection({schedule}) {
           fromWord,
           toWord,
           condition: "toll_time",
+          useEtc: !!form.useEtc,
+          holidayMode: !!form.holidayMode,
+          departAt: String(form.departAt || ""),
         }),
       });
       const json = await res.json();
@@ -4850,8 +4856,9 @@ function SettlementSection({schedule}) {
           returnToIcWord: String((json.toIc && json.toIc.name) || toWord),
         });
       }
+      const modeText = `${form.useEtc ? "ETC" : "一般"}${form.holidayMode ? " / 休日条件ON" : ""}`;
       setIcFetchMsg(
-        `${isOut ? "往路" : "復路"}: ${(json.fromIc && json.fromIc.name) || fromWord} → ${(json.toIc && json.toIc.name) || toWord} / 高速代 ${Math.max(0, Math.round(tollYen)).toLocaleString()}円`
+        `${isOut ? "往路" : "復路"}: ${(json.fromIc && json.fromIc.name) || fromWord} → ${(json.toIc && json.toIc.name) || toWord} / ${modeText} / 高速代 ${Math.max(0, Math.round(tollYen)).toLocaleString()}円`
       );
     } catch (e) {
       setIcFetchMsg(`取得エラー: ${String((e && e.message) || e || "")}`);
@@ -4896,18 +4903,36 @@ function SettlementSection({schedule}) {
     dispatchRule&&h(Fragment,{},
       h("div",{style:{marginBottom:10,padding:"10px 12px",border:"1px solid #E2E8F0",borderRadius:10,background:"#F8FAFC"}},
         h("div",{style:{fontSize:12,fontWeight:700,color:"#334155",marginBottom:8}},"ICから高速代取得（任意 / NAVITIME）"),
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"往路（入口IC → 出口IC）"),
+        h("div",{style:{display:"flex",gap:10,flexWrap:"wrap",marginBottom:8}},
+          h("label",{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:"#334155",fontWeight:700,cursor:"pointer"}},
+            h("input",{type:"checkbox",checked:!!form.useEtc,onChange:e=>patchForm({useEtc:!!e.target.checked})}),
+            "ETC料金"
+          ),
+          h("label",{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:"#334155",fontWeight:700,cursor:"pointer"}},
+            h("input",{type:"checkbox",checked:!!form.holidayMode,onChange:e=>patchForm({holidayMode:!!e.target.checked})}),
+            "休日条件"
+          )
+        ),
+        h("div",{style:{marginBottom:8}},
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:5}},"出発日時（任意）"),
+          h("input",{type:"datetime-local",value:form.departAt,onChange:e=>patchForm({departAt:e.target.value}),style:{...css.inp,width:"100%",padding:"8px 10px",fontSize:12}})
+        ),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"往路（入口 → 出口 / IC省略可）"),
         h("div",{style:{display:"flex",gap:6,marginBottom:6}},
-          h("input",{value:form.outFromIcWord,onChange:e=>patchForm({outFromIcWord:e.target.value}),placeholder:"入口IC 例: 尼崎IC",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
-          h("input",{value:form.outToIcWord,onChange:e=>patchForm({outToIcWord:e.target.value}),placeholder:"出口IC 例: 三木東IC",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("input",{value:form.outFromIcWord,onChange:e=>patchForm({outFromIcWord:e.target.value}),placeholder:"入口 例: 宝塚（または宝塚IC）",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("input",{value:form.outToIcWord,onChange:e=>patchForm({outToIcWord:e.target.value}),placeholder:"出口 例: 龍野（または龍野IC）",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
           h("button",{onClick:()=>fetchIcToll("out"),disabled:icFetchBusy==="out",style:{...css.bS,padding:"8px 10px",fontSize:12,borderRadius:10,flex:"0 0 auto",opacity:icFetchBusy==="out"?0.7:1,cursor:icFetchBusy==="out"?"wait":"pointer"}},icFetchBusy==="out"?"取得中":"往路取得")
         ),
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"復路（入口IC → 出口IC）"),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"復路（入口 → 出口 / IC省略可）"),
         h("div",{style:{display:"flex",gap:6}},
-          h("input",{value:form.returnFromIcWord,onChange:e=>patchForm({returnFromIcWord:e.target.value}),placeholder:"入口IC 例: 三木東IC",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
-          h("input",{value:form.returnToIcWord,onChange:e=>patchForm({returnToIcWord:e.target.value}),placeholder:"出口IC 例: 尼崎IC",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("input",{value:form.returnFromIcWord,onChange:e=>patchForm({returnFromIcWord:e.target.value}),placeholder:"入口 例: 龍野（または龍野IC）",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
+          h("input",{value:form.returnToIcWord,onChange:e=>patchForm({returnToIcWord:e.target.value}),placeholder:"出口 例: 宝塚（または宝塚IC）",style:{...css.inp,flex:1,padding:"8px 10px",fontSize:12}}),
           h("button",{onClick:()=>fetchIcToll("return"),disabled:icFetchBusy==="return",style:{...css.bS,padding:"8px 10px",fontSize:12,borderRadius:10,flex:"0 0 auto",opacity:icFetchBusy==="return"?0.7:1,cursor:icFetchBusy==="return"?"wait":"pointer"}},icFetchBusy==="return"?"取得中":"復路取得")
         ),
+        h("div",{style:{marginTop:6,fontSize:11,fontWeight:700,color:"#64748B"}},
+          "※ 例: 宝塚 / 龍野（ICなしでもOK）。候補が多いときは「宝塚IC」のように入力すると精度が上がります。"),
+        h("div",{style:{marginTop:4,fontSize:11,fontWeight:700,color:"#64748B"}},
+          "※ 休日条件ONで出発日時未入力の場合は、次の日曜 09:00 条件で取得します。"),
         icFetchMsg&&h("div",{style:{marginTop:8,fontSize:11,fontWeight:700,color:icFetchMsg.startsWith("取得エラー")?"#DC2626":"#1D4ED8",whiteSpace:"pre-wrap"}},icFetchMsg)
       ),
       h("div",{style:{display:"flex",gap:8,marginBottom:10}},
