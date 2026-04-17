@@ -644,6 +644,25 @@ function ScoreLine({our,their,size=18}) {
   return h("span",{style:{fontSize:size,fontWeight:900,color:c,whiteSpace:"nowrap"}},Number(our),h("span",{style:{color:"#ddd",fontSize:size*0.7,margin:"0 3px"}},"-"),Number(their));
 }
 function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy,onEnableNotifications}) {
+  const video26 = HOME_LINKS.find(l => /26年度/.test(String(l.label || "")));
+  const video25 = HOME_LINKS.find(l => /25年度/.test(String(l.label || "")));
+  const topLinks = HOME_LINKS.filter(l => !/試合動画(25|26)年度/.test(String(l.label || "")));
+  const renderHeaderLink = (l) => h("a",{
+    key:"header-link-"+l.label,
+    href:l.url,
+    target:"_blank",
+    rel:"noopener noreferrer",
+    style:{
+      textDecoration:"none",
+      fontSize:10,
+      fontWeight:700,
+      color:"#fff",
+      padding:"4px 8px",
+      borderRadius:999,
+      background:"rgba(255,255,255,0.12)",
+      border:"1px solid rgba(255,255,255,0.25)"
+    }
+  },`${l.icon} ${l.label}`);
   return h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",padding:"20px 20px 52px",position:"relative",overflow:"hidden"}},
     h("div",{style:{position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(29,78,216,0.16)"}}),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"relative"}},
@@ -656,22 +675,50 @@ function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy
           h("button",{onClick:onRefresh,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"🔄"),
           h("button",{onClick:onLogout,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"ログアウト")))),
     h("div",{style:{display:"flex",gap:6,marginTop:10,position:"relative",flexWrap:"wrap"}},
-      HOME_LINKS.map(l=>h("a",{
-        key:"header-link-"+l.label,
-        href:l.url,
-        target:"_blank",
-        rel:"noopener noreferrer",
+      topLinks.map(renderHeaderLink),
+      (video26 || video25) && h("div",{
         style:{
-          textDecoration:"none",
-          fontSize:10,
-          fontWeight:700,
-          color:"#fff",
+          display:"inline-flex",
+          alignItems:"center",
+          gap:6,
           padding:"4px 8px",
           borderRadius:999,
-          background:"rgba(255,255,255,0.12)",
-          border:"1px solid rgba(255,255,255,0.25)"
+          background:"rgba(255,255,255,0.10)",
+          border:"1px solid rgba(255,255,255,0.22)"
         }
-      },`${l.icon} ${l.label}`))));
+      },
+        h("span",{style:{fontSize:10,fontWeight:800,color:"rgba(255,255,255,0.9)"}},"試合動画"),
+        video26 && h("a",{
+          href:video26.url,
+          target:"_blank",
+          rel:"noopener noreferrer",
+          style:{
+            textDecoration:"none",
+            fontSize:10,
+            fontWeight:800,
+            color:"#fff",
+            padding:"3px 8px",
+            borderRadius:999,
+            background:"rgba(255,255,255,0.16)",
+            border:"1px solid rgba(255,255,255,0.25)"
+          }
+        },"26年度"),
+        video25 && h("a",{
+          href:video25.url,
+          target:"_blank",
+          rel:"noopener noreferrer",
+          style:{
+            textDecoration:"none",
+            fontSize:10,
+            fontWeight:800,
+            color:"#fff",
+            padding:"3px 8px",
+            borderRadius:999,
+            background:"rgba(255,255,255,0.16)",
+            border:"1px solid rgba(255,255,255,0.25)"
+          }
+        },"25年度")
+      )));
 }
 
 // ── ログイン ─────────────────────────────────────────────────
