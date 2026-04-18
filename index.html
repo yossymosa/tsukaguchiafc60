@@ -2557,12 +2557,26 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
   );
 
   const editContent = h(Fragment, {},
-    !isEventSchedule && h("div", { style: { background: "#F8F9FA", borderRadius: 12, padding: 12, marginBottom: 14 } },
+    !isEventSchedule && !isPracticeSchedule && h("div", { style: { background: "#F8F9FA", borderRadius: 12, padding: 12, marginBottom: 14 } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#bbb", marginBottom: 10 } }, "時間"),
       h("div", { style: { display: "flex", gap: 10 } },
         timeField("gatherTime", "集合時間"),
         timeField("upTime", "アップ開始"),
         timeField("matchTime", "試合開始")
+      )
+    ),
+    isPracticeSchedule && h("div", { style: { background: "#F8F9FA", borderRadius: 12, padding: 12, marginBottom: 14 } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#bbb", marginBottom: 10 } }, "当番"),
+      assignmentField("duty", "当番", dutyCountMap, false),
+      h("div", { style: { marginBottom: 4 } },
+        h("div", { style: { fontSize: 11, fontWeight: 600, color: "#666", marginBottom: 4 } }, "当番メモ"),
+        h("textarea", {
+          value: form.dutyNote,
+          onChange: e => setForm(p => ({ ...p, dutyNote: e.target.value })),
+          placeholder: "例: 練習準備、片付け",
+          rows: 2,
+          style: { ...css.inp, width: "100%", resize: "none" }
+        })
       )
     ),
     !isEventSchedule && !isPracticeSchedule && h("div", { style: { marginBottom: 12 } },
@@ -2814,7 +2828,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
         }, "地図")
       )
     ),
-    !isEventSchedule && ([cleanTime(form.gatherTime), cleanTime(form.upTime), cleanTime(form.matchTime)].some(Boolean)) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
+    !isEventSchedule && !isPracticeSchedule && ([cleanTime(form.gatherTime), cleanTime(form.upTime), cleanTime(form.matchTime)].some(Boolean)) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
       [["集合", cleanTime(form.gatherTime)], ["アップ", cleanTime(form.upTime)], ["試合開始", cleanTime(form.matchTime)]].filter(([, v]) => v).map(([l, v]) =>
         h("div", { key: l, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4 } },
           h("div", { style: { fontSize: 11, color: "#64748B", width: 60 } }, l),
@@ -2823,6 +2837,14 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       )
     ),
     participantBlock,
+    isPracticeSchedule && (form.duty || form.dutyNote) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4A5568", marginBottom: 8 } }, "👨‍🏫 当番"),
+      form.duty && h("div", { style: { marginBottom: 4 } },
+        h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "当番"),
+        h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, toSurname(form.duty))
+      ),
+      form.dutyNote && h("div", { style: { fontSize: 12, color: "#666", whiteSpace: "pre-wrap" } }, form.dutyNote)
+    ),
     !isEventSchedule && !isPracticeSchedule && (form.duty || form.coach || form.luggagePerson) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
       h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4A5568", marginBottom: 8 } }, "👨‍🏫 担当・コーチ"),
       form.duty && h("div", { style: { marginBottom: 4 } },
@@ -6936,9 +6958,48 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
   const [mvpSaving,setMvpSaving]=useState(false);
   const [rank,setRank]=useState(schedule.rank||"");
   const [rankSaving,setRankSaving]=useState(false);
+  const extractTimeFromDate = value => {
+    const s = String(value || "");
+    const m = s.match(/T(\d{1,2}:\d{2})/);
+    return m ? `${String(Number(m[1].split(":")[0])).padStart(2, "0")}:${m[1].split(":")[1]}` : "";
+  };
+  const parseTimeLabelRange = value => {
+    const s = String(value || "");
+    const m = s.match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/);
+    if (!m) return { from: "", to: "" };
+    return {
+      from: `${String(Number(m[1].split(":")[0])).padStart(2, "0")}:${m[1].split(":")[1]}`,
+      to: `${String(Number(m[2].split(":")[0])).padStart(2, "0")}:${m[2].split(":")[1]}`
+    };
+  };
+  const buildEditScheduleForm = sch => {
+    const dateOnly = nd(sch?.date || "") || "";
+    const range = parseTimeLabelRange(sch?.timeLabel || "");
+    const from = String(sch?.timeFrom || "").trim() || extractTimeFromDate(sch?.date || "") || range.from;
+    const to = String(sch?.timeTo || "").trim() || range.to;
+    const hasTime = !!from;
+    const allDayRaw = sch?.allDay;
+    const allDay = (allDayRaw === true || String(allDayRaw).toLowerCase() === "true")
+      ? true
+      : (allDayRaw === false || String(allDayRaw).toLowerCase() === "false")
+        ? false
+        : !hasTime;
+    return {
+      date: dateOnly,
+      allDay,
+      timeFrom: from,
+      timeTo: to,
+      title: sch?.title || "",
+      location: sch?.location || "",
+      type: sch?.type || "practice",
+      deadline: sch?.deadline || "",
+      carpoolDeadline: sch?.carpoolDeadline || "",
+      memo: sch?.memo || ""
+    };
+  };
   const [editSch,setEditSch]=useState(false);
   const [editSchSaving,setEditSchSaving]=useState(false);
-  const [schForm,setSchForm]=useState({date:schedule.date||"",title:schedule.title||"",location:schedule.location||"",type:schedule.type||"practice",deadline:schedule.deadline||"",carpoolDeadline:schedule.carpoolDeadline||"",memo:schedule.memo||""});
+  const [schForm,setSchForm]=useState(()=>buildEditScheduleForm(schedule));
   const [hpModal,setHpModal]=useState(false);
   const [hpText,setHpText]=useState("");
   const [ytModal,setYtModal]=useState(false);
@@ -6976,12 +7037,37 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
   useEffect(()=>{
     setDayTab(resolveDayTab(initialTab));
   },[schedule.id,isSimpleDay,initialTab]);
+  useEffect(()=>{
+    setSchForm(buildEditScheduleForm(schedule));
+  },[schedule.id]);
   const saveEditSch=async()=>{
     setEditSchSaving(true);
     try{
       const nextType = normalizeType(schForm.type) || schForm.type;
-      await api("updateSchedule",{schedule:{...schForm,id:schedule.id,type:nextType,mvp:schedule.mvp||"",deadline:schForm.deadline||"",carpoolDeadline:schForm.carpoolDeadline||""}});
-      schedule.date = schForm.date;
+      const dateOnly = nd(schForm.date) || schForm.date;
+      const timeFrom = String(schForm.timeFrom || "").trim();
+      const timeTo = String(schForm.timeTo || "").trim();
+      const allDay = !!schForm.allDay;
+      const nextDate = (!allDay && timeFrom) ? (dateOnly + "T" + timeFrom) : dateOnly;
+      const nextTimeLabel = (!allDay && timeFrom) ? (timeFrom + (timeTo ? " - " + timeTo : "")) : "";
+      await api("updateSchedule",{schedule:{
+        ...schForm,
+        id:schedule.id,
+        type:nextType,
+        date:nextDate,
+        allDay,
+        timeFrom: allDay ? "" : timeFrom,
+        timeTo: allDay ? "" : timeTo,
+        timeLabel: nextTimeLabel,
+        mvp:schedule.mvp||"",
+        deadline:schForm.deadline||"",
+        carpoolDeadline:schForm.carpoolDeadline||""
+      }});
+      schedule.date = nextDate;
+      schedule.allDay = allDay;
+      schedule.timeFrom = allDay ? "" : timeFrom;
+      schedule.timeTo = allDay ? "" : timeTo;
+      schedule.timeLabel = nextTimeLabel;
       schedule.title = schForm.title;
       schedule.location = schForm.location;
       schedule.type = nextType;
@@ -7140,6 +7226,23 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"日付"),
         h("input",{type:"date",value:schForm.date,onChange:e=>setSchForm(p=>({...p,date:e.target.value})),style:{...css.inp,width:"100%"}})),
+      h("div",{style:{marginBottom:12}},
+        h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"時間"),
+        h("div",{style:{display:"flex",gap:8,marginBottom:8}},
+          [{k:true,l:"終日"},{k:false,l:"時間指定"}].map(opt=>
+            h("button",{key:"edit-sch-all-day-"+String(opt.k),onClick:()=>setSchForm(p=>({...p,allDay:opt.k})),
+              style:{flex:1,padding:"9px",border:"2px solid "+(schForm.allDay===opt.k?"#1D4ED8":"#eee"),
+                borderRadius:10,background:schForm.allDay===opt.k?"#1D4ED8":"#fff",
+                color:schForm.allDay===opt.k?"#fff":"#666",fontSize:13,fontWeight:700,cursor:"pointer"}},opt.l))
+        ),
+        !schForm.allDay&&h("div",{style:{display:"flex",alignItems:"center",gap:8}},
+          h("input",{type:"time",value:schForm.timeFrom||"",onChange:e=>setSchForm(p=>({...p,timeFrom:e.target.value})),
+            style:{...css.inp,flex:1}}),
+          h("span",{style:{color:"#aaa",flexShrink:0,fontWeight:700}},"〜"),
+          h("input",{type:"time",value:schForm.timeTo||"",onChange:e=>setSchForm(p=>({...p,timeTo:e.target.value})),
+            style:{...css.inp,flex:1}})
+        )
+      ),
       schForm.type!=="practice"&&h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"タイトル"),
         h("input",{value:schForm.title,onChange:e=>setSchForm(p=>({...p,title:e.target.value})),placeholder:"例：第3回リーグ戦",style:{...css.inp,width:"100%"}})),
@@ -7169,7 +7272,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         h("button",{onClick:()=>window.print(),style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"📄 PDF")),
       h("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}},
         h(Bdg,{label:tc.lb,color:tc.bg}),
-        isAdmin&&h("button",{onClick:()=>setEditSch(true),style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"5px 12px",color:"#fff",fontSize:12,cursor:"pointer",flexShrink:0}},"✏️ 編集")),
+        isAdmin&&h("button",{onClick:()=>{setSchForm(buildEditScheduleForm(schedule));setEditSch(true);},style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"5px 12px",color:"#fff",fontSize:12,cursor:"pointer",flexShrink:0}},"✏️ 編集")),
       h("div",{style:{fontSize:20,fontWeight:900,color:"#fff",marginBottom:4}},schedule.title||"（タイトルなし）"),
       h("div",{style:{fontSize:13,color:"rgba(255,255,255,0.6)"}},dt.full+(schedule.location?" ／ 📍"+schedule.location:""))),
 
