@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyfDsaZioIZxE8GHYMorJKO6BujgRkuRNDcGbLQLfmH6nLV8CSF5VGN_mYFHW_nDWYS/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxep1KIahTj-2c1-qsfp6z_v5gdZ5QjEVx-9EYvKKEioEW04y0R560tI2hLUvwn8eUK/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -6364,12 +6364,21 @@ function LiftingInput({members,liftings}) {
 }
 
 // ── 日程タブ：カレンダー＋今月の予定＋日程追加 ─────────────────
-function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
+function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Practice}) {
   const today=new Date();
   const [year,setYear]=useState(today.getFullYear());
   const [month,setMonth]=useState(today.getMonth());
   const [modal,setModal]=useState(false);
   const [dayModal,setDayModal]=useState(null);
+  const [importModal,setImportModal]=useState(false);
+  const [importBusy,setImportBusy]=useState(false);
+  const [importRows,setImportRows]=useState([]);
+  const [importResult,setImportResult]=useState(null);
+  const [importForm,setImportForm]=useState({
+    url:"http://afcjr.web.fc2.com/",
+    year:today.getFullYear(),
+    month:today.getMonth()+1
+  });
   const [holidayMap,setHolidayMap]=useState(()=>{
     try{
       const cached = sessionStorage.getItem("afc_holiday_map_jp");
@@ -6428,6 +6437,52 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule}) {
     next = applyFridayPracticeDefaults(next);
     setFs(next);
     setModal(true);
+  };
+  const openImportModal=()=>{
+    setImportForm({
+      url:"http://afcjr.web.fc2.com/",
+      year:year,
+      month:month+1
+    });
+    setImportRows([]);
+    setImportResult(null);
+    setImportModal(true);
+  };
+  const fetchImportPreview=async()=>{
+    if(!onImportFc2Practice) return;
+    setImportBusy(true);
+    try{
+      const y=Number(importForm.year||0);
+      const m=Number(importForm.month||0);
+      if(!y||!m||m<1||m>12) throw new Error("年・月を正しく入力してください");
+      const r=await onImportFc2Practice({url:importForm.url,year:y,month:m,previewOnly:true});
+      setImportRows(Array.isArray(r.items)?r.items:[]);
+      setImportResult(null);
+    }catch(e){
+      alert("取り込み候補の取得エラー: "+(e&&e.message?e.message:"不明なエラー"));
+    }finally{
+      setImportBusy(false);
+    }
+  };
+  const runImportFromPreview=async()=>{
+    if(!onImportFc2Practice) return;
+    if(!importRows.length){
+      alert("先に取り込み候補を取得してください");
+      return;
+    }
+    if(!confirm("この内容で練習予定を取り込みますか？")) return;
+    setImportBusy(true);
+    try{
+      const y=Number(importForm.year||0);
+      const m=Number(importForm.month||0);
+      const r=await onImportFc2Practice({url:importForm.url,year:y,month:m,previewOnly:false});
+      setImportResult(r||null);
+      if(Array.isArray(r?.items)) setImportRows(r.items);
+    }catch(e){
+      alert("取り込みエラー: "+(e&&e.message?e.message:"不明なエラー"));
+    }finally{
+      setImportBusy(false);
+    }
   };
 
   const saveSchedule=async()=>{
@@ -6515,6 +6570,7 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,box
       )
     ),
     isAdmin&&h("div",{style:{display:"flex",gap:8}},
+      h("button",{onClick:openImportModal,style:{...css.bG,padding:"7px 12px",fontSize:12,whiteSpace:"nowrap"}},"FC2取込"),
       h("button",{onClick:()=>openAddScheduleModal(),style:{...css.bO,padding:"7px 14px",fontSize:12,whiteSpace:"nowrap"}},"+ 日程追加"))
   )
 ),
@@ -6647,6 +6703,38 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,box
       h("div",{style:{display:"flex",gap:10}},
         h("button",{onClick:()=>setModal(false),style:css.bG},"キャンセル"),
         h("button",{onClick:saveSchedule,style:css.bS},"追加する"))),
+
+    importModal&&h(Modal,{title:"FC2練習を取り込む",onClose:()=>setImportModal(false),position:"center"},
+      h("div",{style:{display:"grid",gap:10}},
+        h("div",{},
+          h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:4}},"URL"),
+          h("input",{value:importForm.url,onChange:e=>setImportForm(p=>({...p,url:e.target.value})),style:css.inp})),
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+          h("div",{},
+            h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:4}},"年"),
+            h("input",{type:"number",value:importForm.year,onChange:e=>setImportForm(p=>({...p,year:e.target.value})),style:css.inp})),
+          h("div",{},
+            h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:4}},"月"),
+            h("input",{type:"number",min:1,max:12,value:importForm.month,onChange:e=>setImportForm(p=>({...p,month:e.target.value})),style:css.inp}))),
+        h("button",{onClick:fetchImportPreview,disabled:importBusy,style:{...css.bG,opacity:importBusy?0.6:1}},
+          importBusy?"取得中...":"取り込み候補を取得"),
+        importRows.length>0
+          ? h("div",{},
+              h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:6}},
+                `取り込み候補 ${importRows.length}件`),
+              h("div",{style:{maxHeight:280,overflow:"auto",border:"1px solid #E2E8F0",borderRadius:10,padding:8,background:"#F8FAFC"}},
+                importRows.map((r,i)=>h("div",{key:i,style:{padding:"8px 6px",borderBottom:i===importRows.length-1?"none":"1px solid #E2E8F0"}},
+                  h("div",{style:{fontSize:12,fontWeight:800,color:"#1E293B"}},
+                    `${fmt(r.dateOnly||r.date).m}/${fmt(r.dateOnly||r.date).d} ${r.title||"練習"}`),
+                  h("div",{style:{fontSize:11,color:"#475569",marginTop:2}},
+                    `${r.parsedTime||r.timeLabel||"時間なし"}${r.location?" / "+r.location:""}`)))),
+              h("button",{onClick:runImportFromPreview,disabled:importBusy,style:{...css.bS,marginTop:10,opacity:importBusy?0.6:1}},
+                importBusy?"取り込み中...":"この内容で取り込む"))
+          : h("div",{style:{fontSize:12,color:"#94A3B8"}},"先に「取り込み候補を取得」を押してください"),
+        importResult&&h("div",{style:{fontSize:12,fontWeight:700,color:"#16A34A",background:"#ECFDF3",padding:"8px 10px",borderRadius:8}},
+          `取込完了: 追加 ${importResult.inserted||0} / 更新 ${importResult.updated||0} / 変更なし ${importResult.unchanged||0}`)
+      )
+    ),
 
   );
 }
@@ -7842,6 +7930,22 @@ function App() {
     catch(e){alert("エラー: "+e.message);}
     setLoading(false);
   };
+  const handleImportFc2Practice=async({url,year,month,previewOnly})=>{
+    const payload={url:String(url||"").trim(),year:Number(year),month:Number(month)};
+    if(previewOnly){
+      return await api("previewFc2Schedule",payload);
+    }
+    setLoading(true);setLoadMsg("FC2取込中...");
+    try{
+      const res=await api("syncFc2PracticeSchedules",payload);
+      await load("更新中...");
+      return res;
+    }catch(e){
+      throw e;
+    }finally{
+      setLoading(false);
+    }
+  };
   const handleSaveMvp=async(scheduleId,mvpName)=>{
     try{await api("updateMvp",{scheduleId,mvp:mvpName});await load("更新中...");}
     catch(e){alert("MVP保存エラー: "+e.message);}
@@ -7973,7 +8077,7 @@ function App() {
   ];
   const currentTabContent =
     tab==="home" ? h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab})
-    : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule})
+    : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule,onImportFc2Practice:handleImportFc2Practice})
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="member" ? h(MemberTab,{members,liftings})
