@@ -6603,10 +6603,12 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,box
     )
 ),
     // ── 今月の予定リスト
+    (()=>{const upcomingDayKeys=Object.keys(dayData).filter(d=>`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`>=todayStr).sort((a,b)=>Number(a)-Number(b));
+      return h(Fragment,{},
     h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"今月の予定"),
-    Object.keys(dayData).length===0
-      ?h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"今月の日程はありません")
-      :Object.keys(dayData).sort((a,b)=>Number(a)-Number(b)).map(d=>{
+    upcomingDayKeys.length===0
+      ?h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"本日以降の日程はありません")
+      :upcomingDayKeys.map(d=>{
           const evs=dayData[d];
           const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
           const dt=fmt(dStr);
@@ -6633,7 +6635,9 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,box
                   dayR.length>0&&h("div",{style:{fontSize:11,color:"#4CAF50",fontWeight:700}},"⚽ "+dayR.length+"試合"),
                   h("div",{style:{fontSize:14,color:"#ccc",marginTop:2}},"›")));
             }));
-        }),
+        })
+      );
+    })(),
 
     dayModal&&h(Modal,{title:fmt(dayModal.date).full,onClose:()=>setDayModal(null),position:"center"},
       dayModal.events.length===0
