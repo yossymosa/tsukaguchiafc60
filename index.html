@@ -6586,20 +6586,21 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,box
   )),
 
   // 凡例＋追加ボタン
-    h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}},
-      h("div",{style:{display:"flex",gap:10,flexWrap:"wrap"}},
+    h("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10,flexWrap:"wrap"}},
+      h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",flex:1,minWidth:220}},
         [{c:"#4CAF50",l:"練習"},{c:"#1D4ED8",l:"公式戦"},{c:"#2563EB",l:"トレマ"},{c:"#0F172A",l:"カップ戦"},{c:"#009688",l:"イベント"}].map(x=>
-        h("div",{key:x.l,style:{display:"flex",alignItems:"center",gap:5}},
-          h("div",{style:{width:10,height:10,borderRadius:"50%",background:x.c}}),
-          h("span",{style:{fontSize:11,color:"#888"}},x.l)
+          h("div",{key:x.l,style:{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",borderRadius:999,border:"1px solid #E2E8F0",background:"#F8FAFC"}},
+            h("div",{style:{width:9,height:9,borderRadius:"50%",background:x.c,flexShrink:0}}),
+            h("span",{style:{fontSize:11,fontWeight:700,color:"#475569",lineHeight:1}},x.l)
+          )
         )
+      ),
+      isAdmin&&h("div",{style:{display:"grid",gap:8,minWidth:180}},
+        h("button",{onClick:()=>openImportModal("practice"),style:{...css.bG,padding:"8px 12px",fontSize:12,whiteSpace:"nowrap",width:"100%"}},"練習日程インポート"),
+        h("button",{onClick:()=>openImportModal("match"),style:{...css.bG,padding:"8px 12px",fontSize:12,whiteSpace:"nowrap",width:"100%"}},"試合インポート"),
+        h("button",{onClick:()=>openAddScheduleModal(),style:{...css.bO,padding:"8px 12px",fontSize:12,whiteSpace:"nowrap",width:"100%"}},"+ 日程追加")
       )
-    ),
-    isAdmin&&h("div",{style:{display:"flex",gap:8}},
-      h("button",{onClick:()=>openImportModal("practice"),style:{...css.bG,padding:"7px 12px",fontSize:12,whiteSpace:"nowrap"}},"公式HP 練習取込"),
-      h("button",{onClick:()=>openImportModal("match"),style:{...css.bG,padding:"7px 12px",fontSize:12,whiteSpace:"nowrap"}},"公式HP 試合情報取込"),
-      h("button",{onClick:()=>openAddScheduleModal(),style:{...css.bO,padding:"7px 14px",fontSize:12,whiteSpace:"nowrap"}},"+ 日程追加"))
-  )
+    )
 ),
     // ── 今月の予定リスト
     h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"今月の予定"),
