@@ -664,10 +664,10 @@ function RWdg({our,their,pk,status,date}) {
   if(st!=="finished" && Number(our)===0 && Number(their)===0 && !hasPk){
     return h("span",{style:{background:"#E2E8F0",color:"#475569",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},"未実施");
   }
-  const w=Number(our)>Number(their),d=Number(our)===Number(their);
-  const pkW=d&&pk&&Number(pk.our)>Number(pk.their);
-  const pkL=d&&pk&&Number(pk.our)<Number(pk.their);
-  const win=w||pkW, lose=(!w&&!d)||pkL;
+  const w=Number(our)>Number(their),isDraw=Number(our)===Number(their);
+  const pkW=isDraw&&pk&&Number(pk.our)>Number(pk.their);
+  const pkL=isDraw&&pk&&Number(pk.our)<Number(pk.their);
+  const win=w||pkW, lose=(!w&&!isDraw)||pkL;
   const c=win?"#4CAF50":lose?"#F44336":"#FFC107";
   const label=win?"勝ち":lose?"負け":"引分";
   return h("span",{style:{background:c,color:"#fff",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},label+(pkW?" (PK)":pkL?" (PK)":""));
