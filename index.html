@@ -521,8 +521,11 @@ function normalizeMatchStatus(v){
 }
 function isMatchFinished(r){
   const status = normalizeMatchStatus(r?.matchStatus);
+  const d = nd(r?.date || "");
+  const forceFinishedByDate = !!d && d <= todayLocal();
   if(status==="finished") return true;
-  if(status==="in_progress") return false;
+  if(status==="in_progress") return forceFinishedByDate;
+  if(forceFinishedByDate) return true;
   // 旧データ互換: 得点 or PKデータがあるものは実施済み扱い
   const our = Number(r?.ourScore||0);
   const their = Number(r?.theirScore||0);
@@ -649,8 +652,11 @@ function Modal({title,onClose,children,position="bottom"}) {
 function Bdg({label,color,bg,small}) {
   return h("span",{style:{background:bg||color+"22",color,borderRadius:6,padding:small?"2px 7px":"3px 10px",fontSize:small?10:11,fontWeight:700,display:"inline-block"}},label);
 }
-function RWdg({our,their,pk,status}) {
-  const st = normalizeMatchStatus(status);
+function RWdg({our,their,pk,status,date}) {
+  const d = nd(date || "");
+  const forceFinishedByDate = !!d && d <= todayLocal();
+  const stRaw = normalizeMatchStatus(status);
+  const st = forceFinishedByDate ? "finished" : stRaw;
   if(st==="in_progress"){
     return h("span",{style:{background:"#DBEAFE",color:"#1D4ED8",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},"試合中");
   }
@@ -1029,6 +1035,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   const [matchMemo,setMatchMemo]=useState(()=>String(match.memo||""));
   const [matchStatus,setMatchStatus]=useState(()=>{
     const normalized = normalizeMatchStatus(match.matchStatus);
+    const d = nd(match?.date || "");
+    if (d && d <= todayLocal()) return "finished";
     return normalized || (isMatchFinished(match) ? "finished" : "in_progress");
   });
   const parseSubstitutions = v => {
@@ -1258,7 +1266,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     setShotCountMissing(isTrueFlag(match?.shotCountMissing));
     setMatchMemo(String(match.memo||""));
     const normalized = normalizeMatchStatus(match.matchStatus);
-    setMatchStatus(normalized || (isMatchFinished(match) ? "finished" : "in_progress"));
+    const d = nd(match?.date || "");
+    setMatchStatus((d && d <= todayLocal()) ? "finished" : (normalized || (isMatchFinished(match) ? "finished" : "in_progress")));
     setSubstitutions(parseSubstitutions(match?.substitutions || []));
     setSubEdit(null);
     setSubForm({half:"1st",minute:"",second:"00",outMemberId:"",inMemberId:"",note:""});
@@ -1511,7 +1520,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
         h("div",{style:{fontSize:14,fontWeight:900,color:"#334155",lineHeight:1.2}},match.opponent||"相手")
       )
     ),
-    !pkOn&&h("div",{style:{marginTop:4,display:"flex",justifyContent:"center"}},h(RWdg,{our:ourT,their:thT,status:matchStatus}))
+    !pkOn&&h("div",{style:{marginTop:4,display:"flex",justifyContent:"center"}},h(RWdg,{our:ourT,their:thT,status:matchStatus,date:match?.date}))
   );
 
   const matchStatsBlock = h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:8,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -2276,7 +2285,7 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
             h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},"vs "+r.opponent)),
           h("div",{style:{textAlign:"right",flexShrink:0}},
             h(ScoreLine,{our:r.ourScore,their:r.theirScore,size:16}),
-            h("div",{style:{marginTop:3}},h(RWdg,{our:r.ourScore,their:r.theirScore,status:r.matchStatus}))));
+            h("div",{style:{marginTop:3}},h(RWdg,{our:r.ourScore,their:r.theirScore,status:r.matchStatus,date:r.date}))));
       })));
 }
 
@@ -5768,7 +5777,7 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
           s?.location&&h("div",{style:{fontSize:11,color:"#aaa"}},"📍 "+s.location)),
         h("div",{style:{textAlign:"right",flexShrink:0}},
           h(ScoreLine,{our:r.ourScore,their:r.theirScore,size:18}),
-          h("div",{style:{marginTop:3}},h(RWdg,{our:r.ourScore,their:r.theirScore,status:r.matchStatus}))));
+          h("div",{style:{marginTop:3}},h(RWdg,{our:r.ourScore,their:r.theirScore,status:r.matchStatus,date:r.date}))));
     }));
 }
 
@@ -7615,7 +7624,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
                 "vs "+r.opponent),
               h("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
                 h(ScoreLine,{our:r.ourScore,their:r.theirScore,size:20}),
-                h(RWdg,{our:r.ourScore,their:r.theirScore,status:r.matchStatus}),
+                h(RWdg,{our:r.ourScore,their:r.theirScore,status:r.matchStatus,date:r.date}),
                 (()=>{
                   try{const k=JSON.parse(r.pkKickers);if(Array.isArray(k)&&k.length>0){
                     const po=k.filter(x=>x.success).length;
@@ -7685,86 +7694,10 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
 }
 
 
-function TrendChartCard({title,points=[],metricKey,color="#1D4ED8",unit="",isPercent=false}) {
-  const W = 360, H = 170;
-  const pad = {l:34,r:12,t:12,b:34};
-  const innerW = W - pad.l - pad.r;
-  const innerH = H - pad.t - pad.b;
-  const rows = Array.isArray(points) ? points : [];
-  const values = rows
-    .map((p, i) => ({i, v: Number(p && p[metricKey])}))
-    .filter(x => Number.isFinite(x.v));
-  const hasData = values.length > 0;
-  const maxVal = hasData
-    ? (isPercent ? Math.max(100, ...values.map(x => x.v), 1) : Math.max(...values.map(x => x.v), 1))
-    : 1;
-  const minVal = 0;
-  const xAt = idx => rows.length <= 1
-    ? pad.l + innerW / 2
-    : pad.l + (idx * innerW / (rows.length - 1));
-  const yAt = v => {
-    const den = (maxVal - minVal) || 1;
-    return pad.t + ((maxVal - v) / den) * innerH;
-  };
-  const segments = [];
-  let current = [];
-  rows.forEach((p, i) => {
-    const v = Number(p && p[metricKey]);
-    if (Number.isFinite(v)) {
-      current.push({i, v});
-    } else if (current.length) {
-      segments.push(current);
-      current = [];
-    }
-  });
-  if (current.length) segments.push(current);
-  const toPath = seg => seg.map((pt, i) => `${i===0?"M":"L"}${xAt(pt.i)} ${yAt(pt.v)}`).join(" ");
-  const tickIdx = [...new Set([0, Math.floor((rows.length-1)/2), rows.length-1].filter(i=>i>=0))];
-  const lastData = hasData ? values[values.length-1] : null;
-  const latestPoint = lastData ? rows[lastData.i] : null;
-  const latestValueLabel = !lastData
-    ? "-"
-    : isPercent
-      ? `${(Math.round(lastData.v * 10) / 10).toFixed(lastData.v % 1 ? 1 : 0)}%`
-      : `${Math.round(lastData.v * 10) / 10}${unit}`;
-  return h("div",{style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:12,padding:12,marginTop:10}},
-    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}},
-      h("div",{style:{fontSize:12,fontWeight:800,color:"#334155"}},title),
-      h("div",{style:{fontSize:12,fontWeight:800,color,whiteSpace:"nowrap"}},latestValueLabel)
-    ),
-    !hasData
-      ? h("div",{style:{fontSize:12,color:"#94A3B8",padding:"14px 4px"}},"グラフ表示できるデータがありません")
-      : h("svg",{viewBox:`0 0 ${W} ${H}`,style:{width:"100%",height:170,display:"block"}},
-          h("line",{x1:pad.l,y1:pad.t,x2:pad.l,y2:H-pad.b,stroke:"#CBD5E1",strokeWidth:1}),
-          h("line",{x1:pad.l,y1:H-pad.b,x2:W-pad.r,y2:H-pad.b,stroke:"#CBD5E1",strokeWidth:1}),
-          h("line",{x1:pad.l,y1:yAt(maxVal),x2:W-pad.r,y2:yAt(maxVal),stroke:"#E2E8F0",strokeWidth:1,strokeDasharray:"3 3"}),
-          h("line",{x1:pad.l,y1:yAt((maxVal+minVal)/2),x2:W-pad.r,y2:yAt((maxVal+minVal)/2),stroke:"#F1F5F9",strokeWidth:1,strokeDasharray:"3 3"}),
-          segments.map((seg, i)=>h("path",{key:`seg-${i}`,d:toPath(seg),fill:"none",stroke:color,strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"})),
-          values.map(pt=>h("circle",{key:`pt-${pt.i}`,cx:xAt(pt.i),cy:yAt(pt.v),r:3.2,fill:"#fff",stroke:color,strokeWidth:2})),
-          h("text",{x:4,y:yAt(maxVal)+4,fontSize:10,fill:"#94A3B8"},isPercent?`${Math.round(maxVal)}%`:String(Math.round(maxVal))),
-          h("text",{x:10,y:H-pad.b+4,fontSize:10,fill:"#94A3B8"},isPercent?"0%":"0"),
-          tickIdx.map((i, idx)=>{
-            const p = rows[i] || {};
-            const lbl = String(p.shortLabel || p.label || "");
-            return h(Fragment,{key:`tick-${idx}-${i}`},
-              h("line",{x1:xAt(i),y1:H-pad.b,x2:xAt(i),y2:H-pad.b+4,stroke:"#CBD5E1",strokeWidth:1}),
-              h("text",{x:xAt(i),y:H-8,textAnchor:"middle",fontSize:10,fill:"#94A3B8"},lbl)
-            );
-          })
-        ),
-    latestPoint && h("div",{style:{marginTop:6,fontSize:11,color:"#64748B",fontWeight:600}},
-      `${String(latestPoint.label || "")}${latestPoint.subLabel ? " / " + String(latestPoint.subLabel) : ""}`)
-  );
-}
-
 // ── メンバータブ ────────────────────────────────────────────
-function MemberTab({members,liftings=[],results=[]}) {
-  const SHOT_RATE_START_DATE = "2026-04-12";
+function MemberTab({members,liftings=[]}) {
   const [pos,setPos]=useState("all");
   const [gradeF,setGradeF]=useState("4年");
-  const [selectedMemberId,setSelectedMemberId]=useState("");
-  const [trendMode,setTrendMode]=useState("month"); // month | match
-  const [trendMetric,setTrendMetric]=useState("goals"); // goals | assists | lifting | shotRate
   const baseMembers = useMemo(() =>
     members
       .filter(m => [1,2,3,4].includes(getGradeNumber(m.grade)))
@@ -7802,155 +7735,6 @@ function MemberTab({members,liftings=[],results=[]}) {
     : baseMembers.filter(m=>m._gradeKey===gradeF);
   const filtered=pos==="all"?gradeFiltered:gradeFiltered.filter(m=>m.position===pos);
   const sorted=[...filtered].sort((a,b)=>Number(a.number||99)-Number(b.number||99));
-  const allMemberOptions = useMemo(() =>
-    [...baseMembers].sort((a,b)=>
-      (getGradeNumber(b.grade)||0)-(getGradeNumber(a.grade)||0) ||
-      Number(a.number||999)-Number(b.number||999) ||
-      String(a.name||"").localeCompare(String(b.name||""))
-    ),
-  [baseMembers]);
-  useEffect(() => {
-    if (!selectedMemberId) {
-      const first = sorted[0] || allMemberOptions[0];
-      if (first) setSelectedMemberId(String(first.id || ""));
-      return;
-    }
-    const exists = allMemberOptions.some(m => String(m.id||"") === String(selectedMemberId));
-    if (!exists) {
-      const first = sorted[0] || allMemberOptions[0];
-      setSelectedMemberId(first ? String(first.id || "") : "");
-    }
-  }, [selectedMemberId, sorted, allMemberOptions]);
-  const selectedMember = useMemo(() =>
-    allMemberOptions.find(m => String(m.id||"") === String(selectedMemberId||"")) || null,
-  [allMemberOptions, selectedMemberId]);
-  const selectedId = String(selectedMember?.id || "");
-  const memberNameToId = useMemo(() => {
-    const m = {};
-    (members || []).forEach(x => {
-      const name = String(x?.name || "").trim();
-      const id = String(x?.id || "").trim();
-      if (name && id && !m[name]) m[name] = id;
-    });
-    return m;
-  }, [members]);
-  const selectedLiftingRows = useMemo(() =>
-    (liftings || [])
-      .filter(x => String(x?.memberId || "") === selectedId)
-      .map((x, idx) => ({
-        ...x,
-        _idx: idx,
-        _date: nd(x?.date),
-        _count: Math.max(0, Number(x?.count || 0) || 0),
-      }))
-      .sort((a,b) => {
-        const da = a._date || "0000-00-00";
-        const db = b._date || "0000-00-00";
-        if (da !== db) return da.localeCompare(db);
-        return Number(a._idx || 0) - Number(b._idx || 0);
-      }),
-  [liftings, selectedId]);
-  const sortedResults = useMemo(() =>
-    (results || [])
-      .map((r, idx) => ({...r, _idx: idx, _date: nd(r?.date)}))
-      .filter(r => r._date)
-      .sort((a,b) => {
-        if (a._date !== b._date) return a._date.localeCompare(b._date);
-        return Number(a?.gameNumber || 1) - Number(b?.gameNumber || 1);
-      }),
-  [results]);
-  const calcMemberStatsInResult = useCallback((r) => {
-    if (!selectedId) return {goals:0, assists:0, shots:0, isShotRateTarget:false};
-    let goals = 0;
-    let assists = 0;
-    (r?.goals || []).forEach(g => {
-      const scorerId = String(g?.scorerId || memberNameToId[g?.scorerName] || "");
-      const assistId = String(g?.assistId || memberNameToId[g?.assistName] || "");
-      const isOwnGoal = g?.goalType === "オウンゴール";
-      if (!isOwnGoal && scorerId === selectedId) goals++;
-      if (!isOwnGoal && assistId === selectedId) assists++;
-    });
-    const shotMap = parseShotStatsMap((r && r.shotStats) || {});
-    const shots = Math.max(0, Number(shotMap[selectedId] || 0) || 0);
-    const isShotRateTarget = !!r?._date && r._date >= SHOT_RATE_START_DATE && !isTrueFlag(r?.shotCountMissing);
-    return {goals, assists, shots, isShotRateTarget};
-  }, [selectedId, memberNameToId]);
-  const monthlyPoints = useMemo(() => {
-    if (!selectedId) return [];
-    const monthMap = {};
-    const ensureMonth = key => {
-      if (!monthMap[key]) {
-        monthMap[key] = {key, label:key, shortLabel:key.slice(5,7)+"月", goals:0, assists:0, shotGoals:0, shotShots:0, lifting:null};
-      }
-      return monthMap[key];
-    };
-    sortedResults.forEach(r => {
-      const monthKey = String(r._date || "").slice(0, 7);
-      if (!monthKey) return;
-      const row = ensureMonth(monthKey);
-      const s = calcMemberStatsInResult(r);
-      row.goals += s.goals;
-      row.assists += s.assists;
-      if (s.isShotRateTarget) {
-        row.shotGoals += s.goals;
-        row.shotShots += s.shots;
-      }
-    });
-    const liftMonthMap = {};
-    selectedLiftingRows.forEach(x => {
-      if (!x._date) return;
-      const mk = x._date.slice(0, 7);
-      const prev = liftMonthMap[mk];
-      if (!prev || x._date > prev._date || (x._date === prev._date && Number(x._idx||0) > Number(prev._idx||0))) {
-        liftMonthMap[mk] = x;
-      }
-      ensureMonth(mk);
-    });
-    Object.keys(liftMonthMap).forEach(mk => {
-      monthMap[mk].lifting = liftMonthMap[mk]._count;
-    });
-    return Object.keys(monthMap).sort().map(key => {
-      const row = monthMap[key];
-      return {
-        label: `${key.slice(0,4)}年${key.slice(5,7)}月`,
-        shortLabel: row.shortLabel,
-        goals: row.goals,
-        assists: row.assists,
-        lifting: Number.isFinite(Number(row.lifting)) ? Number(row.lifting) : null,
-        shotRate: row.shotShots > 0 ? Math.round((row.shotGoals / row.shotShots) * 1000) / 10 : null,
-      };
-    });
-  }, [selectedId, sortedResults, selectedLiftingRows, calcMemberStatsInResult]);
-  const matchPoints = useMemo(() => {
-    if (!selectedId) return [];
-    const liftByDate = selectedLiftingRows.filter(x => x._date);
-    let li = 0;
-    let lastLifting = null;
-    return sortedResults.map(r => {
-      while (li < liftByDate.length && liftByDate[li]._date <= r._date) {
-        lastLifting = liftByDate[li]._count;
-        li++;
-      }
-      const s = calcMemberStatsInResult(r);
-      return {
-        label: fmt(r._date).full,
-        shortLabel: fmt(r._date).short,
-        subLabel: String(r?.opponent || "").trim(),
-        goals: s.goals,
-        assists: s.assists,
-        lifting: Number.isFinite(Number(lastLifting)) ? Number(lastLifting) : null,
-        shotRate: (s.isShotRateTarget && s.shots > 0) ? Math.round((s.goals / s.shots) * 1000) / 10 : null,
-      };
-    });
-  }, [selectedId, sortedResults, selectedLiftingRows, calcMemberStatsInResult]);
-  const trendPoints = trendMode === "match" ? matchPoints : monthlyPoints;
-  const trendMetricDefs = {
-    goals: {label:"ゴール", color:"#1D4ED8", unit:"点", isPercent:false},
-    assists: {label:"アシスト", color:"#0EA5E9", unit:"A", isPercent:false},
-    lifting: {label:"リフティング", color:"#22C55E", unit:"回", isPercent:false},
-    shotRate: {label:"シュート成功率", color:"#0F766E", unit:"%", isPercent:true},
-  };
-  const trendMetricDef = trendMetricDefs[trendMetric] || trendMetricDefs.goals;
   return h(Fragment,{},
     // 学年フィルター
     h("div",{style:{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}},
@@ -7959,58 +7743,19 @@ function MemberTab({members,liftings=[],results=[]}) {
           background:gradeF===g.key?"#1D4ED8":"#fff",color:gradeF===g.key?"#fff":"#666",
           fontSize:12,fontWeight:gradeF===g.key?700:400,cursor:"pointer"}},g.label))),
     // ポジションフィルター
-    h("div",{style:{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}},
+    h("div",{style:{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}},
       [{k:"all",l:"全員"},{k:"FW",l:"FW"},{k:"MF",l:"MF"},{k:"DF",l:"DF"},{k:"GK",l:"GK"}].map(t=>
         h("button",{key:t.k,onClick:()=>setPos(t.k),
           style:{padding:"6px 14px",border:`2px solid ${pos===t.k?"#1D4ED8":"#eee"}`,
             borderRadius:20,background:pos===t.k?"#1D4ED8":"#fff",
             color:pos===t.k?"#fff":"#666",fontSize:12,fontWeight:pos===t.k?700:400,cursor:"pointer"}},t.l))),
-    h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:10}},"📈 選手推移"),
-      h("div",{style:{marginBottom:8}},
-        h("select",{value:selectedId,onChange:e=>setSelectedMemberId(e.target.value),style:{...css.inp,fontSize:13}},
-          h("option",{value:""},"選手を選択"),
-          allMemberOptions.map(m=>h("option",{key:m.id,value:m.id},`#${m.number||"-"} ${m.name} (${formatMemberGenerationGrade(m)||m.grade||""})`))
-        )
-      ),
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}},
-        [{k:"month",l:"月別"},{k:"match",l:"試合別"}].map(x=>
-          h("button",{key:x.k,onClick:()=>setTrendMode(x.k),style:{
-            padding:"7px 6px",border:`1.5px solid ${trendMode===x.k?"#1D4ED8":"#E2E8F0"}`,borderRadius:10,
-            background:trendMode===x.k?"#DBEAFE":"#fff",color:trendMode===x.k?"#1D4ED8":"#64748B",
-            fontSize:12,fontWeight:800,cursor:"pointer"}},x.l))
-      ),
-      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:6,marginBottom:4}},
-        Object.entries(trendMetricDefs).map(([k,v])=>
-          h("button",{key:k,onClick:()=>setTrendMetric(k),style:{
-            padding:"7px 6px",border:`1.5px solid ${trendMetric===k?v.color+"AA":"#E2E8F0"}`,borderRadius:10,
-            background:trendMetric===k?v.color+"22":"#fff",color:trendMetric===k?v.color:"#64748B",
-            fontSize:12,fontWeight:800,cursor:"pointer"}},v.label))
-      ),
-      selectedMember
-        ? h(TrendChartCard,{title:`${selectedMember.name} / ${trendMode==="match"?"試合別":"月別"} ${trendMetricDef.label}`,points:trendPoints,metricKey:trendMetric,color:trendMetricDef.color,unit:trendMetricDef.unit,isPercent:trendMetricDef.isPercent})
-        : h("div",{style:{fontSize:12,color:"#94A3B8",padding:"8px 0"}},"選手を選ぶとグラフを表示します"),
-      trendMetric==="shotRate"&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:8}},"※ シュート成功率は 2026/04/12 以降かつ「シュート未記録」OFFの試合のみ")
-    ),
     // 選手カード一覧（3列）
     h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8}},
       sorted.map(m=>{
         const pc=PC[m.position]||{bg:"#999"};
-        const lfRows=(liftings||[]).filter(x=>String(x.memberId||"")===String(m.id||""));
-        const lf=lfRows.length
-          ? lfRows.reduce((best,row,idx)=>{
-              if(!best) return {...row,_idx:idx,_date:nd(row?.date)};
-              const d1 = nd(row?.date) || "0000-00-00";
-              const d0 = String(best._date || "0000-00-00");
-              if (d1 > d0) return {...row,_idx:idx,_date:d1};
-              if (d1 === d0 && idx > Number(best._idx || 0)) return {...row,_idx:idx,_date:d1};
-              return best;
-            }, null)
-          : null;
-        const active = String(selectedId) === String(m.id || "");
-        return h("div",{key:m.id,onClick:()=>setSelectedMemberId(String(m.id||"")),style:{background:"#fff",borderRadius:12,padding:"10px 8px",
-          boxShadow:"0 2px 8px rgba(0,0,0,0.06)",textAlign:"center",minWidth:0,cursor:"pointer",
-          border:`2px solid ${active?"#1D4ED8":"transparent"}`}},
+        const lf=liftings.find(x=>x.memberId===m.id);
+        return h("div",{key:m.id,style:{background:"#fff",borderRadius:12,padding:"10px 8px",
+          boxShadow:"0 2px 8px rgba(0,0,0,0.06)",textAlign:"center",minWidth:0}},
           h("div",{style:{width:40,height:40,borderRadius:10,background:pc.bg,margin:"0 auto 8px",
             display:"flex",alignItems:"center",justifyContent:"center",
             color:"#fff",fontSize:17,fontWeight:900}},m.number||"?"),
@@ -8465,7 +8210,7 @@ function App() {
     : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule,onImportFc2Practice:handleImportFc2Practice})
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
-    : tab==="member" ? h(MemberTab,{members,liftings,results})
+    : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
     : tab==="settings" ? (isAdmin
