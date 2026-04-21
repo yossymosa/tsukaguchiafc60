@@ -676,7 +676,7 @@ function ScoreLine({our,their,size=18}) {
   const c=Number(our)>Number(their)?"#4CAF50":Number(our)===Number(their)?"#FFC107":"#F44336";
   return h("span",{style:{fontSize:size,fontWeight:900,color:c,whiteSpace:"nowrap"}},Number(our),h("span",{style:{color:"#ddd",fontSize:size*0.7,margin:"0 3px"}},"-"),Number(their));
 }
-function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy,onEnableNotifications}) {
+function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy,onEnableNotifications,onOpenTactics}) {
   const video26 = HOME_LINKS.find(l => /26年度/.test(String(l.label || "")));
   const video25 = HOME_LINKS.find(l => /25年度/.test(String(l.label || "")));
   const topLinks = HOME_LINKS.filter(l => !/試合動画(25|26)年度/.test(String(l.label || "")));
@@ -714,6 +714,23 @@ function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy
           h("button",{onClick:onLogout,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"ログアウト")))),
     h("div",{style:{display:"flex",gap:6,marginTop:10,position:"relative",flexWrap:"wrap"}},
       topLinks.map(renderHeaderLink),
+      h("button",{
+        onClick:()=>onOpenTactics&&onOpenTactics(),
+        style:{
+          border:"1px solid rgba(255,255,255,0.25)",
+          borderRadius:999,
+          background:"rgba(255,255,255,0.12)",
+          color:"#fff",
+          fontSize:10,
+          fontWeight:800,
+          padding:"5px 10px",
+          cursor:"pointer",
+          display:"inline-flex",
+          alignItems:"center",
+          gap:4,
+          lineHeight:1
+        }
+      },"🧠 戦術ボード"),
       (video26 || video25) && h("div",{
         style:{
           display:"inline-flex",
@@ -757,6 +774,149 @@ function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy
           }
         },"25年度")
       )));
+}
+
+function TacticalBoardModal({members=[],onClose}) {
+  const FORMATIONS = {
+    "3-2-2": [
+      {x:50,y:90},{x:24,y:76},{x:50,y:76},{x:76,y:76},
+      {x:35,y:59},{x:65,y:59},{x:35,y:41},{x:65,y:41}
+    ],
+    "3-3-1": [
+      {x:50,y:90},{x:24,y:76},{x:50,y:76},{x:76,y:76},
+      {x:24,y:59},{x:50,y:59},{x:76,y:59},{x:50,y:41}
+    ]
+  };
+  const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+  const memberNames = useMemo(() =>
+    (members||[])
+      .filter(m=>[1,2,3,4].includes(getGradeNumber(m.grade)))
+      .sort((a,b)=>Number(a.number||999)-Number(b.number||999))
+      .map(m=>String(m.name||"").trim())
+      .filter(Boolean),
+  [members]);
+  const buildPlayers = useCallback((team, formationKey) => {
+    const base = FORMATIONS[formationKey] || FORMATIONS["3-2-2"];
+    return base.map((pt,idx)=>{
+      const y = team==="our" ? pt.y : (100 - pt.y);
+      const label = team==="our"
+        ? (memberNames[idx] || `選手${idx+1}`)
+        : `相手${idx+1}`;
+      return {id:`${team}-${idx+1}`,x:pt.x,y,label};
+    });
+  }, [memberNames]);
+  const [ourFormation,setOurFormation]=useState("3-2-2");
+  const [theirFormation,setTheirFormation]=useState("3-2-2");
+  const [ourPlayers,setOurPlayers]=useState(()=>buildPlayers("our","3-2-2"));
+  const [theirPlayers,setTheirPlayers]=useState(()=>buildPlayers("their","3-2-2"));
+  const [drag,setDrag]=useState(null);
+  const fieldRef = useRef(null);
+
+  useEffect(()=>{ setOurPlayers(buildPlayers("our",ourFormation)); }, [ourFormation, buildPlayers]);
+  useEffect(()=>{ setTheirPlayers(buildPlayers("their",theirFormation)); }, [theirFormation, buildPlayers]);
+
+  const movePlayer = useCallback((team,id,x,y)=>{
+    const update = arr => arr.map(p=>p.id===id?{...p,x,y}:p);
+    if(team==="our") setOurPlayers(update);
+    else setTheirPlayers(update);
+  },[]);
+  const handlePointerDown = (team,id) => e => {
+    e.preventDefault();
+    setDrag({team,id});
+    try{ e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
+  };
+  const handlePointerMove = e => {
+    if(!drag || !fieldRef.current) return;
+    const rect = fieldRef.current.getBoundingClientRect();
+    if(!rect.width || !rect.height) return;
+    const x = clamp(((e.clientX - rect.left) / rect.width) * 100, 6, 94);
+    const y = clamp(((e.clientY - rect.top) / rect.height) * 100, 6, 94);
+    movePlayer(drag.team, drag.id, x, y);
+  };
+  const handlePointerEnd = () => setDrag(null);
+  const resetLayout = () => {
+    setOurPlayers(buildPlayers("our",ourFormation));
+    setTheirPlayers(buildPlayers("their",theirFormation));
+  };
+  const renderChip = (team, p) => {
+    const isOur = team==="our";
+    const bg = isOur ? "#1D4ED8" : "#DC2626";
+    return h("div",{
+      key:p.id,
+      onPointerDown:handlePointerDown(team,p.id),
+      style:{
+        position:"absolute",
+        left:`${p.x}%`,
+        top:`${p.y}%`,
+        transform:"translate(-50%,-50%)",
+        minWidth:58,
+        maxWidth:74,
+        padding:"4px 6px",
+        borderRadius:10,
+        background:bg,
+        color:"#fff",
+        fontSize:10,
+        fontWeight:800,
+        textAlign:"center",
+        boxShadow:"0 3px 10px rgba(0,0,0,0.25)",
+        touchAction:"none",
+        cursor:"grab",
+        userSelect:"none",
+        WebkitUserSelect:"none"
+      }
+    }, p.label);
+  };
+
+  return h(Modal,{title:"🧠 戦術ボード",onClose,position:"center"},
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}},
+      h("div",{style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:8}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"自チーム"),
+        h("select",{value:ourFormation,onChange:e=>setOurFormation(e.target.value),style:{...css.inp,padding:"8px 10px",fontSize:12}},
+          Object.keys(FORMATIONS).map(k=>h("option",{key:k,value:k},k))
+        )
+      ),
+      h("div",{style:{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:10,padding:8}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#7F1D1D",marginBottom:6}},"相手チーム"),
+        h("select",{value:theirFormation,onChange:e=>setTheirFormation(e.target.value),style:{...css.inp,padding:"8px 10px",fontSize:12}},
+          Object.keys(FORMATIONS).map(k=>h("option",{key:k,value:k},k))
+        )
+      )
+    ),
+    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
+      h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700}},"ドラッグして自由に配置できます"),
+      h("button",{onClick:resetLayout,style:{border:"1px solid #CBD5E1",background:"#fff",borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}},"初期配置に戻す")
+    ),
+    h("div",{
+      ref:fieldRef,
+      onPointerMove:handlePointerMove,
+      onPointerUp:handlePointerEnd,
+      onPointerCancel:handlePointerEnd,
+      onPointerLeave:handlePointerEnd,
+      style:{
+        position:"relative",
+        width:"100%",
+        height:430,
+        borderRadius:14,
+        overflow:"hidden",
+        border:"2px solid #E2E8F0",
+        background:"linear-gradient(180deg,#5FAE3A 0%,#4E9E30 100%)",
+        touchAction:"none"
+      }
+    },
+      h("div",{style:{position:"absolute",left:8,right:8,top:8,bottom:8,border:"2px solid rgba(255,255,255,0.9)",borderRadius:8}}),
+      h("div",{style:{position:"absolute",left:8,right:8,top:"50%",height:2,background:"rgba(255,255,255,0.9)",transform:"translateY(-1px)"}}),
+      h("div",{style:{position:"absolute",left:"50%",top:"50%",width:70,height:70,border:"2px solid rgba(255,255,255,0.9)",borderRadius:"50%",transform:"translate(-50%,-50%)"}}),
+      h("div",{style:{position:"absolute",left:"50%",top:"50%",width:8,height:8,borderRadius:"50%",background:"#fff",transform:"translate(-50%,-50%)"}}),
+      h("div",{style:{position:"absolute",left:"22%",right:"22%",top:8,height:58,border:"2px solid rgba(255,255,255,0.9)",borderTop:"none"}}),
+      h("div",{style:{position:"absolute",left:"22%",right:"22%",bottom:8,height:58,border:"2px solid rgba(255,255,255,0.9)",borderBottom:"none"}}),
+      ourPlayers.map(p=>renderChip("our",p)),
+      theirPlayers.map(p=>renderChip("their",p))
+    ),
+    h("div",{style:{display:"flex",gap:12,marginTop:10,fontSize:11,fontWeight:700,color:"#64748B"}},
+      h("div",{style:{display:"inline-flex",alignItems:"center",gap:6}},h("span",{style:{width:10,height:10,borderRadius:"50%",background:"#1D4ED8",display:"inline-block"}}),"自チーム"),
+      h("div",{style:{display:"inline-flex",alignItems:"center",gap:6}},h("span",{style:{width:10,height:10,borderRadius:"50%",background:"#DC2626",display:"inline-block"}}),"相手")
+    )
+  );
 }
 
 // ── ログイン ─────────────────────────────────────────────────
@@ -7899,6 +8059,7 @@ function App() {
   const [loading,setLoading]=useState(false);
   const [loadMsg,setLoadMsg]=useState("読み込み中...");
   const [tab,setTab]=useState("home");
+  const [showTactics,setShowTactics]=useState(false);
   const [dashInitialTab,setDashInitialTab]=useState("result");
   const [page,setPage]=useState(null); // null | {type,schedule?,match?}
   const [members,setMembers]=useState([]);
@@ -8220,8 +8381,9 @@ function App() {
 
   return h(Fragment,{},
     loading && h(Loader,{msg:loadMsg}),
+    showTactics && h(TacticalBoardModal,{members,onClose:()=>setShowTactics(false)}),
     h("div",{className:"page"},
-      h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationEnabled,notificationBusy,onEnableNotifications:handleEnableNotifications}),
+      h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationEnabled,notificationBusy,onEnableNotifications:handleEnableNotifications,onOpenTactics:()=>setShowTactics(true)}),
       h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
         h("div",{style:{display:"flex"}},
           TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),style:{flex:1,padding:"11px 2px 9px",border:"none",background:tab===t.k?"#1D4ED8":"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
