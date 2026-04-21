@@ -791,7 +791,8 @@ function TacticalBoardModal({members=[],onClose}) {
   const buildPlayers = useCallback((team, formationKey) => {
     const base = FORMATIONS[formationKey] || FORMATIONS["3-2-2"];
     return base.map((pt,idx)=>{
-      const y = team==="our" ? pt.y : (100 - pt.y);
+      const yBase = team==="our" ? pt.y : (100 - pt.y);
+      const y = clamp(yBase + (team==="our" ? 6 : -6), 6, 94);
       const number = idx + 1;
       return {id:`${team}-${idx+1}`,x:pt.x,y,number};
     });
