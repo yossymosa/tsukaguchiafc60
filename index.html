@@ -788,27 +788,19 @@ function TacticalBoardModal({members=[],onClose}) {
     ]
   };
   const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
-  const memberNames = useMemo(() =>
-    (members||[])
-      .filter(m=>[1,2,3,4].includes(getGradeNumber(m.grade)))
-      .sort((a,b)=>Number(a.number||999)-Number(b.number||999))
-      .map(m=>String(m.name||"").trim())
-      .filter(Boolean),
-  [members]);
   const buildPlayers = useCallback((team, formationKey) => {
     const base = FORMATIONS[formationKey] || FORMATIONS["3-2-2"];
     return base.map((pt,idx)=>{
       const y = team==="our" ? pt.y : (100 - pt.y);
-      const label = team==="our"
-        ? (memberNames[idx] || `選手${idx+1}`)
-        : `相手${idx+1}`;
-      return {id:`${team}-${idx+1}`,x:pt.x,y,label};
+      const number = idx + 1;
+      return {id:`${team}-${idx+1}`,x:pt.x,y,number};
     });
-  }, [memberNames]);
+  }, []);
   const [ourFormation,setOurFormation]=useState("3-2-2");
   const [theirFormation,setTheirFormation]=useState("3-2-2");
   const [ourPlayers,setOurPlayers]=useState(()=>buildPlayers("our","3-2-2"));
   const [theirPlayers,setTheirPlayers]=useState(()=>buildPlayers("their","3-2-2"));
+  const [ball,setBall]=useState({x:50,y:50});
   const [drag,setDrag]=useState(null);
   const fieldRef = useRef(null);
 
@@ -822,7 +814,12 @@ function TacticalBoardModal({members=[],onClose}) {
   },[]);
   const handlePointerDown = (team,id) => e => {
     e.preventDefault();
-    setDrag({team,id});
+    setDrag({type:"player",team,id});
+    try{ e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
+  };
+  const handleBallPointerDown = e => {
+    e.preventDefault();
+    setDrag({type:"ball"});
     try{ e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
   };
   const handlePointerMove = e => {
@@ -831,12 +828,17 @@ function TacticalBoardModal({members=[],onClose}) {
     if(!rect.width || !rect.height) return;
     const x = clamp(((e.clientX - rect.left) / rect.width) * 100, 6, 94);
     const y = clamp(((e.clientY - rect.top) / rect.height) * 100, 6, 94);
+    if(drag.type==="ball"){
+      setBall({x,y});
+      return;
+    }
     movePlayer(drag.team, drag.id, x, y);
   };
   const handlePointerEnd = () => setDrag(null);
   const resetLayout = () => {
     setOurPlayers(buildPlayers("our",ourFormation));
     setTheirPlayers(buildPlayers("their",theirFormation));
+    setBall({x:50,y:50});
   };
   const renderChip = (team, p) => {
     const isOur = team==="our";
@@ -849,22 +851,25 @@ function TacticalBoardModal({members=[],onClose}) {
         left:`${p.x}%`,
         top:`${p.y}%`,
         transform:"translate(-50%,-50%)",
-        minWidth:58,
-        maxWidth:74,
-        padding:"4px 6px",
-        borderRadius:10,
+        width:32,
+        height:32,
+        borderRadius:"50%",
         background:bg,
         color:"#fff",
-        fontSize:10,
-        fontWeight:800,
+        fontSize:12,
+        fontWeight:900,
         textAlign:"center",
         boxShadow:"0 3px 10px rgba(0,0,0,0.25)",
         touchAction:"none",
         cursor:"grab",
         userSelect:"none",
-        WebkitUserSelect:"none"
+        WebkitUserSelect:"none",
+        display:"flex",
+        alignItems:"center",
+        justifyContent:"center",
+        border:"2px solid rgba(255,255,255,0.85)"
       }
-    }, p.label);
+    }, String(p.number));
   };
 
   return h(Modal,{title:"🧠 戦術ボード",onClose,position:"center"},
@@ -910,7 +915,30 @@ function TacticalBoardModal({members=[],onClose}) {
       h("div",{style:{position:"absolute",left:"22%",right:"22%",top:8,height:58,border:"2px solid rgba(255,255,255,0.9)",borderTop:"none"}}),
       h("div",{style:{position:"absolute",left:"22%",right:"22%",bottom:8,height:58,border:"2px solid rgba(255,255,255,0.9)",borderBottom:"none"}}),
       ourPlayers.map(p=>renderChip("our",p)),
-      theirPlayers.map(p=>renderChip("their",p))
+      theirPlayers.map(p=>renderChip("their",p)),
+      h("div",{
+        onPointerDown:handleBallPointerDown,
+        style:{
+          position:"absolute",
+          left:`${ball.x}%`,
+          top:`${ball.y}%`,
+          transform:"translate(-50%,-50%)",
+          width:28,
+          height:28,
+          borderRadius:"50%",
+          background:"#fff",
+          border:"2px solid #0F172A",
+          boxShadow:"0 3px 8px rgba(0,0,0,0.25)",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          fontSize:16,
+          cursor:"grab",
+          touchAction:"none",
+          userSelect:"none",
+          WebkitUserSelect:"none"
+        }
+      },"⚽")
     ),
     h("div",{style:{display:"flex",gap:12,marginTop:10,fontSize:11,fontWeight:700,color:"#64748B"}},
       h("div",{style:{display:"inline-flex",alignItems:"center",gap:6}},h("span",{style:{width:10,height:10,borderRadius:"50%",background:"#1D4ED8",display:"inline-block"}}),"自チーム"),
