@@ -800,7 +800,7 @@ function TacticalBoardModal({members=[],onClose}) {
   const [theirFormation,setTheirFormation]=useState("3-2-2");
   const [ourPlayers,setOurPlayers]=useState(()=>buildPlayers("our","3-2-2"));
   const [theirPlayers,setTheirPlayers]=useState(()=>buildPlayers("their","3-2-2"));
-  const [ball,setBall]=useState({x:50,y:50});
+  const [ball,setBall]=useState({x:50,y:74});
   const [drag,setDrag]=useState(null);
   const fieldRef = useRef(null);
 
@@ -838,7 +838,7 @@ function TacticalBoardModal({members=[],onClose}) {
   const resetLayout = () => {
     setOurPlayers(buildPlayers("our",ourFormation));
     setTheirPlayers(buildPlayers("their",theirFormation));
-    setBall({x:50,y:50});
+    setBall({x:50,y:74});
   };
   const renderChip = (team, p) => {
     const isOur = team==="our";
@@ -923,8 +923,8 @@ function TacticalBoardModal({members=[],onClose}) {
           left:`${ball.x}%`,
           top:`${ball.y}%`,
           transform:"translate(-50%,-50%)",
-          width:28,
-          height:28,
+          width:22,
+          height:22,
           borderRadius:"50%",
           background:"#fff",
           border:"2px solid #0F172A",
@@ -932,7 +932,7 @@ function TacticalBoardModal({members=[],onClose}) {
           display:"flex",
           alignItems:"center",
           justifyContent:"center",
-          fontSize:16,
+          fontSize:13,
           cursor:"grab",
           touchAction:"none",
           userSelect:"none",
