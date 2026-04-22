@@ -3290,14 +3290,10 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
   const [saving,setSaving] = useState(false);
   const [updatedAt,setUpdatedAt] = useState("");
   const [form,setForm] = useState({
-    childGood:[],
-    childMore:[],
-    parentGood:[],
-    parentMore:[],
-    childGoodOther:"",
-    childMoreOther:"",
-    parentGoodOther:"",
-    parentMoreOther:"",
+    good:[],
+    more:[],
+    goodOther:"",
+    moreOther:"",
   });
 
   useEffect(()=>{
@@ -3316,39 +3312,23 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
       if(isAdmin && !targetMemberId){
         if(!cancelled){
           setLoading(false);
-          setForm({
-            childGood:[],
-            childMore:[],
-            parentGood:[],
-            parentMore:[],
-            childGoodOther:"",
-            childMoreOther:"",
-            parentGoodOther:"",
-            parentMoreOther:"",
-          });
+          setForm({good:[],more:[],goodOther:"",moreOther:""});
           setUpdatedAt("");
         }
         return;
       }
       setLoading(true);
       try{
-        const payload = {
-          scheduleId: schedule.id,
-          userId: user.id,
-        };
+        const payload = { scheduleId: schedule.id, userId: user.id };
         if(isAdmin && targetMemberId) payload.memberId = targetMemberId;
         const r = await api("getReflection", payload);
         if(cancelled) return;
         const v = r.reflection || {};
         setForm({
-          childGood: Array.isArray(v.childGood) ? v.childGood : [],
-          childMore: Array.isArray(v.childMore) ? v.childMore : [],
-          parentGood: Array.isArray(v.parentGood) ? v.parentGood : [],
-          parentMore: Array.isArray(v.parentMore) ? v.parentMore : [],
-          childGoodOther: String(v.childGoodOther || ""),
-          childMoreOther: String(v.childMoreOther || ""),
-          parentGoodOther: String(v.parentGoodOther || ""),
-          parentMoreOther: String(v.parentMoreOther || ""),
+          good: Array.isArray(v.childGood) ? v.childGood : [],
+          more: Array.isArray(v.childMore) ? v.childMore : [],
+          goodOther: String(v.childGoodOther || ""),
+          moreOther: String(v.childMoreOther || ""),
         });
         if(isAdmin && String(v.memberId || "").trim() && String(v.memberId || "").trim() !== String(targetMemberId || "").trim()){
           setTargetMemberId(String(v.memberId || "").trim());
@@ -3398,31 +3378,6 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
       })
     );
 
-  const renderPersonBlock = (title, goodKey, moreKey, goodOtherKey, moreOtherKey) =>
-    h("div",{style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:12,padding:12,marginBottom:10}},
-      h("div",{style:{fontSize:13,fontWeight:800,color:"#1E293B",marginBottom:8}},title),
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"Good（できたこと）"),
-      renderOptionPills(goodKey, REFLECT_GOOD_OPTIONS),
-      (form[goodKey] || []).includes("その他") && h("textarea",{
-        value:form[goodOtherKey] || "",
-        onChange:e=>setForm(prev=>({...prev,[goodOtherKey]:e.target.value})),
-        rows:2,
-        placeholder:"その他（任意）",
-        disabled:!canEdit || saving,
-        style:{...css.inp,width:"100%",resize:"vertical",marginBottom:10}
-      }),
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"More（次に意識したいこと）"),
-      renderOptionPills(moreKey, REFLECT_MORE_OPTIONS),
-      (form[moreKey] || []).includes("その他") && h("textarea",{
-        value:form[moreOtherKey] || "",
-        onChange:e=>setForm(prev=>({...prev,[moreOtherKey]:e.target.value})),
-        rows:2,
-        placeholder:"その他（任意）",
-        disabled:!canEdit || saving,
-        style:{...css.inp,width:"100%",resize:"vertical"}
-      })
-    );
-
   const save = async()=>{
     if(!canEdit) return;
     if(!schedule?.id || !user?.id) return;
@@ -3432,14 +3387,14 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
         scheduleId:schedule.id,
         userId:user.id,
         memberId:isAdmin ? targetMemberId : "",
-        childGood:form.childGood,
-        childMore:form.childMore,
-        parentGood:form.parentGood,
-        parentMore:form.parentMore,
-        childGoodOther:form.childGoodOther,
-        childMoreOther:form.childMoreOther,
-        parentGoodOther:form.parentGoodOther,
-        parentMoreOther:form.parentMoreOther,
+        childGood:form.good,
+        childMore:form.more,
+        childGoodOther:form.goodOther,
+        childMoreOther:form.moreOther,
+        parentGood:[],
+        parentMore:[],
+        parentGoodOther:"",
+        parentMoreOther:"",
       };
       const r = await api("saveReflection", payload);
       const next = r.reflection || {};
@@ -3473,8 +3428,28 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
     loading
       ? h("div",{style:{fontSize:13,color:"#94A3B8",padding:"10px 0"}},"読み込み中...")
       : h(Fragment,{},
-          renderPersonBlock("子ども", "childGood", "childMore", "childGoodOther", "childMoreOther"),
-          renderPersonBlock("親", "parentGood", "parentMore", "parentGoodOther", "parentMoreOther"),
+          h("div",{style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:12,padding:12,marginBottom:10}},
+            h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"Good（できたこと）"),
+            renderOptionPills("good", REFLECT_GOOD_OPTIONS),
+            (form.good || []).includes("その他") && h("textarea",{
+              value:form.goodOther || "",
+              onChange:e=>setForm(prev=>({...prev,goodOther:e.target.value})),
+              rows:2,
+              placeholder:"その他（任意）",
+              disabled:!canEdit || saving,
+              style:{...css.inp,width:"100%",resize:"vertical",marginBottom:10}
+            }),
+            h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"More（次に意識したいこと）"),
+            renderOptionPills("more", REFLECT_MORE_OPTIONS),
+            (form.more || []).includes("その他") && h("textarea",{
+              value:form.moreOther || "",
+              onChange:e=>setForm(prev=>({...prev,moreOther:e.target.value})),
+              rows:2,
+              placeholder:"その他（任意）",
+              disabled:!canEdit || saving,
+              style:{...css.inp,width:"100%",resize:"vertical"}
+            })
+          ),
           canEdit && h("button",{
             type:"button",
             onClick:save,
@@ -7967,7 +7942,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       isAdmin&&h("button",{onClick:()=>{setEditSch(false);onDeleteSchedule&&onDeleteSchedule(schedule);},
         style:{width:"100%",marginTop:12,padding:12,background:"#FFEBEE",color:"#F44336",border:"none",borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer"}},"🗑 日程を削除")),
     // ヘッダー
-    h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"20px 20px 40px"}},
+    h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"20px 20px 40px",position:"sticky",top:0,zIndex:1200}},
       h("div",{style:{display:"flex",gap:8,marginBottom:16}},
         h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
         h("button",{onClick:onHome,style:{background:"rgba(29,78,216,0.75)",border:"1px solid rgba(29,78,216,0.45)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"🏠 ホーム")),
@@ -7979,15 +7954,18 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
 
     h("div",{style:{padding:"0 16px",marginTop:-20}},
       // 内部タブ（試合一覧 / 出欠）
-      h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
-        (isSimpleDay
-          ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"review",l:"🌱 ふりかえり"}]
-          : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"},{k:"review",l:"🌱 ふりかえり"}]
-        ).map(t=>
-          h("button",{key:t.k,onClick:()=>setDayTab(t.k),
-            style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
-              background:dayTab===t.k?"#1D4ED8":"transparent",
-              color:dayTab===t.k?"#fff":"#aaa",fontSize:13,fontWeight:700,cursor:"pointer"}},t.l))),
+      h("div",{style:{position:"sticky",top:124,zIndex:1190,paddingTop:4,paddingBottom:8,marginBottom:6,
+        background:"linear-gradient(180deg,rgba(240,244,248,0.96) 0%,rgba(240,244,248,0.9) 72%,rgba(240,244,248,0) 100%)"}},
+        h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
+          (isSimpleDay
+            ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"review",l:"🌱 ふりかえり"}]
+            : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"},{k:"review",l:"🌱 ふりかえり"}]
+          ).map(t=>
+            h("button",{key:t.k,onClick:()=>setDayTab(t.k),
+              style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
+                background:dayTab===t.k?"#1D4ED8":"transparent",
+                color:dayTab===t.k?"#fff":"#aaa",fontSize:13,fontWeight:700,cursor:"pointer"}},t.l)))
+      ),
       // テンプレボタン（admin）
       isAdmin&&dayTab==="matches"&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
         h("button",{onClick:openHpModal,
