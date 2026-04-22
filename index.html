@@ -719,7 +719,7 @@ function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy
       lineHeight:1
     }
   },`${l.icon} ${l.label}`);
-  return h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",padding:"20px 20px 52px",position:"relative",zIndex:1,overflow:"hidden"}},
+  return h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",padding:"20px 20px 52px",position:"sticky",top:0,zIndex:1400,overflow:"hidden"}},
     h("div",{style:{position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(29,78,216,0.16)"}}),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"relative"}},
       h("div",{},
@@ -7610,10 +7610,11 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
   const isEventDay = normalizeType(schedule.type) === "event";
   const isPracticeDay = normalizeType(schedule.type) === "practice";
   const isSimpleDay = isEventDay || isPracticeDay;
+  const canUseReviewTab = !isSimpleDay;
   const resolveDayTab = raw => {
     const fallback = isSimpleDay ? "detail" : "matches";
     const v = String(raw || "").trim();
-    if (isSimpleDay) return (v === "detail" || v === "attend" || v === "review") ? v : fallback;
+    if (isSimpleDay) return (v === "detail" || v === "attend") ? v : fallback;
     const allowed = ["matches","detail","attend","carpool","settlement","album","review"];
     return allowed.includes(v) ? v : fallback;
   };
@@ -7958,8 +7959,8 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         background:"linear-gradient(180deg,rgba(240,244,248,0.96) 0%,rgba(240,244,248,0.9) 72%,rgba(240,244,248,0) 100%)"}},
         h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
           (isSimpleDay
-            ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"review",l:"🌱 ふりかえり"}]
-            : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"},{k:"review",l:"🌱 ふりかえり"}]
+            ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"}]
+            : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"}, ...(canUseReviewTab ? [{k:"review",l:"🌱 ふりかえり"}] : [])]
           ).map(t=>
             h("button",{key:t.k,onClick:()=>setDayTab(t.k),
               style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
@@ -8061,7 +8062,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin,canWrite,users}),
 
       // ふりかえりタブ
-      dayTab==="review"&&h(ReflectionSection,{schedule,user,members,isAdmin,canWrite}),
+      dayTab==="review"&&canUseReviewTab&&h(ReflectionSection,{schedule,user,members,isAdmin,canWrite}),
 
       // MVP入力欄（公式戦・カップ戦のみ・matchesタブ）
       dayTab==="matches"&&isTournamentTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
@@ -8617,15 +8618,13 @@ function App() {
     loading && h(Loader,{msg:loadMsg}),
     showTactics && h(TacticalBoardModal,{members,onClose:()=>setShowTactics(false)}),
     h("div",{className:"page"},
-      h("div",{style:{position:"sticky",top:0,zIndex:1500}},
-        h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationEnabled,notificationBusy,onEnableNotifications:handleEnableNotifications,onOpenTactics:()=>setShowTactics(true)}),
-        h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
-          h("div",{style:{display:"flex"}},
-            TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),style:{flex:1,padding:"11px 2px 9px",border:"none",background:tab===t.k?"#1D4ED8":"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
-              h("span",{style:{fontSize:17}},t.i),
-              h("span",{style:{fontSize:9,fontWeight:tab===t.k?700:400,color:tab===t.k?"#fff":"#aaa"}},t.l)
-            ))
-          )
+      h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationEnabled,notificationBusy,onEnableNotifications:handleEnableNotifications,onOpenTactics:()=>setShowTactics(true)}),
+      h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"sticky",top:124,zIndex:1390,marginBottom:16}},
+        h("div",{style:{display:"flex"}},
+          TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),style:{flex:1,padding:"11px 2px 9px",border:"none",background:tab===t.k?"#1D4ED8":"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
+            h("span",{style:{fontSize:17}},t.i),
+            h("span",{style:{fontSize:9,fontWeight:tab===t.k?700:400,color:tab===t.k?"#fff":"#aaa"}},t.l)
+          ))
         )
       ),
       h("div",{style:{padding:"12px 16px 0"}}, currentTabContent)
