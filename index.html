@@ -719,7 +719,7 @@ function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy
       lineHeight:1
     }
   },`${l.icon} ${l.label}`);
-  return h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",padding:"20px 20px 52px",position:"relative",overflow:"hidden"}},
+  return h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",padding:"20px 20px 52px",position:"sticky",top:0,zIndex:1400,overflow:"hidden"}},
     h("div",{style:{position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(29,78,216,0.16)"}}),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"relative"}},
       h("div",{},
@@ -8618,7 +8618,7 @@ function App() {
     showTactics && h(TacticalBoardModal,{members,onClose:()=>setShowTactics(false)}),
     h("div",{className:"page"},
       h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationEnabled,notificationBusy,onEnableNotifications:handleEnableNotifications,onOpenTactics:()=>setShowTactics(true)}),
-      h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"relative",zIndex:10,marginBottom:16}},
+      h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"sticky",top:124,zIndex:1390,marginBottom:16}},
         h("div",{style:{display:"flex"}},
           TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),style:{flex:1,padding:"11px 2px 9px",border:"none",background:tab===t.k?"#1D4ED8":"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
             h("span",{style:{fontSize:17}},t.i),
