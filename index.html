@@ -20,7 +20,7 @@
 html,body{height:100%;overflow-y:auto;overscroll-behavior-y:auto;background:#0F172A;font-family:'Noto Sans JP',sans-serif;-webkit-tap-highlight-color:transparent;}
 ::-webkit-scrollbar{display:none;}
 input,select,textarea,button{font-family:'Noto Sans JP',sans-serif;}
-#app{min-height:100vh;overflow:visible;background:linear-gradient(180deg,#0F172A 0,#0F172A 180px,#F0F4F8 180px,#F0F4F8 100%);}
+#app{min-height:100vh;overflow:visible;background:#F0F4F8;}
 .page{max-width:480px;margin:0 auto;min-height:100vh;overflow:visible;padding-bottom:24px;}
 @media print{
   html,body,#app{background:#fff !important;}
@@ -8619,7 +8619,7 @@ function App() {
     showTactics && h(TacticalBoardModal,{members,onClose:()=>setShowTactics(false)}),
     h("div",{className:"page"},
       h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationEnabled,notificationBusy,onEnableNotifications:handleEnableNotifications,onOpenTactics:()=>setShowTactics(true)}),
-      h("div",{style:{background:"#fff",margin:"0 16px",borderRadius:16,marginTop:-24,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"sticky",top:124,zIndex:1390,marginBottom:16}},
+      h("div",{style:{background:"#fff",margin:"8px 16px 16px",borderRadius:16,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",overflow:"hidden",position:"sticky",top:170,zIndex:1390}},
         h("div",{style:{display:"flex"}},
           TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),style:{flex:1,padding:"11px 2px 9px",border:"none",background:tab===t.k?"#1D4ED8":"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
             h("span",{style:{fontSize:17}},t.i),
