@@ -7942,9 +7942,10 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         h("button",{onClick:saveEditSch,disabled:editSchSaving,style:{...css.bS,opacity:editSchSaving?0.7:1}},editSchSaving?"保存中...":"保存する")),
       isAdmin&&h("button",{onClick:()=>{setEditSch(false);onDeleteSchedule&&onDeleteSchedule(schedule);},
         style:{width:"100%",marginTop:12,padding:12,background:"#FFEBEE",color:"#F44336",border:"none",borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer"}},"🗑 日程を削除")),
-    // ヘッダー
-    h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"20px 20px 40px",position:"sticky",top:0,zIndex:1200}},
-      h("div",{style:{display:"flex",gap:8,marginBottom:16}},
+    // ヘッダー + 内部タブ（固定）
+    h("div",{style:{position:"sticky",top:0,zIndex:1200,background:"#F0F4F8"}},
+      h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"14px 16px 12px"}},
+      h("div",{style:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}},
         h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
         h("button",{onClick:onHome,style:{background:"rgba(29,78,216,0.75)",border:"1px solid rgba(29,78,216,0.45)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"🏠 ホーム")),
       h("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}},
@@ -7952,21 +7953,20 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         isAdmin&&h("button",{onClick:()=>{setSchForm(buildEditScheduleForm(schedule));setEditSch(true);},style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"5px 12px",color:"#fff",fontSize:12,cursor:"pointer",flexShrink:0}},"✏️ 編集")),
       h("div",{style:{fontSize:20,fontWeight:900,color:"#fff",marginBottom:4}},schedule.title||"（タイトルなし）"),
       h("div",{style:{fontSize:13,color:"rgba(255,255,255,0.6)"}},dt.full+(schedule.location?" ／ 📍"+schedule.location:""))),
-
-    h("div",{style:{padding:"0 16px",marginTop:-20}},
-      // 内部タブ（試合一覧 / 出欠）
-      h("div",{style:{position:"sticky",top:124,zIndex:1190,paddingTop:4,paddingBottom:8,marginBottom:6,
-        background:"linear-gradient(180deg,rgba(240,244,248,0.96) 0%,rgba(240,244,248,0.9) 72%,rgba(240,244,248,0) 100%)"}},
-        h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
+      h("div",{style:{background:"#fff",margin:"0 0 10px",boxShadow:"0 2px 10px rgba(0,0,0,0.08)",overflow:"hidden"}},
+        h("div",{style:{display:"flex"}},
           (isSimpleDay
             ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"}]
             : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"}, ...(canUseReviewTab ? [{k:"review",l:"🌱 ふりかえり"}] : [])]
           ).map(t=>
             h("button",{key:t.k,onClick:()=>setDayTab(t.k),
-              style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
+              style:{flex:1,padding:"10px 4px 8px",border:"none",
                 background:dayTab===t.k?"#1D4ED8":"transparent",
                 color:dayTab===t.k?"#fff":"#aaa",fontSize:13,fontWeight:700,cursor:"pointer"}},t.l)))
-      ),
+      )
+    ),
+
+    h("div",{style:{padding:"0 16px"}},
       // テンプレボタン（admin）
       isAdmin&&dayTab==="matches"&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
         h("button",{onClick:openHpModal,
