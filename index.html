@@ -202,20 +202,57 @@ const REFLECT_MORE_OPTIONS = [
 
 // ── API ──────────────────────────────────────────────────────────
 async function api(action,body={}) {
-  const res=await fetch(GAS_URL,{method:"POST",body:JSON.stringify({action,...body})});
-  const raw=await res.text();
-  let json=null;
+  const shortActions = new Set([
+    "saveReflection","getReflection","saveGoals","saveShotStats","saveAttend","saveEventAttend","saveCarpool","saveCarpoolPlan"
+  ]);
+  const longActions = new Set([
+    "syncFc2PracticeSchedules","syncOfficialHpMatchImport","syncYoutubeLinksToResults","syncYoutubePlaylist"
+  ]);
+  const timeoutMs = longActions.has(action) ? 120000 : (shortActions.has(action) ? 25000 : 45000);
+  const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  let timer = null;
   try{
-    json=JSON.parse(raw);
+    const fetchPromise = fetch(GAS_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({action,...body}),
+      ...(controller ? {signal:controller.signal} : {})
+    });
+    const res = await (controller
+      ? new Promise((resolve,reject)=>{
+          timer = setTimeout(()=>{
+            try{ controller.abort(); }catch(e){}
+            reject(new Error("timeout"));
+          }, timeoutMs);
+          fetchPromise.then(resolve,reject);
+        })
+      : Promise.race([
+          fetchPromise,
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")), timeoutMs))
+        ])
+    );
+    const raw=await res.text();
+    let json=null;
+    try{
+      json=JSON.parse(raw);
+    }catch(e){
+      throw new Error(`[${action}] APIレスポンス解析失敗: ${String(raw||"").slice(0,180)}`);
+    }
+    if(!json.ok){
+      const msg = json.error || "エラー";
+      const act = json.action ? ` (${json.action})` : "";
+      throw new Error(`[${action}] ${msg}${act}`);
+    }
+    return json;
   }catch(e){
-    throw new Error(`[${action}] APIレスポンス解析失敗: ${String(raw||"").slice(0,180)}`);
+    const msg = String(e && e.message || "");
+    if(msg==="timeout" || /aborted|timeout/i.test(msg)){
+      throw new Error(`[${action}] 通信がタイムアウトしました。もう一度お試しください`);
+    }
+    throw e;
+  }finally{
+    if(timer) clearTimeout(timer);
   }
-  if(!json.ok){
-    const msg = json.error || "エラー";
-    const act = json.action ? ` (${json.action})` : "";
-    throw new Error(`[${action}] ${msg}${act}`);
-  }
-  return json;
 }
 function readFileAsDataUrl(file){
   return new Promise((resolve,reject)=>{
