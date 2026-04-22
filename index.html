@@ -3318,6 +3318,11 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
 
 function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
   const canEdit = canWrite && String(user?.role || "") !== "viewer";
+  const formatUpdatedAt = v => {
+    const d = new Date(String(v || ""));
+    if (isNaN(d.getTime())) return fmt(v).short || "";
+    return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
   const availableMembers = (members || [])
     .filter(m => String(m.id || "").trim())
     .sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"ja"));
@@ -3325,6 +3330,7 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
   const [targetMemberId,setTargetMemberId] = useState(defaultMemberId);
   const [loading,setLoading] = useState(true);
   const [saving,setSaving] = useState(false);
+  const [loadError,setLoadError] = useState("");
   const [updatedAt,setUpdatedAt] = useState("");
   const [form,setForm] = useState({
     good:[],
@@ -3355,6 +3361,7 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
         return;
       }
       setLoading(true);
+      setLoadError("");
       try{
         const payload = { scheduleId: schedule.id, userId: user.id };
         if(isAdmin && targetMemberId) payload.memberId = targetMemberId;
@@ -3367,12 +3374,9 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
           goodOther: String(v.childGoodOther || ""),
           moreOther: String(v.childMoreOther || ""),
         });
-        if(isAdmin && String(v.memberId || "").trim() && String(v.memberId || "").trim() !== String(targetMemberId || "").trim()){
-          setTargetMemberId(String(v.memberId || "").trim());
-        }
         setUpdatedAt(String(v.updatedAt || ""));
       }catch(e){
-        if(!cancelled) alert("ふりかえり読込エラー: " + e.message);
+        if(!cancelled) setLoadError(String(e?.message || "読み込みに失敗しました"));
       }finally{
         if(!cancelled) setLoading(false);
       }
@@ -3447,8 +3451,9 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
   return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8,flexWrap:"wrap"}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"🌱 ふりかえり"),
-      updatedAt && h("div",{style:{fontSize:11,color:"#94A3B8"}},`更新: ${fmtNewsDateTime(updatedAt)}`)
+      updatedAt && h("div",{style:{fontSize:11,color:"#94A3B8"}},`更新: ${formatUpdatedAt(updatedAt)}`)
     ),
+    loadError && h("div",{style:{marginBottom:10,padding:"8px 10px",borderRadius:10,background:"#FEF2F2",border:"1px solid #FECACA",fontSize:12,color:"#B91C1C",fontWeight:700}},`読込エラー: ${loadError}`),
     isAdmin && h("div",{style:{marginBottom:12}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"対象選手"),
       h("select",{
