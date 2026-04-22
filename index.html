@@ -1675,8 +1675,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     ...(visibleHalfOptions.includes("3rd") ? [`${halfScoreMapOur["3rd"]||0}-${halfScoreMapTheir["3rd"]||0}`] : []),
   ];
 
-  const headerBlock = h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"20px 20px 52px",position:"sticky",top:0,zIndex:1400}},
-    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}},
+  const headerBlock = h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"14px 16px 12px",position:"sticky",top:0,zIndex:1400}},
+    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}},
       h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
         h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
         h("button",{onClick:onHome,style:{background:"rgba(29,78,216,0.75)",border:"1px solid rgba(29,78,216,0.45)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"🏠 ホーム")
@@ -2103,7 +2103,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
   return h("div",{className:"page",ref:goalPageRef},
     loading&&h(Loader,{msg:"保存中..."}),
     headerBlock,
-    h("div",{style:{padding:"0 16px",marginTop:-24}},
+    h("div",{style:{padding:"8px 16px 0"}},
       scoreboardBlock,
       matchStatusBlock,
       matchStatsBlock,
@@ -5299,6 +5299,7 @@ function SettlementSection({schedule}) {
     holidayMode: true,
     luggageCarriesPeople: false,
     luggageBikeArea: true,
+    fuelYenPerLiter: "175",
   };
   const [form, setForm] = useState(defaultForm);
   const [icFetchBusy, setIcFetchBusy] = useState("");
@@ -5316,11 +5317,12 @@ function SettlementSection({schedule}) {
   const highwayOutYen = Math.max(0, toNum(form.highwayOutYen, 0));
   const highwayReturnYen = Math.max(0, toNum(form.highwayReturnYen, 0));
   const highwayYen = highwayOutYen + highwayReturnYen;
+  const fuelYenPerLiter = Math.max(0, toNum(form.fuelYenPerLiter, 175));
   const dispatchRule = form.mode === "dispatch" || (form.mode === "luggage" && (form.luggageCarriesPeople || !form.luggageBikeArea));
   const nearRule = dispatchRule && !!form.withinAmagasaki && oneWayKm > 0 && oneWayKm < 11;
   const isFarRule = dispatchRule && !nearRule;
-  const gasOutYen = isFarRule ? Math.round((Math.max(0, oneWayKm) / 8) * 175) : 0;
-  const gasReturnYen = isFarRule ? Math.round((Math.max(0, returnKm) / 8) * 175) : 0;
+  const gasOutYen = isFarRule ? Math.round((Math.max(0, oneWayKm) / 8) * fuelYenPerLiter) : 0;
+  const gasReturnYen = isFarRule ? Math.round((Math.max(0, returnKm) / 8) * fuelYenPerLiter) : 0;
   const gasYen = gasOutYen + gasReturnYen;
   const thanksYen = isFarRule ? (oneWayKm < 15 ? 500 : 1000) : 0;
   const luggageBaseYen = (!dispatchRule) ? 200 : 0;
@@ -5461,7 +5463,7 @@ function SettlementSection({schedule}) {
         lines.push("謝礼+ガソリン代(定額): 500円");
         lines.push(`駐車場代: ${parkingYen.toLocaleString()}円`);
       } else {
-        lines.push(`ガソリン代: ${gasYen.toLocaleString()}円`);
+        lines.push(`ガソリン代: ${gasYen.toLocaleString()}円（${fuelYenPerLiter.toLocaleString()}円/L）`);
         lines.push(`駐車場代: ${parkingYen.toLocaleString()}円`);
         lines.push(`高速代: ${highwayYen.toLocaleString()}円`);
         lines.push(`謝礼: ${thanksYen.toLocaleString()}円`);
@@ -5573,6 +5575,10 @@ function SettlementSection({schedule}) {
         h("div",{style:{flex:1}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"駐車場代（円）"),
           h("input",{type:"number",min:"0",step:"1",value:form.parkingYen,onChange:e=>patchForm({parkingYen:e.target.value}),style:{...css.inp,width:"100%"}})
+        ),
+        h("div",{style:{flex:1}},
+          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"ガソリン単価（円/L）"),
+          h("input",{type:"number",min:"0",step:"1",value:form.fuelYenPerLiter,onChange:e=>patchForm({fuelYenPerLiter:e.target.value}),placeholder:"175",style:{...css.inp,width:"100%"}})
         )
       ),
       h("div",{style:{display:"flex",gap:8,marginBottom:10}},
@@ -5615,7 +5621,7 @@ function SettlementSection({schedule}) {
                   h("br",{}),
                   `駐車場代: ${parkingYen.toLocaleString()}円`)
               : h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.7}},
-                  `ガソリン代: 往路${oneWayKm.toFixed(1)}km→${gasOutYen.toLocaleString()}円 + 復路${returnKm.toFixed(1)}km→${gasReturnYen.toLocaleString()}円 = ${gasYen.toLocaleString()}円`,
+                  `ガソリン代: 往路${oneWayKm.toFixed(1)}km→${gasOutYen.toLocaleString()}円 + 復路${returnKm.toFixed(1)}km→${gasReturnYen.toLocaleString()}円 = ${gasYen.toLocaleString()}円（${fuelYenPerLiter.toLocaleString()}円/L）`,
                   h("br",{}),
                   `駐車場代: ${parkingYen.toLocaleString()}円`,
                   h("br",{}),
