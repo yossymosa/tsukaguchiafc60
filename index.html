@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwlYH7jf-dnH7OCK6l-_DOlaqEckcaO_MYQHLGbv4nPPKs0Q0GBn_kbfVuVmglCgkjz/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwtnjZ_zOqky5KOxWve9CxmaeywdRChXFIoWBJGYhhC9VarfGLJgAKk24tiRFAOvPiB/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -181,6 +181,24 @@ const ATTEND_STYLE={
   "△":{bg:"#FFC107",c:"#333"},
   "未":{bg:"#eee",c:"#aaa"},
 };
+const REFLECT_GOOD_OPTIONS = [
+  "シュートを打てた",
+  "パスをつなげた",
+  "守備で止めた",
+  "声を出せた",
+  "走り切れた",
+  "チャレンジできた",
+  "その他",
+];
+const REFLECT_MORE_OPTIONS = [
+  "判断を早くしたい",
+  "ポジションを意識したい",
+  "1対1をがんばりたい",
+  "声をもっと出したい",
+  "体力をつけたい",
+  "ボールを早く離したい",
+  "その他",
+];
 
 // ── API ──────────────────────────────────────────────────────────
 async function api(action,body={}) {
@@ -3258,6 +3276,212 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       }, editing ? "キャンセル" : "✏️ 編集")
     ),
     editing ? editContent : readContent
+  );
+}
+
+function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
+  const canEdit = canWrite && String(user?.role || "") !== "viewer";
+  const availableMembers = (members || [])
+    .filter(m => String(m.id || "").trim())
+    .sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"ja"));
+  const defaultMemberId = String(user?.memberId || "").trim() || String(availableMembers[0]?.id || "");
+  const [targetMemberId,setTargetMemberId] = useState(defaultMemberId);
+  const [loading,setLoading] = useState(true);
+  const [saving,setSaving] = useState(false);
+  const [updatedAt,setUpdatedAt] = useState("");
+  const [form,setForm] = useState({
+    childGood:[],
+    childMore:[],
+    parentGood:[],
+    parentMore:[],
+    childGoodOther:"",
+    childMoreOther:"",
+    parentGoodOther:"",
+    parentMoreOther:"",
+  });
+
+  useEffect(()=>{
+    if(!targetMemberId && availableMembers.length){
+      setTargetMemberId(String(availableMembers[0].id || ""));
+    }
+  },[targetMemberId,availableMembers.length]);
+
+  useEffect(()=>{
+    let cancelled = false;
+    const loadReflection = async()=>{
+      if(!schedule?.id || !user?.id){
+        if(!cancelled) setLoading(false);
+        return;
+      }
+      if(isAdmin && !targetMemberId){
+        if(!cancelled){
+          setLoading(false);
+          setForm({
+            childGood:[],
+            childMore:[],
+            parentGood:[],
+            parentMore:[],
+            childGoodOther:"",
+            childMoreOther:"",
+            parentGoodOther:"",
+            parentMoreOther:"",
+          });
+          setUpdatedAt("");
+        }
+        return;
+      }
+      setLoading(true);
+      try{
+        const payload = {
+          scheduleId: schedule.id,
+          userId: user.id,
+        };
+        if(isAdmin && targetMemberId) payload.memberId = targetMemberId;
+        const r = await api("getReflection", payload);
+        if(cancelled) return;
+        const v = r.reflection || {};
+        setForm({
+          childGood: Array.isArray(v.childGood) ? v.childGood : [],
+          childMore: Array.isArray(v.childMore) ? v.childMore : [],
+          parentGood: Array.isArray(v.parentGood) ? v.parentGood : [],
+          parentMore: Array.isArray(v.parentMore) ? v.parentMore : [],
+          childGoodOther: String(v.childGoodOther || ""),
+          childMoreOther: String(v.childMoreOther || ""),
+          parentGoodOther: String(v.parentGoodOther || ""),
+          parentMoreOther: String(v.parentMoreOther || ""),
+        });
+        if(isAdmin && String(v.memberId || "").trim() && String(v.memberId || "").trim() !== String(targetMemberId || "").trim()){
+          setTargetMemberId(String(v.memberId || "").trim());
+        }
+        setUpdatedAt(String(v.updatedAt || ""));
+      }catch(e){
+        if(!cancelled) alert("ふりかえり読込エラー: " + e.message);
+      }finally{
+        if(!cancelled) setLoading(false);
+      }
+    };
+    loadReflection();
+    return ()=>{ cancelled = true; };
+  },[schedule?.id,user?.id,isAdmin,targetMemberId]);
+
+  const selectedMember = availableMembers.find(m=>String(m.id||"")===String(targetMemberId||"")) || null;
+  const toggleOption = (key, option) => {
+    setForm(prev => {
+      const current = Array.isArray(prev[key]) ? prev[key] : [];
+      const has = current.includes(option);
+      const next = has ? current.filter(v=>v!==option) : [...current, option];
+      return { ...prev, [key]: next };
+    });
+  };
+
+  const renderOptionPills = (key, options) =>
+    h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}},
+      options.map(opt=>{
+        const active = (form[key] || []).includes(opt);
+        return h("button",{
+          key:key+"-"+opt,
+          type:"button",
+          onClick:()=>toggleOption(key,opt),
+          disabled:!canEdit || saving,
+          style:{
+            border: active ? "1px solid #1D4ED8" : "1px solid #CBD5E1",
+            background: active ? "#DBEAFE" : "#fff",
+            color: active ? "#1D4ED8" : "#334155",
+            borderRadius:999,
+            padding:"6px 10px",
+            fontSize:12,
+            fontWeight:700,
+            cursor:(!canEdit || saving) ? "default" : "pointer",
+            opacity:(!canEdit || saving) ? 0.7 : 1
+          }
+        }, opt);
+      })
+    );
+
+  const renderPersonBlock = (title, goodKey, moreKey, goodOtherKey, moreOtherKey) =>
+    h("div",{style:{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:12,padding:12,marginBottom:10}},
+      h("div",{style:{fontSize:13,fontWeight:800,color:"#1E293B",marginBottom:8}},title),
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"Good（できたこと）"),
+      renderOptionPills(goodKey, REFLECT_GOOD_OPTIONS),
+      (form[goodKey] || []).includes("その他") && h("textarea",{
+        value:form[goodOtherKey] || "",
+        onChange:e=>setForm(prev=>({...prev,[goodOtherKey]:e.target.value})),
+        rows:2,
+        placeholder:"その他（任意）",
+        disabled:!canEdit || saving,
+        style:{...css.inp,width:"100%",resize:"vertical",marginBottom:10}
+      }),
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:6}},"More（次に意識したいこと）"),
+      renderOptionPills(moreKey, REFLECT_MORE_OPTIONS),
+      (form[moreKey] || []).includes("その他") && h("textarea",{
+        value:form[moreOtherKey] || "",
+        onChange:e=>setForm(prev=>({...prev,[moreOtherKey]:e.target.value})),
+        rows:2,
+        placeholder:"その他（任意）",
+        disabled:!canEdit || saving,
+        style:{...css.inp,width:"100%",resize:"vertical"}
+      })
+    );
+
+  const save = async()=>{
+    if(!canEdit) return;
+    if(!schedule?.id || !user?.id) return;
+    setSaving(true);
+    try{
+      const payload = {
+        scheduleId:schedule.id,
+        userId:user.id,
+        memberId:isAdmin ? targetMemberId : "",
+        childGood:form.childGood,
+        childMore:form.childMore,
+        parentGood:form.parentGood,
+        parentMore:form.parentMore,
+        childGoodOther:form.childGoodOther,
+        childMoreOther:form.childMoreOther,
+        parentGoodOther:form.parentGoodOther,
+        parentMoreOther:form.parentMoreOther,
+      };
+      const r = await api("saveReflection", payload);
+      const next = r.reflection || {};
+      setUpdatedAt(String(next.updatedAt || ""));
+      alert("ふりかえりを保存しました");
+    }catch(e){
+      alert("ふりかえり保存エラー: " + e.message);
+    }finally{
+      setSaving(false);
+    }
+  };
+
+  return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+    h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8,flexWrap:"wrap"}},
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"🌱 ふりかえり"),
+      updatedAt && h("div",{style:{fontSize:11,color:"#94A3B8"}},`更新: ${fmtNewsDateTime(updatedAt)}`)
+    ),
+    isAdmin && h("div",{style:{marginBottom:12}},
+      h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"対象選手"),
+      h("select",{
+        value:targetMemberId,
+        onChange:e=>setTargetMemberId(e.target.value),
+        style:{...css.inp,width:"100%"}
+      },
+        h("option",{value:""},"選手を選択"),
+        availableMembers.map(m=>h("option",{key:m.id,value:m.id},`#${m.number||"-"} ${m.name}`))
+      )
+    ),
+    !isAdmin && selectedMember && h("div",{style:{fontSize:12,color:"#1E293B",fontWeight:700,marginBottom:10}},
+      `対象: ${selectedMember.name}`),
+    loading
+      ? h("div",{style:{fontSize:13,color:"#94A3B8",padding:"10px 0"}},"読み込み中...")
+      : h(Fragment,{},
+          renderPersonBlock("子ども", "childGood", "childMore", "childGoodOther", "childMoreOther"),
+          renderPersonBlock("親", "parentGood", "parentMore", "parentGoodOther", "parentMoreOther"),
+          canEdit && h("button",{
+            type:"button",
+            onClick:save,
+            disabled:saving || (isAdmin && !targetMemberId),
+            style:{...css.bS,width:"100%",opacity:(saving || (isAdmin && !targetMemberId))?0.65:1}
+          },saving ? "保存中..." : "保存する")
+        )
   );
 }
 // ── 配車セクション ────────────────────────────────────────────
@@ -7414,8 +7638,8 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
   const resolveDayTab = raw => {
     const fallback = isSimpleDay ? "detail" : "matches";
     const v = String(raw || "").trim();
-    if (isSimpleDay) return (v === "detail" || v === "attend") ? v : fallback;
-    const allowed = ["matches","detail","attend","carpool","settlement","album"];
+    if (isSimpleDay) return (v === "detail" || v === "attend" || v === "review") ? v : fallback;
+    const allowed = ["matches","detail","attend","carpool","settlement","album","review"];
     return allowed.includes(v) ? v : fallback;
   };
   const [dayTab,setDayTab]=useState(()=>resolveDayTab(initialTab)); // "matches"|"detail"|"attend"|"carpool"|"settlement"|"album"
@@ -7757,8 +7981,8 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       // 内部タブ（試合一覧 / 出欠）
       h("div",{style:{display:"flex",background:"#fff",borderRadius:14,padding:3,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"}},
         (isSimpleDay
-          ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"}]
-          : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"}]
+          ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"review",l:"🌱 ふりかえり"}]
+          : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"},{k:"review",l:"🌱 ふりかえり"}]
         ).map(t=>
           h("button",{key:t.k,onClick:()=>setDayTab(t.k),
             style:{flex:1,padding:"9px 4px",border:"none",borderRadius:11,
@@ -7857,6 +8081,9 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
 
       // 出欠タブ
       dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin,canWrite,users}),
+
+      // ふりかえりタブ
+      dayTab==="review"&&h(ReflectionSection,{schedule,user,members,isAdmin,canWrite}),
 
       // MVP入力欄（公式戦・カップ戦のみ・matchesタブ）
       dayTab==="matches"&&isTournamentTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
