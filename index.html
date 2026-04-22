@@ -534,7 +534,7 @@ function hasPkDecisionData(r){
 function normalizeMatchStatus(v){
   const s = String(v||"").trim().toLowerCase();
   if(["finished","done","ended","試合終了","終了","済"].includes(s)) return "finished";
-  if(["in_progress","live","playing","試合中","進行中"].includes(s)) return "in_progress";
+  if(["pre","before","scheduled","試合前","未実施","in_progress","live","playing","試合中","進行中"].includes(s)) return "pre";
   return "";
 }
 function isMatchFinished(r){
@@ -542,7 +542,7 @@ function isMatchFinished(r){
   const d = nd(r?.date || "");
   const forceFinishedByDate = !!d && d <= todayLocal();
   if(status==="finished") return true;
-  if(status==="in_progress") return forceFinishedByDate;
+  if(status==="pre") return forceFinishedByDate;
   if(forceFinishedByDate) return true;
   // 旧データ互換: 得点 or PKデータがあるものは実施済み扱い
   const our = Number(r?.ourScore||0);
@@ -675,8 +675,8 @@ function RWdg({our,their,pk,status,date}) {
   const forceFinishedByDate = !!d && d <= todayLocal();
   const stRaw = normalizeMatchStatus(status);
   const st = forceFinishedByDate ? "finished" : stRaw;
-  if(st==="in_progress"){
-    return h("span",{style:{background:"#DBEAFE",color:"#1D4ED8",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},"試合中");
+  if(st==="pre"){
+    return h("span",{style:{background:"#E2E8F0",color:"#475569",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},"試合前");
   }
   const hasPk = !!(pk && Number(pk.our)+Number(pk.their)>0);
   if(st!=="finished" && Number(our)===0 && Number(their)===0 && !hasPk){
@@ -1244,7 +1244,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     const normalized = normalizeMatchStatus(match.matchStatus);
     const d = nd(match?.date || "");
     if (d && d <= todayLocal()) return "finished";
-    return normalized || (isMatchFinished(match) ? "finished" : "in_progress");
+    return normalized || (isMatchFinished(match) ? "finished" : "pre");
   });
   const parseSubstitutions = v => {
     try {
@@ -1474,7 +1474,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     setMatchMemo(String(match.memo||""));
     const normalized = normalizeMatchStatus(match.matchStatus);
     const d = nd(match?.date || "");
-    setMatchStatus((d && d <= todayLocal()) ? "finished" : (normalized || (isMatchFinished(match) ? "finished" : "in_progress")));
+    setMatchStatus((d && d <= todayLocal()) ? "finished" : (normalized || (isMatchFinished(match) ? "finished" : "pre")));
     setSubstitutions(parseSubstitutions(match?.substitutions || []));
     setSubEdit(null);
     setSubForm({half:"1st",minute:"",second:"00",outMemberId:"",inMemberId:"",note:""});
@@ -1688,7 +1688,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
           h(Bdg,{label:tc.lb,color:"#fff",bg:tc.bg}),
           match.gameNumber&&h(Bdg,{label:"第"+match.gameNumber+"試合",color:"rgba(255,255,255,0.8)",bg:"rgba(255,255,255,0.15)"}),
           match.formatLabel&&h(Bdg,{label:match.formatLabel,color:"rgba(255,255,255,0.6)",bg:"rgba(255,255,255,0.1)"}),
-          h(Bdg,{label:matchStatus==="finished"?"試合終了":"試合中",color:matchStatus==="finished"?"#14532D":"#1E3A8A",bg:matchStatus==="finished"?"#DCFCE7":"#DBEAFE"})
+          h(Bdg,{label:matchStatus==="finished"?"試合終了":"試合前",color:matchStatus==="finished"?"#14532D":"#475569",bg:matchStatus==="finished"?"#DCFCE7":"#E2E8F0"})
         ),
         h("div",{style:{fontSize:20,fontWeight:900,color:"#fff"}},"vs "+match.opponent),
         h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.55)",marginTop:4}},dt.full+(schedule?.location?" · "+schedule.location:""))
@@ -1990,16 +1990,16 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     h("div",{style:{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"MATCH STATUS"),
     h("div",{style:{display:"flex",gap:8}},
       h("button",{
-        onClick:()=>isAdmin&&setMatchStatus("in_progress"),
+        onClick:()=>isAdmin&&setMatchStatus("pre"),
         disabled:!isAdmin,
         style:{
           flex:1,padding:"9px 12px",borderRadius:10,
-          border:`2px solid ${matchStatus==="in_progress"?"#2563EB":"#E2E8F0"}`,
-          background:matchStatus==="in_progress"?"#EFF6FF":"#fff",
-          color:matchStatus==="in_progress"?"#1D4ED8":"#64748B",
+          border:`2px solid ${matchStatus==="pre"?"#64748B":"#E2E8F0"}`,
+          background:matchStatus==="pre"?"#F1F5F9":"#fff",
+          color:matchStatus==="pre"?"#334155":"#64748B",
           fontSize:12,fontWeight:800,cursor:isAdmin?"pointer":"default",opacity:isAdmin?1:0.95
         }
-      },"試合中"),
+      },"試合前"),
       h("button",{
         onClick:()=>isAdmin&&setMatchStatus("finished"),
         disabled:!isAdmin,
@@ -6332,7 +6332,7 @@ function AddMatchModal({schedule,results,onSave,onClose}) {
     formatTime:latestParsedFormat.time||DEFAULT_FORMAT_TIME,
     formatMode:latestParsedFormat.mode||DEFAULT_FORMAT_MODE,
     memo:"",
-    matchStatus:"in_progress",
+    matchStatus:"pre",
     formation:latestResult?.formation||"3-2-2",
     ourShots:Math.max(0, Number(latestResult?.ourShots||0)||0),
     theirShots:Math.max(0, Number(latestResult?.theirShots||0)||0),
@@ -6350,7 +6350,7 @@ function AddMatchModal({schedule,results,onSave,onClose}) {
     if(!fr.opponent)return alert("対戦相手を入力してください");
     onSave({
       ...fr,
-      matchStatus: fr.matchStatus || "in_progress",
+      matchStatus: fr.matchStatus || "pre",
       formatLabel: buildFormatLabel(fr.formatTime, fr.formatMode),
       scheduleId:schedule.id,date:schedule.date,type:schedule.type
     });
@@ -8429,7 +8429,7 @@ function App() {
         scheduleId:fr.scheduleId,date:fr.date,opponent:fr.opponent,
         formatLabel:fr.formatLabel||"",gameNumber:fr.gameNumber||1,
         type:fr.type,memo:fr.memo||"",
-        matchStatus:fr.matchStatus||"in_progress",
+        matchStatus:fr.matchStatus||"pre",
         formation:fr.formation||"",
         formationSlots:fr.formationSlots||"",
         ourShots:fr.ourShots,
