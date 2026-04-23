@@ -214,7 +214,6 @@ async function api(action,body={}) {
   try{
     const fetchPromise = fetch(GAS_URL,{
       method:"POST",
-      headers:{"Content-Type":"application/json"},
       body:JSON.stringify({action,...body}),
       ...(controller ? {signal:controller.signal} : {})
     });
