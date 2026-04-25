@@ -1450,9 +1450,35 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
     return attending.length ? attending : membersSorted;
   }, [membersSorted, scheduleIdForAttend, attendMap]);
   const shotTargetMembers = useMemo(() => {
-    if (!scheduleIdForAttend || !attendMap) return membersSorted;
-    return membersSorted.filter(m => String(attendMap[m.id] || "") === "○");
+    if (!scheduleIdForAttend || attendMap === null) return membersSorted;
+    return membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
   }, [membersSorted, scheduleIdForAttend, attendMap]);
+  const goalAssistSelectableMembers = useMemo(() => {
+    if (!scheduleIdForAttend || attendMap === null) return membersSorted;
+    return membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
+  }, [membersSorted, scheduleIdForAttend, attendMap]);
+  const memberOptionsByPosition = (list) => {
+    const base = Array.isArray(list) ? list : [];
+    const posList = ["FW","MF","DF","GK"];
+    const groups = posList
+      .map(pos => {
+        const ms = base.filter(m => String(m.position || "") === pos).sort((a,b)=>Number(a.number||999)-Number(b.number||999));
+        return ms.length
+          ? h("optgroup",{key:`opt-${pos}`,label:pos}, ms.map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name)))
+          : null;
+      })
+      .filter(Boolean);
+    const others = base.filter(m => !posList.includes(String(m.position || "")));
+    if (others.length) {
+      groups.push(
+        h("optgroup",{key:"opt-other",label:"その他"},
+          others.sort((a,b)=>Number(a.number||999)-Number(b.number||999)).map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name))
+        )
+      );
+    }
+    if (groups.length) return groups;
+    return base.map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name));
+  };
   const memberNameById = mid => {
     const id = String(mid || "").trim();
     if (!id) return "";
@@ -2135,14 +2161,14 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"得点者"),
           h("select",{value:editNg.scorerId||"",onChange:e=>setEditNg(p=>({...p,scorerId:e.target.value})),style:css.inp},
             h("option",{value:""},"選んでください"),
-            ["FW","MF","DF","GK"].map(pos=>h("optgroup",{key:pos,label:pos},
-              members.filter(m=>m.position===pos).sort((a,b)=>Number(a.number)-Number(b.number))
-                .map(m=>h("option",{key:m.id,value:m.id},"#"+m.number+" "+m.name)))))),
+            memberOptionsByPosition(goalAssistSelectableMembers))),
         editGoal.type==="our"&&h("div",{style:{marginBottom:14}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"アシスト（任意）"),
           h("select",{value:editNg.assistId||"",onChange:e=>setEditNg(p=>({...p,assistId:e.target.value})),style:css.inp},
             h("option",{value:""},"なし"),
-            members.filter(m=>m.id!==editNg.scorerId).map(m=>h("option",{key:m.id,value:m.id},"#"+m.number+" "+m.name)))),
+            goalAssistSelectableMembers
+              .filter(m=>String(m.id)!==String(editNg.scorerId||""))
+              .map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name)))),
         editGoal.type==="our"&&h("div",{style:{marginBottom:20}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"種別"),
           h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#4CAF50"},{v:"PK",c:"#FFC107"},{v:"オウンゴール",c:"#0F172A"}].map(x=>
@@ -2294,12 +2320,13 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,onBack,onHome,on
       h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"得点者"),
         h("select",{value:ng.scorerId,onChange:e=>setNg(p=>({...p,scorerId:e.target.value})),style:css.inp},
           h("option",{value:""},"選手を選んでください"),
-          ["FW","MF","DF","GK"].map(pos=>h("optgroup",{key:pos,label:pos},
-            members.filter(m=>m.position===pos).sort((a,b)=>Number(a.number)-Number(b.number)).map(m=>h("option",{key:m.id,value:m.id},"#"+m.number+" "+m.name)))))),
+          memberOptionsByPosition(goalAssistSelectableMembers))),
       h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"アシスト（任意）"),
         h("select",{value:ng.assistId,onChange:e=>setNg(p=>({...p,assistId:e.target.value})),style:css.inp},
           h("option",{value:""},"なし"),
-          members.filter(m=>m.id!==ng.scorerId).map(m=>h("option",{key:m.id,value:m.id},"#"+m.number+" "+m.name)))),
+          goalAssistSelectableMembers
+            .filter(m=>String(m.id)!==String(ng.scorerId||""))
+            .map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name)))),
       h("div",{style:{marginBottom:20}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"種別"),
         h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#4CAF50"},{v:"PK",c:"#FFC107"},{v:"オウンゴール",c:"#0F172A"}].map(x=>h("button",{key:x.v,onClick:()=>setNg(p=>({...p,goalType:x.v})),style:{flex:1,padding:10,border:`2px solid ${ng.goalType===x.v?x.c:"#eee"}`,borderRadius:10,background:ng.goalType===x.v?x.c:"#fff",color:ng.goalType===x.v?(x.v==="PK"?"#333":"#fff"):"#666",fontSize:12,fontWeight:700,cursor:"pointer"}},x.v)))),
       h("div",{style:{display:"flex",gap:10}},h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),h("button",{onClick:addOur,style:css.bS},"追加"))),
