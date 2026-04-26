@@ -8203,13 +8203,13 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     ),
 
     h("div",{style:{padding:"0 16px"}},
-      // テンプレボタン（admin）
-      isAdmin&&dayTab==="matches"&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
+      // テンプレボタン（HP: admin/member, YouTube: admin）
+      canWrite&&dayTab==="matches"&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
         h("button",{onClick:openHpModal,
           style:{flex:1,padding:"11px",border:"2px solid #0F172A",borderRadius:12,
             background:"#E2E8F0",color:"#0F172A",fontSize:13,fontWeight:700,cursor:"pointer"}},
           "📋 HP用テンプレ"),
-        h("button",{onClick:()=>setYtModal(true),
+        isAdmin&&h("button",{onClick:()=>setYtModal(true),
           style:{flex:1,padding:"11px",border:"2px solid #B91C1C",borderRadius:12,
             background:"#FEE2E2",color:"#B91C1C",fontSize:13,fontWeight:700,cursor:"pointer"}},
           "🎬 YouTubeテンプレ")
