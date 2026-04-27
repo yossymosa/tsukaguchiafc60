@@ -573,20 +573,21 @@ function normalizeMatchStatus(v){
   if(["pre","before","scheduled","試合前","未実施","in_progress","live","playing","試合中","進行中"].includes(s)) return "pre";
   return "";
 }
-function isMatchFinished(r){
-  const status = normalizeMatchStatus(r?.matchStatus);
-  const d = nd(r?.date || "");
-  const forceFinishedByDate = !!d && d <= todayLocal();
-  if(status==="finished") return true;
-  if(status==="pre") return forceFinishedByDate;
-  if(forceFinishedByDate) return true;
-  // 旧データ互換: 得点 or PKデータがあるものは実施済み扱い
+function hasMatchResultEvidence(r){
   const our = Number(r?.ourScore||0);
   const their = Number(r?.theirScore||0);
-  if((our+their)>0) return true;
+  if(!isNaN(our) && !isNaN(their) && (our+their)>0) return true;
   if(hasPkDecisionData(r)) return true;
   if(Array.isArray(r?.goals) && r.goals.length>0) return true;
   if(Array.isArray(r?.theirGoals) && r.theirGoals.length>0) return true;
+  return false;
+}
+function isMatchFinished(r){
+  const status = normalizeMatchStatus(r?.matchStatus);
+  if(status==="finished") return true;
+  if(status==="pre") return hasMatchResultEvidence(r);
+  // 旧データ互換: 明示ステータスがなくても結果データがあるものは実施済み扱い
+  if(hasMatchResultEvidence(r)) return true;
   return false;
 }
 function calcStats(rs) {
