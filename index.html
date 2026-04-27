@@ -582,6 +582,13 @@ function hasMatchResultEvidence(r){
   if(Array.isArray(r?.theirGoals) && r.theirGoals.length>0) return true;
   return false;
 }
+function hasExplicitScoreInput(r){
+  const rawOur = r?.ourScore;
+  const rawTheir = r?.theirScore;
+  const ourStr = (rawOur===0 || rawOur==="0") ? "0" : String(rawOur ?? "").trim();
+  const theirStr = (rawTheir===0 || rawTheir==="0") ? "0" : String(rawTheir ?? "").trim();
+  return ourStr!=="" && theirStr!=="";
+}
 function isMatchFinished(r){
   const status = normalizeMatchStatus(r?.matchStatus);
   if(status==="finished") return true;
@@ -590,8 +597,14 @@ function isMatchFinished(r){
   if(hasMatchResultEvidence(r)) return true;
   return false;
 }
+function shouldCountMatchForStats(r){
+  if(!isMatchFinished(r)) return false;
+  if(hasMatchResultEvidence(r)) return true;
+  // 0-0 の正式終了は、スコアが明示入力されている場合のみ集計対象にする
+  return normalizeMatchStatus(r?.matchStatus)==="finished" && hasExplicitScoreInput(r);
+}
 function calcStats(rs) {
-  const finished = (rs||[]).filter(isMatchFinished);
+  const finished = (rs||[]).filter(shouldCountMatchForStats);
   if(!finished.length) return {games:0,wins:0,draws:0,losses:0,gf:0,ga:0,pct:"-"};
   const isWin = r => {
     const our=Number(r.ourScore), their=Number(r.theirScore);
@@ -1287,8 +1300,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
   const [matchMemo,setMatchMemo]=useState(()=>String(match.memo||""));
   const [matchStatus,setMatchStatus]=useState(()=>{
     const normalized = normalizeMatchStatus(match.matchStatus);
-    const d = nd(match?.date || "");
-    if (d && d <= todayLocal()) return "finished";
     return normalized || (isMatchFinished(match) ? "finished" : "pre");
   });
   const parseSubstitutions = v => {
@@ -1551,8 +1562,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
     setFavoriteModalOpen(false);
     setMatchMemo(String(match.memo||""));
     const normalized = normalizeMatchStatus(match.matchStatus);
-    const d = nd(match?.date || "");
-    setMatchStatus((d && d <= todayLocal()) ? "finished" : (normalized || (isMatchFinished(match) ? "finished" : "pre")));
+    setMatchStatus(normalized || (isMatchFinished(match) ? "finished" : "pre"));
     setSubstitutions(parseSubstitutions(match?.substitutions || []));
     setSubEdit(null);
     setSubForm({half:"1st",minute:"",second:"00",outMemberId:"",inMemberId:"",note:""});
@@ -6847,9 +6857,11 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
               }))
       ),
       (()=>{
-        const st2=calcStats(oppFiltered);
+        const statRows = searchedResults.filter(shouldCountMatchForStats);
+        const oppStatRows = oppFilter==="all" ? statRows : statRows.filter(r=>r.opponent===oppFilter);
+        const st2=calcStats(oppStatRows);
         const oppMap={};
-        searchedResults.forEach(r=>{
+        statRows.forEach(r=>{
           if(!r.opponent) return;
           if(!oppMap[r.opponent]) oppMap[r.opponent]={w:0,d:0,l:0,gf:0,ga:0};
           const o=oppMap[r.opponent];
@@ -6872,7 +6884,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
           // 集計カード
           h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 4px 16px rgba(0,0,0,0.15)"}},
             h("div",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.45)",letterSpacing:2,marginBottom:12}},
-              (oppFilter==="all"?"全体":"vs "+oppFilter)+" · "+oppFiltered.length+"試合"),
+              (oppFilter==="all"?"全体":"vs "+oppFilter)+" · "+oppStatRows.length+"試合"),
             st2.games>0&&h(Fragment,{},
               h("div",{style:{display:"flex",gap:2,height:8,borderRadius:4,overflow:"hidden",background:"rgba(0,0,0,0.2)",marginBottom:6}},
                 h("div",{style:{width:`${st2.wins/st2.games*100}%`,background:"#4CAF50"}}),
@@ -6910,8 +6922,8 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
           // 試合一覧
           h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
             h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"📋 試合一覧"),
-            oppFiltered.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:16}},"試合がありません"),
-            oppFiltered.map((r,i)=>{
+            oppStatRows.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:16}},"試合がありません"),
+            oppStatRows.map((r,i)=>{
               const tc=getTC(r.type);
               const linkedSchedule = findLinkedScheduleForResult(r, schedules);
               const dt=fmt(r.date);
@@ -6919,7 +6931,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
               const rw=our>their?"勝":our===their?"分":"負";
               const rwc=our>their?"#4CAF50":our===their?"#FFC107":"#F44336";
               return h("div",{key:r.id,onClick:()=>linkedSchedule&&onGoToMatch&&onGoToMatch(r,linkedSchedule),style:{
-                  marginBottom:i<oppFiltered.length-1?8:0,padding:"10px 10px",background:"#F8F9FA",borderRadius:10,cursor:linkedSchedule?"pointer":"default"
+                  marginBottom:i<oppStatRows.length-1?8:0,padding:"10px 10px",background:"#F8F9FA",borderRadius:10,cursor:linkedSchedule?"pointer":"default"
                 }},
                 h("div",{style:{display:"flex",alignItems:"center",gap:10}},
                   h("div",{style:{fontSize:11,color:"#aaa",flexShrink:0,width:36,textAlign:"center"}},dt.short),
