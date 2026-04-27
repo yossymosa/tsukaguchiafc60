@@ -582,12 +582,30 @@ function hasMatchResultEvidence(r){
   if(Array.isArray(r?.theirGoals) && r.theirGoals.length>0) return true;
   return false;
 }
-function hasExplicitScoreInput(r){
-  const rawOur = r?.ourScore;
-  const rawTheir = r?.theirScore;
-  const ourStr = (rawOur===0 || rawOur==="0") ? "0" : String(rawOur ?? "").trim();
-  const theirStr = (rawTheir===0 || rawTheir==="0") ? "0" : String(rawTheir ?? "").trim();
-  return ourStr!=="" && theirStr!=="";
+function hasAdditionalResultInputs(r){
+  if(String(r?.memo||"").trim()) return true;
+  const subs = r?.substitutions;
+  if(Array.isArray(subs) && subs.length>0) return true;
+  if(typeof subs==="string"){
+    const s=subs.trim();
+    if(s && s!=="[]" && s!=="{}") return true;
+  }
+  const slots = r?.formationSlots;
+  if(Array.isArray(slots) && slots.some(v=>String(v||"").trim())) return true;
+  if(typeof slots==="string"){
+    const s=slots.trim();
+    if(s && s!=="[]" && s!=="{}") return true;
+  }
+  if(String(r?.formation||"").trim()) return true;
+  const statKeys=["ourShots","theirShots","ourCorners","theirCorners","ourFreeKicks","theirFreeKicks","ourPkCount","theirPkCount","ourOffsides","theirOffsides"];
+  if(statKeys.some(k=>Number(r?.[k]||0)>0)) return true;
+  const ss = r?.shotStats;
+  if(ss && typeof ss==="object" && !Array.isArray(ss) && Object.keys(ss).length>0) return true;
+  if(typeof ss==="string"){
+    const s = ss.trim();
+    if(s && s!=="{}" && s!=="[]") return true;
+  }
+  return false;
 }
 function isMatchFinished(r){
   const status = normalizeMatchStatus(r?.matchStatus);
@@ -600,8 +618,8 @@ function isMatchFinished(r){
 function shouldCountMatchForStats(r){
   if(!isMatchFinished(r)) return false;
   if(hasMatchResultEvidence(r)) return true;
-  // 0-0 の正式終了は、スコアが明示入力されている場合のみ集計対象にする
-  return normalizeMatchStatus(r?.matchStatus)==="finished" && hasExplicitScoreInput(r);
+  // 0-0 の正式終了は、試合記録の入力痕跡がある場合のみ集計対象にする
+  return normalizeMatchStatus(r?.matchStatus)==="finished" && hasAdditionalResultInputs(r);
 }
 function calcStats(rs) {
   const finished = (rs||[]).filter(shouldCountMatchForStats);
@@ -721,14 +739,13 @@ function Bdg({label,color,bg,small}) {
   return h("span",{style:{background:bg||color+"22",color,borderRadius:6,padding:small?"2px 7px":"3px 10px",fontSize:small?10:11,fontWeight:700,display:"inline-block"}},label);
 }
 function RWdg({our,their,pk,status,date}) {
-  const d = nd(date || "");
-  const forceFinishedByDate = !!d && d <= todayLocal();
   const stRaw = normalizeMatchStatus(status);
-  const st = forceFinishedByDate ? "finished" : stRaw;
+  const hasPk = !!(pk && Number(pk.our)+Number(pk.their)>0);
+  const hasScore = !isNaN(Number(our)) && !isNaN(Number(their)) && (Number(our)+Number(their)>0);
+  const st = stRaw || ((hasScore || hasPk) ? "finished" : "pre");
   if(st==="pre"){
     return h("span",{style:{background:"#E2E8F0",color:"#475569",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},"試合前");
   }
-  const hasPk = !!(pk && Number(pk.our)+Number(pk.their)>0);
   if(st!=="finished" && Number(our)===0 && Number(their)===0 && !hasPk){
     return h("span",{style:{background:"#E2E8F0",color:"#475569",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},"未実施");
   }
