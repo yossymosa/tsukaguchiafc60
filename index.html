@@ -512,6 +512,9 @@ function fmt(v) {
   const dw=["日","月","火","水","木","金","土"][dt.getDay()];
   return {y:s.slice(0,4),m:s.slice(5,7),d:s.slice(8,10),dw,short:s.slice(5,7)+"/"+s.slice(8,10),full:s.slice(0,4)+"年"+s.slice(5,7)+"月"+s.slice(8,10)+"日("+dw+")"};
 }
+function isValidDateKey(v){
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(v||""));
+}
 function getCurrentThirdGeneration() {
   const now = new Date();
   const fiscalYear = now.getMonth() + 1 >= 4 ? now.getFullYear() : now.getFullYear() - 1;
@@ -6676,6 +6679,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const filtered=useMemo(()=>results.filter(r=>{
     if(typeF!=="all"&&!typeMatch(r,typeF)) return false;
     const d=nd(r.date);
+    if(!isValidDateKey(d)) return false;
     if(periodRange.f&&d<periodRange.f) return false;
     if(periodRange.t&&d>periodRange.t) return false;
     return true;
@@ -6719,6 +6723,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     if(!["official","cup","公式戦","カップ戦"].includes(s.type)) return false;
     if(typeF!=="all"&&!typeMatch(s,typeF)) return false;
     const d=nd(s.date);
+    if(!isValidDateKey(d)) return false;
     if(periodRange.f&&d<periodRange.f) return false;
     if(periodRange.t&&d>periodRange.t) return false;
     return true;
