@@ -621,8 +621,13 @@ function isMatchFinished(r){
 function shouldCountMatchForStats(r){
   if(!isMatchFinished(r)) return false;
   if(hasMatchResultEvidence(r)) return true;
-  // 0-0 の正式終了は、試合記録の入力痕跡がある場合のみ集計対象にする
-  return normalizeMatchStatus(r?.matchStatus)==="finished" && hasAdditionalResultInputs(r);
+  // スコア証跡（得点/失点/PK）がない行は基本集計しない
+  // 例外: メモで 0-0 引き分けを明示した場合のみ集計対象にする
+  const status = normalizeMatchStatus(r?.matchStatus);
+  if(status!=="finished") return false;
+  const memo = String(r?.memo||"").trim();
+  if(!memo) return false;
+  return /(?:0\s*[-－ー–―]\s*0|スコアレス|引き分け|ドロー)/i.test(memo);
 }
 function calcStats(rs) {
   const finished = (rs||[]).filter(shouldCountMatchForStats);
