@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyxxuQM0uM3soq9QiJs1aMHifVsuaOINIaMYpeHJWntdfIT8gKz76uUD2RTRscDhSRy/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyP48iOUhZ-YChRC_AAexQH5YCMnw2vHstb4K4HtvFP_PMICfp6SnkvNbrqeWE246V8/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -405,6 +405,25 @@ function isTrueFlag(value){
   if (value === true || value === 1) return true;
   const s = String(value === undefined || value === null ? "" : value).trim().toLowerCase();
   return s === "1" || s === "true" || s === "yes" || s === "on" || s === "y" || s === "ok";
+}
+
+function normalizeFavoriteMap(value){
+  try{
+    const src = (value && typeof value === "object" && !Array.isArray(value)) ? value : {};
+    const out = {};
+    Object.entries(src).forEach(([id,val])=>{
+      const key = String(id || "").trim();
+      if(!key) return;
+      if(val && typeof val === "object" && !Array.isArray(val)){
+        out[key] = { updatedAt: String(val.updatedAt || "") };
+      }else if(isTrueFlag(val)){
+        out[key] = { updatedAt: "" };
+      }
+    });
+    return out;
+  }catch(e){
+    return {};
+  }
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -1297,7 +1316,7 @@ function copyToClipboard(text) {
 }
 
 // ── ゴール記録ページ ─────────────────────────────────────────
-function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHome,onSaved,onShotSaved}) {
+function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap={},onToggleFavorite,onBack,onHome,onSaved,onShotSaved}) {
   const halfSortOrder = h => {
     const v = normalizeHalfLabel(h);
     return v==="1st" ? 0 : v==="2nd" ? 1 : v==="3rd" ? 2 : 99;
@@ -1312,11 +1331,14 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
   const [formationSaving,setFormationSaving]=useState(false);
   const [formationSavedTick,setFormationSavedTick]=useState(0);
   const [favoriteSaving,setFavoriteSaving]=useState(false);
-  const [favoriteModalOpen,setFavoriteModalOpen]=useState(false);
-  const [isFavorite,setIsFavorite]=useState(()=>isTrueFlag(match?.favorite));
-  const [favoriteMemo,setFavoriteMemo]=useState(()=>String(match?.favoriteMemo||""));
-  const [favoriteByName,setFavoriteByName]=useState(()=>String(match?.favoriteByName||""));
-  const [favoriteAt,setFavoriteAt]=useState(()=>String(match?.favoriteAt||""));
+  const [isFavorite,setIsFavorite]=useState(()=>{
+    const id = String(match?.id || "").trim();
+    return !!(id && favoriteMap && favoriteMap[id]);
+  });
+  const [favoriteAt,setFavoriteAt]=useState(()=>{
+    const id = String(match?.id || "").trim();
+    return String((id && favoriteMap && favoriteMap[id] && favoriteMap[id].updatedAt) || "");
+  });
   const [shotCountMissing,setShotCountMissing]=useState(()=>isTrueFlag(match?.shotCountMissing));
   const [ng,setNg]=useState({scorerId:"",assistId:"",half:"1st",minute:"",second:"00",goalType:"通常"});
   const [ntg,setNtg]=useState({half:"1st",minute:"",second:"00",goalType:"通常"});
@@ -1652,11 +1674,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
     setShotByHalf(parsedShot.byHalf);
     setTheirShotsByHalf(parsedShot.theirByHalf);
     setShotCountMissing(isTrueFlag(match?.shotCountMissing));
-    setIsFavorite(isTrueFlag(match?.favorite));
-    setFavoriteMemo(String(match?.favoriteMemo||""));
-    setFavoriteByName(String(match?.favoriteByName||""));
-    setFavoriteAt(String(match?.favoriteAt||""));
-    setFavoriteModalOpen(false);
+    const favoriteId = String(match?.id || "").trim();
+    const favoriteRow = favoriteId ? favoriteMap[favoriteId] : null;
+    setIsFavorite(!!favoriteRow);
+    setFavoriteAt(String((favoriteRow && favoriteRow.updatedAt) || ""));
     setMatchMemo(String(match.memo||""));
     const normalized = normalizeMatchStatus(match.matchStatus);
     setMatchStatus(normalized || (isMatchFinished(match) ? "finished" : "pre"));
@@ -1685,7 +1706,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
     clockStartMsRef.current = 0;
     setShotSavedTick(0);
     setFormationSavedTick(0);
-  }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.formation, match?.formationSlots, match?.substitutions, match?.favorite, match?.favoriteMemo, match?.favoriteByName, match?.favoriteAt]);
+  }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.formation, match?.formationSlots, match?.substitutions, favoriteMap]);
   useEffect(() => {
     let active = true;
     if (!scheduleIdForAttend) {
@@ -1872,25 +1893,21 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
     }catch(e){alert("保存エラー: "+e.message);}
     setLoading(false);
   };
-  const saveMatchFavorite = async(nextFavorite, memoText) => {
-    if (!canWrite) {
-      alert("閲覧専用アカウントでは登録できません");
+  const saveMatchFavorite = async(nextFavorite) => {
+    const resultId = String(match?.id || "").trim();
+    if (!resultId) {
+      alert("試合IDが見つかりません");
       return;
     }
     setFavoriteSaving(true);
     try {
-      const normalizedMemo = String(memoText || "").trim();
-      await api("saveResultFavorite",{
-        resultId: String(match?.id || "").trim(),
-        favorite: nextFavorite ? "1" : "",
-        memo: nextFavorite ? normalizedMemo : "",
-        userId: String(user?.id || "").trim(),
-        userName: String(user?.name || "").trim(),
-      });
-      setIsFavorite(!!nextFavorite);
-      setFavoriteMemo(nextFavorite ? normalizedMemo : "");
-      setFavoriteByName(nextFavorite ? String(user?.name || "") : "");
-      setFavoriteAt(nextFavorite ? new Date().toISOString() : "");
+      const nextOn = !!nextFavorite;
+      if (typeof onToggleFavorite !== "function") throw new Error("お気に入りAPIが未設定です");
+      const res = await onToggleFavorite(resultId, nextOn);
+      const map = normalizeFavoriteMap(res && res.favoriteMap);
+      const row = map[resultId];
+      setIsFavorite(nextOn);
+      setFavoriteAt(nextOn ? String((row && row.updatedAt) || "") : "");
       if (typeof onShotSaved === "function") await onShotSaved();
     } catch (e) {
       alert("お気に入り保存エラー: " + (e && e.message ? e.message : e));
@@ -1898,16 +1915,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
     setFavoriteSaving(false);
   };
   const onClickFavoriteButton = () => {
-    if (!canWrite) {
-      alert("閲覧専用アカウントでは登録できません");
-      return;
-    }
-    if (isFavorite) {
-      if (!confirm("お気に入りを解除しますか？")) return;
-      saveMatchFavorite(false, "");
-      return;
-    }
-    setFavoriteModalOpen(true);
+    saveMatchFavorite(!isFavorite);
   };
 
   const youtubeLinks = [
@@ -1942,7 +1950,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
       ),
       h("button",{
         onClick:onClickFavoriteButton,
-        disabled:favoriteSaving || !canWrite,
+        disabled:favoriteSaving,
         style:{
           border:"1px solid "+(isFavorite?"#FDE68A":"rgba(255,255,255,0.35)"),
           borderRadius:999,
@@ -1950,10 +1958,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
           background:isFavorite?"#FEF3C7":"rgba(255,255,255,0.12)",
           color:isFavorite?"#92400E":"#fff",
           fontSize:12,fontWeight:800,
-          cursor:(favoriteSaving || !canWrite)?"default":"pointer",
-          opacity:(favoriteSaving || !canWrite)?0.7:1
+          cursor:favoriteSaving?"default":"pointer",
+          opacity:favoriteSaving?0.7:1
         }
-      }, favoriteSaving ? "保存中..." : (isFavorite ? "★ お気に入り済み" : "☆ お気に入り登録"))
+      }, favoriteSaving ? "保存中..." : ("お気に入り " + (isFavorite ? "ON" : "OFF")))
     ),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:12,flexWrap:"wrap"}},
       h("div",{},
@@ -1979,10 +1987,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
         : h("span",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.45)"}},"試合動画未登録")
     ),
     isFavorite && h("div",{style:{marginTop:10,padding:"8px 10px",background:"rgba(255,255,255,0.1)",borderRadius:10,border:"1px solid rgba(255,255,255,0.2)"}},
-      h("div",{style:{fontSize:11,fontWeight:800,color:"#FCD34D"}},"★ お気に入り"),
-      favoriteMemo && h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.92)",lineHeight:1.5,marginTop:4,whiteSpace:"pre-wrap"}},favoriteMemo),
-      (favoriteByName || favoriteAt) && h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.6)",marginTop:4}},
-        [favoriteByName ? ("登録: " + favoriteByName) : "", favoriteAtLabel].filter(Boolean).join(" / "))
+      h("div",{style:{fontSize:11,fontWeight:800,color:"#FCD34D"}},"★ あなたのお気に入り"),
+      favoriteAtLabel && h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.6)",marginTop:4}},"登録: " + favoriteAtLabel)
     )
   );
 
@@ -2543,22 +2549,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
         },
         style:{width:"100%",padding:"10px 12px",fontSize:12,fontWeight:700,marginBottom:10,borderRadius:10,border:"1px solid #D1D5DB",background:"#fff",color:"#475569",cursor:"pointer"}
       },"↑ 試合上部へ戻る"),
-
-    favoriteModalOpen && h(Modal,{title:"⭐ お気に入り登録",onClose:()=>setFavoriteModalOpen(false),position:"center"},
-      h("div",{style:{marginBottom:10,fontSize:12,color:"#64748B",lineHeight:1.6}},
-        "この試合をお気に入りに追加します。必要ならメモも残せます。"),
-      h("textarea",{
-        value:favoriteMemo,
-        onChange:e=>setFavoriteMemo(e.target.value),
-        rows:4,
-        placeholder:"例: 立ち上がりの守備が良かった、次も見返したい試合",
-        style:{...css.inp,width:"100%",resize:"none",marginBottom:12}
-      }),
-      h("div",{style:{display:"flex",gap:10}},
-        h("button",{onClick:()=>setFavoriteModalOpen(false),style:css.bG},"キャンセル"),
-        h("button",{onClick:()=>saveMatchFavorite(true,favoriteMemo),disabled:favoriteSaving,style:{...css.bS,opacity:favoriteSaving?0.7:1,cursor:favoriteSaving?"default":"pointer"}},
-          favoriteSaving?"保存中...":"お気に入り登録"))
-    ),
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"⚽ 得点を追加",onClose:()=>setModal(null)},
@@ -6768,7 +6758,7 @@ function RankList({title,icon,data,unit}) {
     }));
 }
 
-function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDashTab="result",onGoToMatch,onGoToDay}) {
+function DashTab({results,members,schedules,liftings=[],isAdmin=false,favoriteMap={},initialDashTab="result",onGoToMatch,onGoToDay}) {
   const SHOT_RATE_START_DATE = "2026-04-12";
   const [dashTab,setDashTab]=useState(initialDashTab); // "result" | "tournament" | "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
@@ -6845,17 +6835,25 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const oppFiltered=useMemo(()=>
     oppFilter==="all"?searchedResults:searchedResults.filter(r=>r.opponent===oppFilter)
   ,[searchedResults,oppFilter]);
+  const privateFavoriteMap = useMemo(() => normalizeFavoriteMap(favoriteMap), [favoriteMap]);
   const favoriteRows = useMemo(() => {
-    const rows = searchedResults.filter(r => isTrueFlag(r.favorite));
+    const rows = (results || [])
+      .map(r => {
+        const id = String(r?.id || "").trim();
+        const row = id ? privateFavoriteMap[id] : null;
+        if (!row) return null;
+        return {...r, _privateFavoriteAt: String(row.updatedAt || "")};
+      })
+      .filter(Boolean);
     return [...rows].sort((a,b) => {
-      const ta = new Date(String(a.favoriteAt || a.date || "")).getTime();
-      const tb = new Date(String(b.favoriteAt || b.date || "")).getTime();
+      const ta = new Date(String(a._privateFavoriteAt || a.date || "")).getTime();
+      const tb = new Date(String(b._privateFavoriteAt || b.date || "")).getTime();
       if (isNaN(ta) && isNaN(tb)) return nd(b.date).localeCompare(nd(a.date));
       if (isNaN(ta)) return 1;
       if (isNaN(tb)) return -1;
       return tb - ta;
     });
-  }, [searchedResults]);
+  }, [results, privateFavoriteMap]);
   const st=calcStats(filtered);
   const tournamentFiltered=useMemo(()=>schedules.filter(s=>{
     if(!["official","cup","公式戦","カップ戦"].includes(s.type)) return false;
@@ -6989,15 +6987,15 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     // ── 対戦成績タブ ──
     dashTab==="result"&&h(Fragment,{},
       h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
-        h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:10}},"⭐ お気に入りリスト"),
+        h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:10}},"⭐ お気に入りリスト（自分のみ）"),
         favoriteRows.length===0
-          ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"お気に入り登録された試合はまだありません")
+          ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"あなたのお気に入りはまだありません")
           : h("div",{style:{display:"grid",gap:8}},
               favoriteRows.map(r=>{
                 const linkedSchedule = findLinkedScheduleForResult(r, schedules);
                 const tc = getTC(r.type);
                 const dt = fmt(r.date);
-                const favDt = new Date(String(r.favoriteAt || ""));
+                const favDt = new Date(String(r._privateFavoriteAt || ""));
                 const favLabel = isNaN(favDt.getTime())
                   ? ""
                   : `${String(favDt.getMonth()+1).padStart(2,"0")}/${String(favDt.getDate()).padStart(2,"0")} ${String(favDt.getHours()).padStart(2,"0")}:${String(favDt.getMinutes()).padStart(2,"0")}`;
@@ -7010,9 +7008,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
                     h("span",{style:{fontSize:11,color:"#94A3B8"}},dt.short),
                     favLabel&&h("span",{style:{fontSize:11,color:"#94A3B8",marginLeft:"auto"}},"登録 " + favLabel)
                   ),
-                  h("div",{style:{fontSize:14,fontWeight:800,color:"#1E293B"}},`vs ${r.opponent||"（相手未設定）"}`),
-                  String(r.favoriteMemo||"").trim() && h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.55,marginTop:6,whiteSpace:"pre-wrap"}},
-                    "📝 " + r.favoriteMemo)
+                  h("div",{style:{fontSize:14,fontWeight:800,color:"#1E293B"}},`vs ${r.opponent||"（相手未設定）"}`)
                 );
               }))
       ),
@@ -8749,6 +8745,7 @@ function App() {
   const [pendingNotices,setPendingNotices]=useState([]);
   const [liftings,setLiftings]=useState([]);
   const [users,setUsers]=useState([]);
+  const [myFavorites,setMyFavorites]=useState({});
   const [deepLink,setDeepLink]=useState(()=>{
     const params = new URLSearchParams(location.search);
     return {
@@ -8777,6 +8774,7 @@ function App() {
       setNews(d.news||[]); setLiftings(d.liftings||[]);
       setPendingNotices(d.myPendingNotices||[]);
       setUsers(d.users||[]);
+      setMyFavorites(normalizeFavoriteMap(d.myFavorites || {}));
     }catch(e){alert("読み込みエラー: "+e.message);}
     setLoading(false);
   },[user?.id]);
@@ -8963,6 +8961,16 @@ function App() {
     saveUser({...user,...r.user});
     await load("更新中...");
   };
+  const handleToggleFavorite=async(resultId,nextOn)=>{
+    const r = await api("saveMyFavorite",{
+      userId:String(user?.id||"").trim(),
+      resultId:String(resultId||"").trim(),
+      favorite:nextOn?"1":""
+    });
+    const map = normalizeFavoriteMap(r.favoriteMap || {});
+    setMyFavorites(map);
+    return { favoriteMap: map };
+  };
   const safeSetTab=useCallback((nextTab)=>{
     const t=String(nextTab||"").trim();
     if(!t) return setTab("home");
@@ -8992,7 +9000,7 @@ function App() {
     h(GoalPage,{
       key:String(page?.match?.id||"")+"|"+String(page?.schedule?.id||""),
       match:page.match,schedule:page.schedule,members,isAdmin,canWrite,
-      user,
+      user,favoriteMap:myFavorites,onToggleFavorite:handleToggleFavorite,
       onHome:goBack,
       onBack:()=>{
         const backSchedule = findLinkedScheduleForResult(page.match, schedules) || page.schedule;
@@ -9051,7 +9059,7 @@ function App() {
     tab==="home" ? h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab})
     : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule,onImportFc2Practice:handleImportFc2Practice})
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay})
-    : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
+    : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,favoriteMap:myFavorites,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
