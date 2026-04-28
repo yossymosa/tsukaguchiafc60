@@ -8094,7 +8094,12 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         "あなたは少年サッカーチームの広報補助です。\n" +
         "以下は同じ日程内の複数試合メモです。\n" +
         "内容を重複なく整理し、HP記事の下書きに使いやすいように日本語でやさしく要約してください。\n" +
-        "出力は本文のみ、箇条書きでも可、300文字前後。\n\n" +
+        "出力形式は必ず次の条件に従ってください。\n" +
+        "1. 箇条書き（各行の先頭は「・」）\n" +
+        "2. 4〜8行\n" +
+        "3. 各行は体言止め（名詞句で終了）\n" +
+        "4. 「しました」「されました」「です」「ます」などの文末は禁止\n" +
+        "5. 句点「。」は使わない\n\n" +
         "【試合メモ】\n" + matchMemoSourceText;
       const d = await api("aiGenerate",{prompt});
       const summarized = String(d?.text || "").trim() || matchMemoSourceText;
