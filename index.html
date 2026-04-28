@@ -7962,7 +7962,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
   const [aiResult,setAiResult]=useState("");
   const [aiLoading,setAiLoading]=useState(false);
   const [aiDraftSaved,setAiDraftSaved]=useState(false);
-  const [memoToAiCopied,setMemoToAiCopied]=useState(false);
+  const [memoToAiState,setMemoToAiState]=useState(""); // "" | "loading" | "done"
   const [hpCopied,setHpCopied]=useState(false);
   const hpDraftOwner = encodeURIComponent(String(user?.email || user?.id || user?.name || "anon").trim().toLowerCase());
   const hpDraftKey = "afc_hp_ai_draft_" + (schedule?.id || "") + "_" + hpDraftOwner;
@@ -7988,6 +7988,17 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     return [base, generated].filter(Boolean).join("\n\n");
   };
   const scheduleMemoText = String(schedule.memo || "").trim();
+  const matchMemoRows = dayR
+    .filter(r => String(r?.memo || "").trim())
+    .map((r, idx) => {
+      const gameNo = String(r?.gameNumber || (idx + 1)).trim();
+      const opp = String(r?.opponent || "相手未設定").trim();
+      const head = `第${gameNo}試合 vs ${opp}`;
+      return { head, memo: String(r.memo || "").trim() };
+    });
+  const matchMemoSourceText = matchMemoRows
+    .map(row => `${row.head}\n${row.memo}`)
+    .join("\n\n");
   useEffect(()=>{
     setDayTab(resolveDayTab(initialTab));
   },[schedule.id,isSimpleDay,canUseReviewTab,initialTab]);
@@ -8050,7 +8061,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     setHpText(text);
     setAiDraft(loadAiDraft());
     setAiResult("");
-    setMemoToAiCopied(false);
+    setMemoToAiState("");
     setHpModal(true);
   };
   const runAi=async()=>{
@@ -8075,14 +8086,28 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     setYtCopied(key);
     setTimeout(()=>setYtCopied(""),1800);
   };
-  const copyScheduleMemoToAi=()=>{
-    if(!scheduleMemoText) return;
-    setAiDraft(prev=>{
-      const cur = String(prev || "").trim();
-      return cur ? (cur + "\n\n" + scheduleMemoText) : scheduleMemoText;
-    });
-    setMemoToAiCopied(true);
-    setTimeout(()=>setMemoToAiCopied(false),1800);
+  const summarizeMatchMemoToAi=async()=>{
+    if(!matchMemoSourceText || memoToAiState==="loading") return;
+    setMemoToAiState("loading");
+    try{
+      const prompt =
+        "あなたは少年サッカーチームの広報補助です。\n" +
+        "以下は同じ日程内の複数試合メモです。\n" +
+        "内容を重複なく整理し、HP記事の下書きに使いやすいように日本語でやさしく要約してください。\n" +
+        "出力は本文のみ、箇条書きでも可、300文字前後。\n\n" +
+        "【試合メモ】\n" + matchMemoSourceText;
+      const d = await api("aiGenerate",{prompt});
+      const summarized = String(d?.text || "").trim() || matchMemoSourceText;
+      setAiDraft(prev=>{
+        const cur = String(prev || "").trim();
+        return cur ? (cur + "\n\n" + summarized) : summarized;
+      });
+      setMemoToAiState("done");
+      setTimeout(()=>setMemoToAiState(""),2000);
+    }catch(e){
+      alert("試合メモ要約エラー: " + e.message);
+      setMemoToAiState("");
+    }
   };
 
   return h("div",{className:"page"},
@@ -8099,12 +8124,18 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
           placeholder:"例：前半は守備が安定、後半は右サイドから崩して得点\n例：保護者への感謝コメントを2文追加",
           rows:7,style:{...css.inp,resize:"vertical",minHeight:130,fontSize:13,lineHeight:1.75}})),
       h("div",{style:{display:"flex",gap:8,marginBottom:10}},
-        h("button",{onClick:copyScheduleMemoToAi,disabled:!scheduleMemoText,
+        h("button",{onClick:summarizeMatchMemoToAi,disabled:!matchMemoSourceText || memoToAiState==="loading",
           style:{flex:1,padding:"10px 12px",border:"1px solid #BFDBFE",borderRadius:10,
-            background:!scheduleMemoText?"#E2E8F0":"#EFF6FF",color:!scheduleMemoText?"#94A3B8":"#1D4ED8",
-            fontSize:12,fontWeight:700,cursor:!scheduleMemoText?"not-allowed":"pointer"}},
-          memoToAiCopied?"✓ AI入力へ反映済み":"📝 日程メモをAI入力へコピー"),
-        scheduleMemoText && h("div",{style:{flex:1,fontSize:11,color:"#64748B",lineHeight:1.55,background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:"8px 10px",whiteSpace:"pre-wrap",maxHeight:72,overflow:"auto"}},scheduleMemoText)),
+            background:(!matchMemoSourceText || memoToAiState==="loading")?"#E2E8F0":"#EFF6FF",
+            color:(!matchMemoSourceText || memoToAiState==="loading")?"#94A3B8":"#1D4ED8",
+            fontSize:12,fontWeight:700,cursor:(!matchMemoSourceText || memoToAiState==="loading")?"not-allowed":"pointer"}},
+          memoToAiState==="loading" ? "✨ 要約中..." :
+          memoToAiState==="done" ? "✓ AI入力へ反映済み" :
+          "📝 試合メモをAIで要約"),
+        matchMemoSourceText && h("div",{style:{flex:1,fontSize:11,color:"#64748B",lineHeight:1.55,background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:"8px 10px",whiteSpace:"pre-wrap",maxHeight:92,overflow:"auto"}},
+          matchMemoSourceText),
+        !matchMemoSourceText && scheduleMemoText && h("div",{style:{flex:1,fontSize:11,color:"#64748B",lineHeight:1.55,background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:"8px 10px",whiteSpace:"pre-wrap",maxHeight:92,overflow:"auto"}},
+          scheduleMemoText)),
       h("div",{style:{display:"flex",gap:8,marginBottom:10}},
         h("button",{onClick:saveAiDraft,
           style:{flex:1,padding:"10px 12px",border:"1px solid #CBD5E1",borderRadius:10,background:"#fff",
