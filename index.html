@@ -1900,16 +1900,21 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       return;
     }
     setFavoriteSaving(true);
+    const prevFavorite = isFavorite;
+    const prevFavoriteAt = favoriteAt;
+    const optimisticAt = new Date().toISOString();
+    setIsFavorite(!!nextFavorite);
+    setFavoriteAt(nextFavorite ? optimisticAt : "");
     try {
       const nextOn = !!nextFavorite;
       if (typeof onToggleFavorite !== "function") throw new Error("お気に入りAPIが未設定です");
       const res = await onToggleFavorite(resultId, nextOn);
       const map = normalizeFavoriteMap(res && res.favoriteMap);
       const row = map[resultId];
-      setIsFavorite(nextOn);
       setFavoriteAt(nextOn ? String((row && row.updatedAt) || "") : "");
-      if (typeof onShotSaved === "function") await onShotSaved();
     } catch (e) {
+      setIsFavorite(prevFavorite);
+      setFavoriteAt(prevFavoriteAt);
       alert("お気に入り保存エラー: " + (e && e.message ? e.message : e));
     }
     setFavoriteSaving(false);
@@ -6694,16 +6699,24 @@ function AddMatchModal({schedule,results,onSave,onClose}) {
     theirOffsides:Math.max(0, Number(latestResult?.theirOffsides||0)||0),
     formationSlots:latestResult?.formationSlots||"",
   });
-  const save=()=>{
+  const [submitting,setSubmitting]=useState(false);
+  const save=async()=>{
+    if(submitting) return;
     if(!fr.opponent)return alert("対戦相手を入力してください");
-    onSave({
-      ...fr,
-      matchStatus: fr.matchStatus || "pre",
-      formatLabel: buildFormatLabel(fr.formatTime, fr.formatMode),
-      scheduleId:schedule.id,date:schedule.date,type:schedule.type
-    });
+    setSubmitting(true);
+    try{
+      await Promise.resolve(onSave({
+        ...fr,
+        matchStatus: fr.matchStatus || "pre",
+        formatLabel: buildFormatLabel(fr.formatTime, fr.formatMode),
+        scheduleId:schedule.id,date:schedule.date,type:schedule.type
+      }));
+    } finally {
+      setSubmitting(false);
+    }
   };
-  return h(Modal,{title:"試合を追加",onClose},
+  return h(Modal,{title:"試合を追加",onClose:submitting?(()=>{}):onClose},
+    submitting && h("div",{style:{position:"fixed",inset:0,zIndex:5001,background:"rgba(255,255,255,0.01)",cursor:"wait"}}),
     h("div",{style:{marginBottom:16}},
       h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"対戦相手"),
       h("input",{value:fr.opponent,onChange:e=>setFr(p=>({...p,opponent:e.target.value})),placeholder:"〇〇FC",style:css.inp}),
@@ -6735,7 +6748,10 @@ function AddMatchModal({schedule,results,onSave,onClose}) {
         Object.keys(MATCH_FORMATION_PRESETS).map(key=>
           h("button",{key,onClick:()=>setFr(p=>({...p,formation:key})),
             style:{padding:"10px 8px",border:`2px solid ${fr.formation===key?"#1D4ED8":"#E2E8F0"}`,borderRadius:10,background:fr.formation===key?"#1D4ED8":"#fff",color:fr.formation===key?"#fff":"#334155",fontSize:13,fontWeight:700,cursor:"pointer"}},key)))),
-    h("div",{style:{display:"flex",gap:10}},h("button",{onClick:onClose,style:css.bG},"キャンセル"),h("button",{onClick:save,style:css.bS},"追加する")));
+    h("div",{style:{display:"flex",gap:10}},
+      h("button",{onClick:onClose,disabled:submitting,style:{...css.bG,opacity:submitting?0.6:1,cursor:submitting?"default":"pointer"}},"キャンセル"),
+      h("button",{onClick:save,disabled:submitting,style:{...css.bS,opacity:submitting?0.7:1,cursor:submitting?"default":"pointer"}},
+        submitting?"登録中...":"追加する")));
 }
 
 // ── 成績タブ ───────────────────────────────────────────────────
@@ -8861,6 +8877,7 @@ function App() {
 
   const handleAddResult=async fr=>{
     setLoading(true);setLoadMsg("追加中...");
+    let ok=false;
     try{
       await api("addResult",{result:{
         scheduleId:fr.scheduleId,date:fr.date,opponent:fr.opponent,
@@ -8881,9 +8898,13 @@ function App() {
         theirOffsides:fr.theirOffsides
       }});
       await load("更新中...");
+      ok=true;
     }catch(e){alert("エラー: "+e.message);}
     setLoading(false);
-    setPage({type:"dayDetail",schedule:page?.schedule||fr});
+    if(ok){
+      setPage({type:"dayDetail",schedule:page?.schedule||fr});
+    }
+    return ok;
   };
   const handleAddSchedule=async fs=>{
     setLoading(true);setLoadMsg("追加中...");
