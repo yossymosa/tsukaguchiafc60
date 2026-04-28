@@ -1420,26 +1420,19 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
       return {};
     }
   };
-  const sortMembersForFormation = () => {
-    const sorted = [...(members || [])].sort((a,b)=>Number(a.number||999)-Number(b.number||999)||String(a.name||"").localeCompare(String(b.name||""),"ja"));
-    if (!scheduleIdForAttend || attendMap === null) return sorted;
-    return sorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
-  };
   const buildFormationSlots = (formationKey, currentSlots={}) => {
     const slots = MATCH_FORMATION_PRESETS[formationKey] || [];
-    const candidates = sortMembersForFormation();
     const used = {};
     const next = {};
     slots.forEach(slot => {
       const keep = String(currentSlots[slot.id] || "").trim();
-      if (keep && candidates.some(m => m.id === keep) && !used[keep]) {
+      if (keep && !used[keep]) {
         next[slot.id] = keep;
         used[keep] = true;
         return;
       }
-      const free = candidates.find(m => !used[m.id]);
-      next[slot.id] = free ? free.id : "";
-      if (free) used[free.id] = true;
+      // 以前の試合からの引き継ぎで未設定の枠は空欄のままにする
+      next[slot.id] = "";
     });
     return next;
   };
@@ -1617,6 +1610,13 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
     setMatchClockSec(nowSec);
     setClockRunning(false);
     if (isAdmin) setMatchStatus("finished");
+  };
+  const resetMatchClock = () => {
+    setClockRunning(false);
+    setMatchClockSec(0);
+    clockBaseSecRef.current = 0;
+    clockStartMsRef.current = 0;
+    if (isAdmin) setMatchStatus("pre");
   };
   const currentClockLabel = formatClockLabel(getClockSecNow());
   const currentHalfKey = getHalfByClockSec(getClockSecNow());
@@ -2297,7 +2297,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,onBack,onHo
           background:clockRunning?"#16A34A":"#ECFDF5",color:clockRunning?"#fff":"#15803D",
           fontSize:12,fontWeight:800,cursor:"pointer"
         }
-      },"■ 試合終了")
+      },"■ 試合終了"),
+      h("button",{
+        onClick:resetMatchClock,
+        style:{
+          flex:1,padding:"9px 12px",borderRadius:10,border:"2px solid #CBD5E1",
+          background:"#fff",color:"#475569",
+          fontSize:12,fontWeight:800,cursor:"pointer"
+        }
+      },"↺ リセット")
     ),
     h("div",{style:{display:"flex",gap:8}},
       h("button",{
