@@ -2744,6 +2744,15 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},`${fiscalLabel}戦績`),
       h("div",{onClick:()=>onOpenDashTab&&onOpenDashTab("result"),style:{background:"#fff",borderRadius:14,padding:"14px 12px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",border:"1px solid #E2E8F0",cursor:onOpenDashTab?"pointer":"default"}},
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}},
+          h("div",{style:{fontSize:13,fontWeight:900,color:"#0F172A"}},"シーズンサマリー"),
+          h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4ED8",background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:999,padding:"4px 10px"}},`勝率 ${fiscalStats.pct}`)
+        ),
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:"8px 10px",marginBottom:10,gap:8,flexWrap:"wrap"}},
+          h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700}},"勝-分-負"),
+          h("div",{style:{fontSize:16,color:"#0F172A",fontWeight:900}},`${fiscalStats.wins}-${fiscalStats.draws}-${fiscalStats.losses}`),
+          h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700}},`得失点 ${fiscalStats.gf}-${fiscalStats.ga}`)
+        ),
         h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8}},
           h("div",{style:{textAlign:"center",background:"#EFF6FF",borderRadius:10,padding:"8px 6px"}},
             h("div",{style:{fontSize:20,fontWeight:900,color:"#1D4ED8",lineHeight:1}},fiscalStats.games),
