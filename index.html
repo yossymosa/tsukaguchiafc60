@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxY0_iJsfon8eWPp_RhdH35BzL-KkMzPzXZnjgGHJS5wYjNXEEj9MKP9oYM1VrzoygH/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxVeYr26SeN4YYEJCSbhsOQ3MsG_v57tHwFYSlbwPMoV-Kk1sAHmqNz6DL2a4yWy27p/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -1326,8 +1326,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const [theirG,setTheirG]=useState((match.theirGoals||[]).map(normalizeGoalItem));
   const [modal,setModal]=useState(null);
   const [loading,setLoading]=useState(false);
-  const [shotSaving,setShotSaving]=useState(false);
-  const [shotSavedTick,setShotSavedTick]=useState(0);
   const [formationSaving,setFormationSaving]=useState(false);
   const [formationSavedTick,setFormationSavedTick]=useState(0);
   const [favoriteSaving,setFavoriteSaving]=useState(false);
@@ -1704,7 +1702,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setMatchClockSec(0);
     clockBaseSecRef.current = 0;
     clockStartMsRef.current = 0;
-    setShotSavedTick(0);
     setFormationSavedTick(0);
   }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.formation, match?.formationSlots, match?.substitutions, favoriteMap]);
   useEffect(() => {
@@ -1750,7 +1747,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       curHalfMap[id] = next;
       return {...base, [safeActiveShotHalf]: curHalfMap};
     });
-    if (shotSavedTick) setShotSavedTick(0);
   };
   const bumpTheirShot = delta => {
     if (!isAdmin) return;
@@ -1760,25 +1756,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       base[safeActiveShotHalf] = Math.max(0, cur + Number(delta || 0));
       return base;
     });
-    if (shotSavedTick) setShotSavedTick(0);
-  };
-  const saveShotsOnly = async() => {
-    if (!isAdmin) return;
-    setShotSaving(true);
-    try {
-      await api("saveShotStats",{
-        resultId: match.id,
-        ourShots: ourShotsTotal,
-        theirShots: theirShotsTotal,
-        shotStats: shotStatsPayload,
-        shotCountMissing: shotCountMissing ? "1" : "",
-      });
-      setShotSavedTick(Date.now());
-      if (typeof onShotSaved === "function") await onShotSaved();
-    } catch(e) {
-      alert("シュート保存エラー: " + e.message);
-    }
-    setShotSaving(false);
   };
   const saveFormationOnly = async() => {
     if (!isAdmin) return;
@@ -2275,10 +2252,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
             h("input",{type:"checkbox",checked:shotCountMissing,onChange:e=>setShotCountMissing(!!e.target.checked)}),
             "シュート数を記録できていない（成功率集計から除外）"
           ),
-          shotSavedTick ? h("span",{style:{fontSize:11,color:"#16A34A",fontWeight:800}},"保存済み") : h("span",{style:{fontSize:11,color:"#94A3B8"}},"未保存")
-        ),
-        h("button",{onClick:saveShotsOnly,disabled:shotSaving,style:{...css.bS,padding:"8px 14px",fontSize:12,minWidth:120,opacity:shotSaving?0.7:1,cursor:shotSaving?"default":"pointer"}},
-          shotSaving?"保存中...":"シュート保存")
+          h("span",{style:{fontSize:11,color:"#94A3B8"}},"※ この内容は「試合全体を保存」で保存されます")
+        )
       )
     )
   );
@@ -2769,27 +2744,33 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
     h("div",{style:{marginBottom:20}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},`${fiscalLabel}戦績`),
       h("div",{onClick:()=>onOpenDashTab&&onOpenDashTab("result"),style:{background:"#fff",borderRadius:14,padding:"14px 12px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",border:"1px solid #E2E8F0",cursor:onOpenDashTab?"pointer":"default"}},
-        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8}},
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8}},
+          h("div",{style:{textAlign:"center",background:"#EFF6FF",borderRadius:10,padding:"8px 6px"}},
+            h("div",{style:{fontSize:20,fontWeight:900,color:"#1D4ED8",lineHeight:1}},fiscalStats.games),
+            h("div",{style:{fontSize:10,fontWeight:700,color:"#1D4ED8",marginTop:2}},"試合数")
+          ),
           h("div",{style:{textAlign:"center",background:"#ECFDF3",borderRadius:10,padding:"8px 6px"}},
             h("div",{style:{fontSize:22,fontWeight:900,color:"#16A34A",lineHeight:1}},fiscalStats.wins),
-            h("div",{style:{fontSize:10,fontWeight:700,color:"#16A34A",marginTop:2}},"勝"),
+            h("div",{style:{fontSize:10,fontWeight:700,color:"#16A34A",marginTop:2}},"勝ち")
           ),
           h("div",{style:{textAlign:"center",background:"#FEF9C3",borderRadius:10,padding:"8px 6px"}},
             h("div",{style:{fontSize:22,fontWeight:900,color:"#CA8A04",lineHeight:1}},fiscalStats.draws),
-            h("div",{style:{fontSize:10,fontWeight:700,color:"#CA8A04",marginTop:2}},"分"),
+            h("div",{style:{fontSize:10,fontWeight:700,color:"#CA8A04",marginTop:2}},"引き分け")
           ),
           h("div",{style:{textAlign:"center",background:"#FEE2E2",borderRadius:10,padding:"8px 6px"}},
             h("div",{style:{fontSize:22,fontWeight:900,color:"#DC2626",lineHeight:1}},fiscalStats.losses),
-            h("div",{style:{fontSize:10,fontWeight:700,color:"#DC2626",marginTop:2}},"敗"),
+            h("div",{style:{fontSize:10,fontWeight:700,color:"#DC2626",marginTop:2}},"負け")
           ),
-          h("div",{style:{textAlign:"center",background:"#EFF6FF",borderRadius:10,padding:"8px 6px"}},
-            h("div",{style:{fontSize:20,fontWeight:900,color:"#1D4ED8",lineHeight:1}},fiscalStats.games),
-            h("div",{style:{fontSize:10,fontWeight:700,color:"#1D4ED8",marginTop:2}},"試合"),
+          h("div",{style:{textAlign:"center",background:"#EEF2FF",borderRadius:10,padding:"8px 6px"}},
+            h("div",{style:{fontSize:20,fontWeight:900,color:"#3730A3",lineHeight:1}},fiscalStats.gf),
+            h("div",{style:{fontSize:10,fontWeight:700,color:"#3730A3",marginTop:2}},"得点")
           ),
+          h("div",{style:{textAlign:"center",background:"#F8FAFC",borderRadius:10,padding:"8px 6px"}},
+            h("div",{style:{fontSize:20,fontWeight:900,color:"#64748B",lineHeight:1}},fiscalStats.ga),
+            h("div",{style:{fontSize:10,fontWeight:700,color:"#64748B",marginTop:2}},"失点")
+          )
         ),
-        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,fontSize:11,color:"#64748B",fontWeight:700}},
-          h("span",{},`得失点 ${fiscalStats.gf}-${fiscalStats.ga}`),
-          h("span",{},`勝率 ${fiscalStats.pct}`),
+        h("div",{style:{display:"flex",justifyContent:"flex-end",alignItems:"center",marginTop:8,fontSize:11,color:"#94A3B8",fontWeight:700}},
           h("span",{style:{color:"#94A3B8"}},"›")
         )
       )
