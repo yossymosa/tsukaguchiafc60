@@ -2802,12 +2802,14 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
       recent.map(r=>{
         const tc=getTC(getResultType(r));
         const s=findLinkedScheduleForResult(r, schedules);
+        const cardTitle = String((s && s.title) || "").trim();
         const dt=fmt(r.date);
         return h("div",{key:r.id,onClick:()=>onGoToMatch(r,s),style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",cursor:"pointer"}},
           h("div",{style:{textAlign:"center",flexShrink:0,width:36}},h("div",{style:{fontSize:11,color:"#aaa"}},dt.short),h("div",{style:{fontSize:10,color:"#ccc"}},dt.dw)),
           h("div",{style:{width:3,height:40,background:tc.bg,borderRadius:2,flexShrink:0}}),
           h("div",{style:{flex:1,minWidth:0}},
             h("div",{style:{marginBottom:2}},h(Bdg,{label:tc.lb,color:tc.bg,small:true})),
+            cardTitle && h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},cardTitle),
             h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},"vs "+r.opponent)),
           h("div",{style:{textAlign:"right",flexShrink:0}},
             h(ScoreLine,{our:r.ourScore,their:r.theirScore,size:16}),
