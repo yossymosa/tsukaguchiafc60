@@ -1448,6 +1448,34 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     theirOffsides:Math.max(0, Number(match.theirOffsides||0)||0),
   }));
   const scheduleIdForAttend = String(schedule?.id || match?.scheduleId || "").trim();
+  const lineupCacheKey = rid => "afc_lineup_cache_" + String(rid || "").trim();
+  const readLineupCache = rid => {
+    const key = lineupCacheKey(rid);
+    if (!key || key.endsWith("_")) return null;
+    try{
+      const raw = localStorage.getItem(key);
+      if(!raw) return null;
+      const obj = JSON.parse(raw);
+      return obj && typeof obj === "object" ? obj : null;
+    }catch(e){
+      return null;
+    }
+  };
+  const hasAnyFormationSelection = slotsObj => {
+    if(!slotsObj || typeof slotsObj !== "object") return false;
+    return Object.values(slotsObj).some(v => String(v || "").trim());
+  };
+  const writeLineupCache = (rid, formationValue, slotsValue) => {
+    const key = lineupCacheKey(rid);
+    if (!key || key.endsWith("_")) return;
+    try{
+      localStorage.setItem(key, JSON.stringify({
+        formation: String(formationValue || ""),
+        formationSlots: slotsValue && typeof slotsValue === "object" ? slotsValue : {},
+        updatedAt: Date.now()
+      }));
+    }catch(e){}
+  };
   const parseFormationSlots = v => {
     try {
       const obj = typeof v === "string" ? JSON.parse(v || "{}") : (v || {});
@@ -1475,11 +1503,14 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     });
     return next;
   };
-  const [formation,setFormation]=useState(()=>String(match.formation||""));
+  const cachedLineupInit = readLineupCache(match?.id);
+  const [formation,setFormation]=useState(()=>String(match.formation || (cachedLineupInit && cachedLineupInit.formation) || ""));
   const [formationSlots,setFormationSlots]=useState(()=>{
-    const key = String(match.formation || "");
+    const key = String(match.formation || (cachedLineupInit && cachedLineupInit.formation) || "");
     const saved = parseFormationSlots(match.formationSlots);
-    return key ? buildFormationSlots(key, saved) : {};
+    const cachedSlots = parseFormationSlots(cachedLineupInit && cachedLineupInit.formationSlots);
+    const seed = hasAnyFormationSelection(saved) ? saved : cachedSlots;
+    return key ? buildFormationSlots(key, seed) : {};
   });
 
   const ourT=goals.length, thT=theirG.length;
@@ -1712,10 +1743,13 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       ourOffsides:Math.max(0, Number(match.ourOffsides||0)||0),
       theirOffsides:Math.max(0, Number(match.theirOffsides||0)||0),
     });
-    const key = String(match.formation || "");
+    const cachedLineup = readLineupCache(match?.id);
+    const key = String(match.formation || (cachedLineup && cachedLineup.formation) || "");
     const saved = parseFormationSlots(match.formationSlots);
+    const cachedSlots = parseFormationSlots(cachedLineup && cachedLineup.formationSlots);
+    const seed = hasAnyFormationSelection(saved) ? saved : cachedSlots;
     setFormation(key);
-    setFormationSlots(key ? buildFormationSlots(key, saved) : {});
+    setFormationSlots(key ? buildFormationSlots(key, seed) : {});
     setClockRunning(false);
     setMatchClockSec(0);
     clockBaseSecRef.current = 0;
@@ -1842,6 +1876,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const save=async()=>{
     setLoading(true);
     try{
+      writeLineupCache(match?.id, formation || "", formation ? formationSlots : {});
       await api("saveGoals",{
         resultId:match.id,goals,theirGoals:theirG,
         youtubeUrl:ytUrls.full,youtubeUrl1st:ytUrls.first,youtubeUrl2nd:ytUrls.second,
@@ -1867,6 +1902,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         pkOur:hasPk?pkOurScore:null,
         pkTheir:hasPk?pkTheirScore:null,
       });
+      writeLineupCache(match?.id, formation || "", formation ? formationSlots : {});
       onSaved();
     }catch(e){alert("保存エラー: "+e.message);}
     setLoading(false);
@@ -5998,13 +6034,28 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
     [
       linkedPlayerName,
       ...registeredFamilyMembers,
-      ...parseMemberList(eventForm.adultMembers),
-      ...parseMemberList(eventForm.childMembers),
-      ...parseMemberList(eventForm.preschoolMembers),
     ]
       .map(v => String(v || "").trim())
       .filter(Boolean)
   )];
+  const sanitizeEventForm = formValue => {
+    const allowedSet = new Set(eventFamilyCandidates.map(n => String(n || "").trim()).filter(Boolean));
+    const next = {
+      adultMembers: parseMemberList(formValue?.adultMembers || []).filter(n => allowedSet.has(String(n || "").trim())),
+      childMembers: parseMemberList(formValue?.childMembers || []).filter(n => allowedSet.has(String(n || "").trim())),
+      preschoolMembers: parseMemberList(formValue?.preschoolMembers || []).filter(n => allowedSet.has(String(n || "").trim())),
+    };
+    const seen = new Set();
+    ["adultMembers","childMembers","preschoolMembers"].forEach(k => {
+      next[k] = next[k].filter(name => {
+        const key = String(name || "").trim();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    });
+    return next;
+  };
   const toggleEventMember = (categoryKey, name) => {
     const targetName = String(name || "").trim();
     if (!targetName) return;
@@ -6028,6 +6079,10 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
   useEffect(() => {
     setDeadlineDraft(String(schedule.deadline || "").trim());
   }, [schedule?.id, schedule?.deadline]);
+  useEffect(() => {
+    if (!isEventSchedule) return;
+    setEventForm(prev => sanitizeEventForm(prev));
+  }, [isEventSchedule, eventFamilyCandidates.join("|")]);
 
   // スケジュールの出欠を読み込み
   useEffect(() => {
@@ -6039,13 +6094,13 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
         setEventAttend(rows);
         const mine = rows.find(a => String(a.userId) === String(user.id));
         if (mine) {
-          setEventForm({
+          setEventForm(sanitizeEventForm({
             adultMembers: parseMemberList(mine.adultMembers || []),
             childMembers: parseMemberList(mine.childMembers || []),
             preschoolMembers: parseMemberList(mine.preschoolMembers || []),
-          });
+          }));
         } else {
-          setEventForm({ adultMembers: [], childMembers: [], preschoolMembers: [] });
+          setEventForm(sanitizeEventForm({ adultMembers: [], childMembers: [], preschoolMembers: [] }));
         }
       } else {
         const map = {};
@@ -6069,9 +6124,10 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
   const saveEventAttend = async () => {
     if (!canWrite) return;
     setSaving("event");
-    const adultMembers = parseMemberList(eventForm.adultMembers || []);
-    const childMembers = parseMemberList(eventForm.childMembers || []);
-    const preschoolMembers = parseMemberList(eventForm.preschoolMembers || []);
+    const sanitized = sanitizeEventForm(eventForm);
+    const adultMembers = parseMemberList(sanitized.adultMembers || []);
+    const childMembers = parseMemberList(sanitized.childMembers || []);
+    const preschoolMembers = parseMemberList(sanitized.preschoolMembers || []);
     const payload = {
       scheduleId: schedule.id,
       userId: user.id,
@@ -6085,6 +6141,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
     };
     try {
       await api("saveEventAttend", payload);
+      setEventForm(sanitized);
       setEventAttend(prev => [...prev.filter(a => String(a.userId) !== String(user.id)), payload]);
     } catch(e) { alert("保存エラー: " + e.message); }
     setSaving("");
@@ -6183,7 +6240,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
             h("div",{style:{fontSize:22,fontWeight:900,color:item.color}},item.value),
             h("div",{style:{fontSize:11,color:item.color,fontWeight:700,marginTop:4}},item.label)))),
       h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:12,marginBottom:12}},
-        h("div",{style:{fontSize:12,fontWeight:700,color:"#666",marginBottom:10}},"設定タブで登録した家族名と選手名から選択"),
+        h("div",{style:{fontSize:12,fontWeight:700,color:"#666",marginBottom:10}},"登録している家族から選択"),
         eventFamilyCandidates.length===0
           ? h("div",{style:{fontSize:12,color:"#64748B",marginBottom:10,lineHeight:1.6}},"設定タブで家族構成を登録し、子どもを紐づけるとここで選択できます")
           : [
