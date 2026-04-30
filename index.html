@@ -1548,6 +1548,20 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     () => [...(members || [])].sort((a,b)=>Number(a.number||999)-Number(b.number||999)||String(a.name||"").localeCompare(String(b.name||""),"ja")),
     [members]
   );
+  const getFormationMemberKey = m => {
+    const id = String(m?.id || "").trim();
+    if (id) return id;
+    const num = String(m?.number || "").trim();
+    const name = String(m?.name || "").trim();
+    return name ? `nm:${num}:${name}` : "";
+  };
+  const findFormationMemberByKey = key => {
+    const k = String(key || "").trim();
+    if (!k) return null;
+    const direct = membersSorted.find(m => String(m.id || "").trim() === k);
+    if (direct) return direct;
+    return membersSorted.find(m => getFormationMemberKey(m) === k) || null;
+  };
   const formationSelectableMembers = useMemo(() => {
     if (!scheduleIdForAttend || attendMap === null) return membersSorted;
     const attending = membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
@@ -1591,7 +1605,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const memberNameById = mid => {
     const id = String(mid || "").trim();
     if (!id) return "";
-    const found = membersSorted.find(m => String(m.id || "") === id);
+    const found = membersSorted.find(m => String(m.id || "") === id) || findFormationMemberByKey(id);
     return found ? found.name : "";
   };
   const safeActiveShotHalf = visibleHalfOptions.includes(activeShotHalf) ? activeShotHalf : (visibleHalfOptions[0] || "1st");
@@ -1785,7 +1799,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   useEffect(() => {
     if (!formation) return;
     setFormationSlots(prev => buildFormationSlots(formation, prev || {}));
-  }, [formation, formationSelectableMembers.map(m => String(m.id || "").trim()).join("|")]);
+  }, [formation, formationSelectableMembers.map(m => getFormationMemberKey(m)).join("|")]);
   const bumpMemberShot = (memberId, delta) => {
     if (!isAdmin) return;
     const id = String(memberId || "").trim();
@@ -2230,17 +2244,23 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           const currentId = String(formationSlots[slot.id] || "");
           const usedByOthers = new Set(Object.entries(formationSlots).filter(([k,v]) => k !== slot.id && v).map(([,v]) => String(v)));
           const slotPool = [...formationSelectableMembers];
-          if (currentId && !slotPool.some(m => String(m.id || "").trim() === currentId)) {
-            const fallbackMember = membersSorted.find(m => String(m.id || "").trim() === currentId);
+          if (currentId && !slotPool.some(m => getFormationMemberKey(m) === currentId)) {
+            const fallbackMember = findFormationMemberByKey(currentId);
             slotPool.push(fallbackMember || {id:currentId, name:"(保存済み選手)"});
           }
-          const slotOptions = slotPool.filter(m => !usedByOthers.has(String(m.id)) || String(m.id) === currentId);
-          const currentMember = membersSorted.find(m => String(m.id) === currentId);
+          const slotOptions = slotPool.filter(m => {
+            const key = getFormationMemberKey(m) || String(m.id || "").trim();
+            return !usedByOthers.has(key) || key === currentId;
+          });
+          const currentMember = findFormationMemberByKey(currentId);
           return h("div",{key:slot.id,style:{position:"absolute",left:node.x+"%",top:node.y+"%",transform:"translate(-50%,-50%)",display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:72}},
             isAdmin
               ? h("select",{value:currentId,onChange:e=>{setFormationSlots(prev=>({...prev,[slot.id]:String(e.target.value || "").trim()}));},style:{...css.inp,padding:"4px 6px",fontSize:11,minWidth:74,maxWidth:74,width:74,background:"rgba(255,255,255,0.96)",fontWeight:800,textAlign:"center",margin:0}},
                   h("option",{value:""},"選手を選択"),
-                  slotOptions.map(m=>h("option",{key:m.id,value:m.id},m.name))
+                  slotOptions.map(m=>{
+                    const optKey = getFormationMemberKey(m) || String(m.id || "").trim();
+                    return h("option",{key:optKey,value:optKey},m.name);
+                  })
                 )
               : h("div",{style:{fontSize:12,fontWeight:900,color:"#0F172A",background:"rgba(255,255,255,0.92)",borderRadius:999,padding:"6px 10px",minWidth:86,textAlign:"center",border:"1px solid rgba(255,255,255,0.65)",boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}},
                   currentMember ? currentMember.name : "—")
