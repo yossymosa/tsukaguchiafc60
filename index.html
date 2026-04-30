@@ -426,6 +426,22 @@ function normalizeFavoriteMap(value){
   }
 }
 
+function normalizeUiTabVisibility(value){
+  const toBool = (v, fallback=true) => {
+    if (v === undefined || v === null || v === "") return fallback;
+    if (typeof v === "boolean") return v;
+    const s = String(v).trim().toLowerCase();
+    if (["1","true","yes","on","y","ok"].includes(s)) return true;
+    if (["0","false","no","off","n"].includes(s)) return false;
+    return fallback;
+  };
+  const src = (value && typeof value === "object" && !Array.isArray(value)) ? value : {};
+  return {
+    member: toBool(src.member, true),
+    memo: toBool(src.memo, true),
+  };
+}
+
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -8598,7 +8614,7 @@ function MemberTab({members,liftings=[]}) {
     ));
 }
 
-function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile}) {
+function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile,uiTabVisibility,onSaveUiTabVisibility}) {
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
   const child = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
   const familyListView = parseFamilyMembers(currentUserProfile.familyMembers || []);
@@ -8611,6 +8627,8 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
   const [memberId,setMemberId] = useState(currentUserProfile.memberId || "");
   const [familyText,setFamilyText] = useState(familyListView.join("\n"));
   const [saving,setSaving] = useState(false);
+  const [tabVisibility,setTabVisibility] = useState(()=>normalizeUiTabVisibility(uiTabVisibility));
+  const [tabVisibilitySaving,setTabVisibilitySaving] = useState(false);
 
   useEffect(()=>{
     const latest = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
@@ -8618,6 +8636,9 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
     setMemberId(latest.memberId || "");
     setFamilyText(parseFamilyMembers(latest.familyMembers || []).join("\n"));
   },[user.id,user.name,user.memberId,JSON.stringify((users||[]).map(u=>[u.id,u.familyMembers]))]);
+  useEffect(()=>{
+    setTabVisibility(normalizeUiTabVisibility(uiTabVisibility));
+  },[uiTabVisibility?.member, uiTabVisibility?.memo]);
 
   const generations = [...new Set(members.map(m=>String(m.generation||"").trim()).filter(Boolean))].sort((a,b)=>Number(b)-Number(a));
   const memberOptions = generations.flatMap(gen => {
@@ -8640,6 +8661,19 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
       alert("設定保存エラー: " + e.message);
     }
     setSaving(false);
+  };
+  const saveTabVisibility = async() => {
+    if (String(user?.role || "") !== "admin") return;
+    if (typeof onSaveUiTabVisibility !== "function") return;
+    setTabVisibilitySaving(true);
+    try{
+      const next = await onSaveUiTabVisibility(tabVisibility);
+      setTabVisibility(normalizeUiTabVisibility(next || tabVisibility));
+      alert("タブ表示設定を保存しました");
+    }catch(e){
+      alert("タブ表示設定エラー: " + e.message);
+    }
+    setTabVisibilitySaving(false);
   };
 
   return h(Fragment,{},
@@ -8693,6 +8727,36 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
         h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:"12px 14px"}},
           h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:4}},"背番号"),
           h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.number||"-")))),
+    String(user?.role||"")==="admin" && h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:10}},"🧩 タブ表示設定"),
+      h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12}},"管理者で「選手」「メモ」タブの表示を切り替えできます（全員共通）"),
+      h("div",{style:{display:"grid",gap:10,marginBottom:12}},
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10}},
+          h("div",{style:{fontSize:13,fontWeight:700,color:"#1E293B"}},"選手タブ"),
+          h("button",{onClick:()=>setTabVisibility(p=>({...p,member:!p.member})),disabled:tabVisibilitySaving,style:{
+            width:58,height:32,flexShrink:0,border:"none",borderRadius:999,
+            background:tabVisibility.member?"#1D4ED8":"#CBD5E1",padding:3,cursor:tabVisibilitySaving?"wait":"pointer",
+            display:"flex",alignItems:"center",justifyContent:tabVisibility.member?"flex-end":"flex-start",
+            opacity:tabVisibilitySaving?0.75:1
+          }},
+            h("span",{style:{width:26,height:26,borderRadius:"50%",background:"#fff",boxShadow:"0 2px 6px rgba(0,0,0,0.18)",display:"block"}})
+          )
+        ),
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10}},
+          h("div",{style:{fontSize:13,fontWeight:700,color:"#1E293B"}},"メモタブ"),
+          h("button",{onClick:()=>setTabVisibility(p=>({...p,memo:!p.memo})),disabled:tabVisibilitySaving,style:{
+            width:58,height:32,flexShrink:0,border:"none",borderRadius:999,
+            background:tabVisibility.memo?"#1D4ED8":"#CBD5E1",padding:3,cursor:tabVisibilitySaving?"wait":"pointer",
+            display:"flex",alignItems:"center",justifyContent:tabVisibility.memo?"flex-end":"flex-start",
+            opacity:tabVisibilitySaving?0.75:1
+          }},
+            h("span",{style:{width:26,height:26,borderRadius:"50%",background:"#fff",boxShadow:"0 2px 6px rgba(0,0,0,0.18)",display:"block"}})
+          )
+        )
+      ),
+      h("button",{onClick:saveTabVisibility,disabled:tabVisibilitySaving,style:{...css.bS,width:"100%",opacity:tabVisibilitySaving?0.75:1}},
+        tabVisibilitySaving ? "保存中..." : "表示設定を保存")
+    ),
     h("div",{style:{background:"#fff",borderRadius:16,padding:18,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🔔 通知設定"),
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}},
@@ -8740,6 +8804,7 @@ function App() {
   const [liftings,setLiftings]=useState([]);
   const [users,setUsers]=useState([]);
   const [myFavorites,setMyFavorites]=useState({});
+  const [uiTabVisibility,setUiTabVisibility]=useState({member:true,memo:true});
   const [deepLink,setDeepLink]=useState(()=>{
     const params = new URLSearchParams(location.search);
     return {
@@ -8769,6 +8834,7 @@ function App() {
       setPendingNotices(d.myPendingNotices||[]);
       setUsers(d.users||[]);
       setMyFavorites(normalizeFavoriteMap(d.myFavorites || {}));
+      setUiTabVisibility(normalizeUiTabVisibility(d.uiTabVisibility || {}));
     }catch(e){alert("読み込みエラー: "+e.message);}
     setLoading(false);
   },[user?.id]);
@@ -8970,12 +9036,24 @@ function App() {
     setMyFavorites(map);
     return { favoriteMap: map };
   };
+  const handleSaveUiTabVisibility=async(nextVisibility={})=>{
+    const payload = normalizeUiTabVisibility(nextVisibility || {});
+    const res = await api("saveUiTabVisibility",{
+      userId:String(user?.id||"").trim(),
+      uiTabVisibility: payload
+    });
+    const saved = normalizeUiTabVisibility((res && res.uiTabVisibility) || payload);
+    setUiTabVisibility(saved);
+    return saved;
+  };
   const safeSetTab=useCallback((nextTab)=>{
     const t=String(nextTab||"").trim();
     if(!t) return setTab("home");
     if(t==="settings" && !isAdmin) return setTab("home");
+    if(t==="member" && !uiTabVisibility.member) return setTab("home");
+    if(t==="memo" && !uiTabVisibility.memo) return setTab("home");
     setTab(t);
-  },[isAdmin]);
+  },[isAdmin,uiTabVisibility?.member,uiTabVisibility?.memo]);
   useEffect(()=>{
     if(!user || !deepLink.scheduleId || schedules.length===0) return;
     const target = schedules.find(s => String(s.id || "").trim() === String(deepLink.scheduleId).trim());
@@ -8990,6 +9068,10 @@ function App() {
   useEffect(()=>{
     if(!isAdmin && tab==="settings") setTab("home");
   },[isAdmin,tab]);
+  useEffect(()=>{
+    if(tab==="member" && !uiTabVisibility.member) setTab("home");
+    if(tab==="memo" && !uiTabVisibility.memo) setTab("home");
+  },[tab,uiTabVisibility?.member,uiTabVisibility?.memo]);
 
   // ── ページルーティング ────────────────────────────────────────
   if(!user) return h(Login,{onLogin:saveUser});
@@ -9049,8 +9131,8 @@ function App() {
     {k:"cal",    i:"📅",l:"日程"},
     {k:"match",  i:"⚽",l:"試合"},
     {k:"dash",   i:"📊",l:"成績"},
-    {k:"member", i:"👥",l:"選手"},
-    {k:"memo",   i:"📝",l:"メモ"},
+    ...(uiTabVisibility.member ? [{k:"member", i:"👥",l:"選手"}] : []),
+    ...(uiTabVisibility.memo ? [{k:"memo",   i:"📝",l:"メモ"}] : []),
     {k:"docs",   i:"📚",l:"資料"},
     ...(isAdmin?[{k:"settings",i:"⚙️",l:"設定"}]:[]),
   ];
@@ -9063,7 +9145,7 @@ function App() {
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
     : tab==="settings" ? (isAdmin
-        ? h(SettingsTab,{user,users,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile})
+        ? h(SettingsTab,{user,users,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile,uiTabVisibility,onSaveUiTabVisibility:handleSaveUiTabVisibility})
         : null)
     : h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab});
 
