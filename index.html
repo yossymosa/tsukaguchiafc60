@@ -1562,6 +1562,20 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     if (direct) return direct;
     return membersSorted.find(m => getFormationMemberKey(m) === k) || null;
   };
+  const normalizeFormationSlotsKeys = slotsObj => {
+    const src = (slotsObj && typeof slotsObj === "object") ? slotsObj : {};
+    const next = {};
+    Object.keys(src).forEach(slotId => {
+      const raw = String(src[slotId] || "").trim();
+      if (!raw) {
+        next[slotId] = "";
+        return;
+      }
+      const found = findFormationMemberByKey(raw);
+      next[slotId] = found ? getFormationMemberKey(found) : raw;
+    });
+    return next;
+  };
   const formationSelectableMembers = useMemo(() => {
     if (!scheduleIdForAttend || attendMap === null) return membersSorted;
     const attending = membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
@@ -1800,6 +1814,14 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     if (!formation) return;
     setFormationSlots(prev => buildFormationSlots(formation, prev || {}));
   }, [formation, formationSelectableMembers.map(m => getFormationMemberKey(m)).join("|")]);
+  useEffect(() => {
+    if (!formation) return;
+    setFormationSlots(prev => {
+      const normalized = normalizeFormationSlotsKeys(prev || {});
+      const same = JSON.stringify(prev || {}) === JSON.stringify(normalized);
+      return same ? prev : buildFormationSlots(formation, normalized);
+    });
+  }, [formation, membersSorted.map(m => getFormationMemberKey(m)).join("|")]);
   const bumpMemberShot = (memberId, delta) => {
     if (!isAdmin) return;
     const id = String(memberId || "").trim();
@@ -1890,7 +1912,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const save=async()=>{
     setLoading(true);
     try{
-      writeLineupCache(match?.id, formation || "", formation ? formationSlots : {});
+      const normalizedSlots = normalizeFormationSlotsKeys(formation ? formationSlots : {});
+      writeLineupCache(match?.id, formation || "", normalizedSlots);
       await api("saveGoals",{
         resultId:match.id,goals,theirGoals:theirG,
         youtubeUrl:ytUrls.full,youtubeUrl1st:ytUrls.first,youtubeUrl2nd:ytUrls.second,
@@ -1905,7 +1928,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         ourOffsides:getStatValue("ourOffsides"),
         theirOffsides:getStatValue("theirOffsides"),
         formation:formation || "",
-        formationSlots:formation ? formationSlots : {},
+        formationSlots:formation ? normalizedSlots : {},
         substitutions,
         memo:matchMemo,
         matchStatus:matchStatus,
@@ -1916,7 +1939,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         pkOur:hasPk?pkOurScore:null,
         pkTheir:hasPk?pkTheirScore:null,
       });
-      writeLineupCache(match?.id, formation || "", formation ? formationSlots : {});
+      writeLineupCache(match?.id, formation || "", formation ? normalizedSlots : {});
       onSaved();
     }catch(e){alert("保存エラー: "+e.message);}
     setLoading(false);
@@ -2241,8 +2264,17 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         h("div",{style:{position:"absolute",left:"50%",bottom:0,width:70,height:26,transform:"translateX(-50%)",border:"2px solid rgba(255,255,255,0.95)",borderBottom:"none"}}),
         formationNodes.map(node=>{
           const slot = node.slot;
-          const currentId = String(formationSlots[slot.id] || "");
-          const usedByOthers = new Set(Object.entries(formationSlots).filter(([k,v]) => k !== slot.id && v).map(([,v]) => String(v)));
+          const rawCurrentId = String(formationSlots[slot.id] || "");
+          const currentMemberResolved = findFormationMemberByKey(rawCurrentId);
+          const currentId = currentMemberResolved ? getFormationMemberKey(currentMemberResolved) : rawCurrentId;
+          const usedByOthers = new Set(
+            Object.entries(formationSlots)
+              .filter(([k,v]) => k !== slot.id && v)
+              .map(([,v]) => {
+                const found = findFormationMemberByKey(String(v || "").trim());
+                return found ? getFormationMemberKey(found) : String(v || "").trim();
+              })
+          );
           const slotPool = [...formationSelectableMembers];
           if (currentId && !slotPool.some(m => getFormationMemberKey(m) === currentId)) {
             const fallbackMember = findFormationMemberByKey(currentId);
