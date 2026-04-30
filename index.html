@@ -1344,8 +1344,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const [theirG,setTheirG]=useState((match.theirGoals||[]).map(normalizeGoalItem));
   const [modal,setModal]=useState(null);
   const [loading,setLoading]=useState(false);
-  const [formationSaving,setFormationSaving]=useState(false);
-  const [formationSavedTick,setFormationSavedTick]=useState(0);
   const [favoriteSaving,setFavoriteSaving]=useState(false);
   const [isFavorite,setIsFavorite]=useState(()=>{
     const id = String(match?.id || "").trim();
@@ -1491,7 +1489,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     const key = String(nextFormation || "");
     setFormation(key);
     setFormationSlots(prev=>key ? buildFormationSlots(key, prev) : {});
-    if (formationSavedTick) setFormationSavedTick(0);
   };
   const won=ourT>thT,draw=ourT===thT,rc=won?"#4CAF50":draw?"#FFC107":"#F44336";
   // PK集計
@@ -1720,7 +1717,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setMatchClockSec(0);
     clockBaseSecRef.current = 0;
     clockStartMsRef.current = 0;
-    setFormationSavedTick(0);
   }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.formation, match?.formationSlots, match?.substitutions]);
   useEffect(() => {
     let active = true;
@@ -1774,21 +1770,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       base[safeActiveShotHalf] = Math.max(0, cur + Number(delta || 0));
       return base;
     });
-  };
-  const saveFormationOnly = async() => {
-    if (!isAdmin) return;
-    setFormationSaving(true);
-    try {
-      await api("saveFormation",{
-        resultId: match.id,
-        formation: formation || "",
-        formationSlots: formation ? formationSlots : {}
-      });
-      setFormationSavedTick(Date.now());
-    } catch(e) {
-      alert("スタメン保存エラー: " + e.message);
-    }
-    setFormationSaving(false);
   };
   const openAddOurGoal = () => {
     applyClockToGoalDraft("our", -20);
@@ -2213,7 +2194,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           const currentMember = membersSorted.find(m => String(m.id) === currentId);
           return h("div",{key:slot.id,style:{position:"absolute",left:node.x+"%",top:node.y+"%",transform:"translate(-50%,-50%)",display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:72}},
             isAdmin
-              ? h("select",{value:currentId,onChange:e=>{setFormationSlots(prev=>({...prev,[slot.id]:e.target.value})); if (formationSavedTick) setFormationSavedTick(0);},style:{...css.inp,padding:"4px 6px",fontSize:11,minWidth:74,maxWidth:74,width:74,background:"rgba(255,255,255,0.96)",fontWeight:800,textAlign:"center",margin:0}},
+              ? h("select",{value:currentId,onChange:e=>{setFormationSlots(prev=>({...prev,[slot.id]:e.target.value}));},style:{...css.inp,padding:"4px 6px",fontSize:11,minWidth:74,maxWidth:74,width:74,background:"rgba(255,255,255,0.96)",fontWeight:800,textAlign:"center",margin:0}},
                   h("option",{value:""},"選手を選択"),
                   slotOptions.map(m=>h("option",{key:m.id,value:m.id},m.name))
                 )
@@ -2221,11 +2202,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
                   currentMember ? currentMember.name : "—")
           );
         })
-      ),
-      isAdmin&&h("div",{style:{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}},
-        formationSavedTick ? h("span",{style:{fontSize:11,color:"#16A34A",fontWeight:800}},"スタメン保存済み") : h("span",{style:{fontSize:11,color:"#94A3B8"}},"スタメン未保存"),
-        h("button",{onClick:saveFormationOnly,disabled:formationSaving,style:{...css.bS,padding:"8px 14px",fontSize:12,minWidth:120,opacity:formationSaving?0.7:1,cursor:formationSaving?"default":"pointer"}},
-          formationSaving?"保存中...":"スタメン保存")
       )
     )
   );
