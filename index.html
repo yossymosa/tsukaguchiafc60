@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyGIXCSMdWBs7buXJZbTCEThIm2EMczhIjUO9dKnrZg8sWzyHAcXu6SPIFRVUp5-Yh-/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwXUaZsr2MpCNpyQUhSPH9col6rSmAfwoopl1H0Qchz1oC-_NGSjxJyLw2VZIq-s11X/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -137,6 +137,17 @@ function getHalfOptionsByFormatLabel(formatLabel, goals = [], theirGoals = []) {
       .some(g => normalizeHalfLabel(g && g.half) === "3rd");
   if (has3rdGoal && !fromLabel.includes("3rd")) return ["1st","2nd","3rd"];
   return fromLabel;
+}
+function normalizeFormationLabel(value){
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (MATCH_FORMATION_PRESETS[raw]) return raw;
+  const m = raw.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+  if (m && Number(m[1]) === 2003) {
+    const candidate = `3-${Number(m[2])}-${Number(m[3])}`;
+    if (MATCH_FORMATION_PRESETS[candidate]) return candidate;
+  }
+  return raw;
 }
 // スプシ「種類」列は英語・日本語どちらでも対応
 // スプシ「種類」列は英語・日本語どちらでも対応
@@ -1504,9 +1515,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     return next;
   };
   const cachedLineupInit = readLineupCache(match?.id);
-  const [formation,setFormation]=useState(()=>String(match.formation || (cachedLineupInit && cachedLineupInit.formation) || ""));
+  const [formation,setFormation]=useState(()=>normalizeFormationLabel(match.formation || (cachedLineupInit && cachedLineupInit.formation) || ""));
   const [formationSlots,setFormationSlots]=useState(()=>{
-    const key = String(match.formation || (cachedLineupInit && cachedLineupInit.formation) || "");
+    const key = normalizeFormationLabel(match.formation || (cachedLineupInit && cachedLineupInit.formation) || "");
     const saved = parseFormationSlots(match.formationSlots);
     const cachedSlots = parseFormationSlots(cachedLineupInit && cachedLineupInit.formationSlots);
     const seed = hasAnyFormationSelection(saved) ? saved : cachedSlots;
@@ -1772,7 +1783,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       theirOffsides:Math.max(0, Number(match.theirOffsides||0)||0),
     });
     const cachedLineup = readLineupCache(match?.id);
-    const key = String(match.formation || (cachedLineup && cachedLineup.formation) || "");
+    const key = normalizeFormationLabel(match.formation || (cachedLineup && cachedLineup.formation) || "");
     const saved = parseFormationSlots(match.formationSlots);
     const cachedSlots = parseFormationSlots(cachedLineup && cachedLineup.formationSlots);
     const seed = hasAnyFormationSelection(saved) ? saved : cachedSlots;
@@ -1912,8 +1923,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const save=async()=>{
     setLoading(true);
     try{
-      const normalizedSlots = normalizeFormationSlotsKeys(formation ? formationSlots : {});
-      writeLineupCache(match?.id, formation || "", normalizedSlots);
+      const safeFormation = normalizeFormationLabel(formation || "");
+      const normalizedSlots = normalizeFormationSlotsKeys(safeFormation ? formationSlots : {});
+      writeLineupCache(match?.id, safeFormation || "", normalizedSlots);
       await api("saveGoals",{
         resultId:match.id,goals,theirGoals:theirG,
         youtubeUrl:ytUrls.full,youtubeUrl1st:ytUrls.first,youtubeUrl2nd:ytUrls.second,
@@ -1927,8 +1939,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         theirPkCount:getStatValue("theirPkCount"),
         ourOffsides:getStatValue("ourOffsides"),
         theirOffsides:getStatValue("theirOffsides"),
-        formation:formation || "",
-        formationSlots:formation ? normalizedSlots : {},
+        formation:safeFormation || "",
+        formationSlots:safeFormation ? normalizedSlots : {},
         substitutions,
         memo:matchMemo,
         matchStatus:matchStatus,
@@ -1939,8 +1951,19 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         pkOur:hasPk?pkOurScore:null,
         pkTheir:hasPk?pkTheirScore:null,
       });
-      writeLineupCache(match?.id, formation || "", formation ? normalizedSlots : {});
-      onSaved();
+      writeLineupCache(match?.id, safeFormation || "", safeFormation ? normalizedSlots : {});
+      if (typeof onShotSaved === "function") {
+        await onShotSaved({
+          id: String(match?.id || ""),
+          formation: safeFormation || "",
+          formationSlots: safeFormation ? normalizedSlots : {},
+          substitutions,
+          memo: matchMemo,
+          matchStatus
+        });
+      } else if (typeof onSaved === "function") {
+        await onSaved();
+      }
     }catch(e){alert("保存エラー: "+e.message);}
     setLoading(false);
   };
@@ -2601,7 +2624,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
             pkWin&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#4CAF50"}},"🎉 PK勝ち！"),
             pkLose&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#F44336"}},"😔 PK負け")))),
 
-      isAdmin&&h("button",{onClick:save,style:{...css.bS,width:"100%",padding:16,fontSize:15,marginBottom:16}},"💾 試合全体を保存"),
+      isAdmin&&h("button",{
+        onClick:save,
+        disabled:loading,
+        style:{...css.bS,width:"100%",padding:16,fontSize:15,marginBottom:16,opacity:loading?0.7:1,cursor:loading?"wait":"pointer"}
+      },loading?"保存中...":"💾 試合全体を保存"),
       h("div",{style:{background:"#fff",borderRadius:14,padding:14,fontSize:13,marginBottom:12}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"📝 試合メモ"),
         isAdmin
@@ -6461,7 +6488,7 @@ function EditResultModal({result, members, onSave, onClose}) {
     date:        result.date||"",
     type:        result.type||"",
     memo:        result.memo||"",
-    formation:   result.formation||"",
+    formation:   normalizeFormationLabel(result.formation)||"",
   });
   const save = () => {
     if (!fr.opponent) return alert("対戦相手を入力してください");
@@ -6775,7 +6802,7 @@ function AddMatchModal({schedule,results,onSave,onClose}) {
     formatMode:latestParsedFormat.mode||DEFAULT_FORMAT_MODE,
     memo:"",
     matchStatus:"pre",
-    formation:latestResult?.formation||"3-2-2",
+    formation:normalizeFormationLabel(latestResult?.formation)||"3-2-2",
     ourShots:Math.max(0, Number(latestResult?.ourShots||0)||0),
     theirShots:Math.max(0, Number(latestResult?.theirShots||0)||0),
     ourCorners:Math.max(0, Number(latestResult?.ourCorners||0)||0),
@@ -8924,7 +8951,11 @@ function App() {
       if(shouldCountAccess) sessionStorage.setItem(accessKey,"1");
       setMembers((d.members||[]).map(normalizeMember));
       setSchedules(d.schedules||[]);
-      setResults(d.results||[]);
+      setResults(
+        (d.results||[])
+          .filter(r => String((r && r.id) || "").trim())
+          .map(r => ({...r, formation: normalizeFormationLabel(r.formation || "")}))
+      );
       setNews(d.news||[]); setLiftings(d.liftings||[]);
       setPendingNotices(d.myPendingNotices||[]);
       setUsers(d.users||[]);
@@ -9187,7 +9218,18 @@ function App() {
         const backSchedule = findLinkedScheduleForResult(page.match, schedules) || page.schedule;
         goToDay(backSchedule);
       },
-      onShotSaved:async()=>{
+      onShotSaved:async(savedPatch)=>{
+        const patch = savedPatch && typeof savedPatch === "object" ? savedPatch : null;
+        const patchId = String((patch && patch.id) || "").trim();
+        if (patch && patchId) {
+          setResults(prev => (prev || []).map(r =>
+            String(r.id || "").trim() === patchId ? ({...r, ...patch}) : r
+          ));
+          setPage(prev => {
+            if (!prev || prev.type !== "matchDetail" || String(prev?.match?.id || "").trim() !== patchId) return prev;
+            return {...prev, match:{...prev.match, ...patch}};
+          });
+        }
         await load("更新中...");
       },
     }));
