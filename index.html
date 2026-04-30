@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwUmPXbAXF9DFuKd1oRZdEILQGxJG25y7Y5_P16D-IRmfKOTXUl_OjFvMEmMNN-ktQg/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw8SuzlvpR57igMoqCqroPoKp4kd9LMSzZ4Nc17VR9i307G_cd-q2vgZGZAnPF5PHGm/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -203,7 +203,7 @@ const REFLECT_MORE_OPTIONS = [
 // ── API ──────────────────────────────────────────────────────────
 async function api(action,body={}) {
   const shortActions = new Set([
-    "saveReflection","getReflection","saveGoals","saveShotStats","saveAttend","saveEventAttend","saveCarpool","saveCarpoolPlan"
+    "saveReflection","getReflection","saveGoals","saveFormation","saveShotStats","saveAttend","saveEventAttend","saveCarpool","saveCarpoolPlan"
   ]);
   const longActions = new Set([
     "syncFc2PracticeSchedules","syncOfficialHpMatchImport","syncYoutubeLinksToResults","syncYoutubePlaylist"
@@ -651,18 +651,20 @@ function isMatchFinished(r){
   if(status==="pre") return hasMatchResultEvidence(r);
   // 旧データ互換: 明示ステータスがなくても結果データがあるものは実施済み扱い
   if(hasMatchResultEvidence(r)) return true;
+  // 旧データ互換: ステータス空欄でも過去日付は試合終了扱い
+  const d = nd(r?.date);
+  if(d && d < todayLocal()) return true;
   return false;
 }
 function shouldCountMatchForStats(r){
   if(!isMatchFinished(r)) return false;
-  if(hasMatchResultEvidence(r)) return true;
-  // スコア証跡（得点/失点/PK）がない行は基本集計しない
-  // 例外: メモで 0-0 引き分けを明示した場合のみ集計対象にする
   const status = normalizeMatchStatus(r?.matchStatus);
-  if(status!=="finished") return false;
-  const memo = String(r?.memo||"").trim();
-  if(!memo) return false;
-  return /(?:0\s*[-－ー–―]\s*0|スコアレス|引き分け|ドロー)/i.test(memo);
+  if(status==="finished") return true;
+  if(hasMatchResultEvidence(r)) return true;
+  // 旧データ互換: ステータス空欄でも過去日付なら 0-0 含め集計対象
+  const d = nd(r?.date);
+  if(d && d < todayLocal()) return true;
+  return false;
 }
 function calcStats(rs) {
   const finished = (rs||[]).filter(shouldCountMatchForStats);
@@ -1777,7 +1779,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     if (!isAdmin) return;
     setFormationSaving(true);
     try {
-      await api("saveGoals",{
+      await api("saveFormation",{
         resultId: match.id,
         formation: formation || "",
         formationSlots: formation ? formationSlots : {}
