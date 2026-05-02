@@ -8117,14 +8117,11 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
   const isEventDay = normalizeType(schedule.type) === "event";
   const isPracticeDay = normalizeType(schedule.type) === "practice";
   const isSimpleDay = isEventDay || isPracticeDay;
-  const canUseReviewTab = !isSimpleDay && !!isAdmin;
   const resolveDayTab = raw => {
     const fallback = isSimpleDay ? "detail" : "matches";
     const v = String(raw || "").trim();
     if (isSimpleDay) return (v === "detail" || v === "attend") ? v : fallback;
-    const allowed = canUseReviewTab
-      ? ["matches","detail","attend","carpool","settlement","album","review"]
-      : ["matches","detail","attend","carpool","settlement","album"];
+    const allowed = ["matches","detail","attend","carpool","settlement","album"];
     return allowed.includes(v) ? v : fallback;
   };
   const [dayTab,setDayTab]=useState(()=>resolveDayTab(initialTab)); // "matches"|"detail"|"attend"|"carpool"|"settlement"|"album"
@@ -8234,7 +8231,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     .join("\n\n");
   useEffect(()=>{
     setDayTab(resolveDayTab(initialTab));
-  },[schedule.id,isSimpleDay,canUseReviewTab,initialTab]);
+  },[schedule.id,isSimpleDay,initialTab]);
   useEffect(()=>{
     setSchForm(buildEditScheduleForm(schedule));
   },[schedule.id]);
@@ -8502,7 +8499,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         h("div",{style:{display:"flex"}},
           (isSimpleDay
             ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"}]
-            : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"}, ...(canUseReviewTab ? [{k:"review",l:"🌱 ふりかえり"}] : [])]
+            : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"}]
           ).map(t=>
             h("button",{key:t.k,onClick:()=>setDayTab(t.k),
               style:{flex:1,padding:"10px 4px 8px",border:"none",
@@ -8605,9 +8602,6 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
 
       // 出欠タブ
       dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin,canWrite,users}),
-
-      // ふりかえりタブ
-      dayTab==="review"&&canUseReviewTab&&h(ReflectionSection,{schedule,user,members,isAdmin,canWrite}),
 
       // MVP入力欄（公式戦・カップ戦のみ・matchesタブ）
       dayTab==="matches"&&isTournamentTarget&&h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
