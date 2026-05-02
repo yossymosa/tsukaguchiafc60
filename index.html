@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwXUaZsr2MpCNpyQUhSPH9col6rSmAfwoopl1H0Qchz1oC-_NGSjxJyLw2VZIq-s11X/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyK7OuUi3rzR7ncIZ_o2xwUpmFvvddNaEWhIDfOgf0ENlcTNVqTL51ZygC7jGksVmdf/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -214,7 +214,7 @@ const REFLECT_MORE_OPTIONS = [
 // ── API ──────────────────────────────────────────────────────────
 async function api(action,body={}) {
   const shortActions = new Set([
-    "saveReflection","getReflection","saveGoals","saveFormation","saveShotStats","saveAttend","saveEventAttend","saveCarpool","saveCarpoolPlan"
+    "saveReflection","getReflection","saveGoals","saveFormation","saveShotStats","saveAttend","saveEventAttend","saveCarpool","saveCarpoolPlan","updateUserBySuperAdmin"
   ]);
   const longActions = new Set([
     "syncFc2PracticeSchedules","syncOfficialHpMatchImport","syncYoutubeLinksToResults","syncYoutubePlaylist"
@@ -6099,7 +6099,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
   const isEventSchedule = normalizeType(schedule.type) === "event";
   const [attend, setAttend] = useState({});   // {memberId: status}
   const [eventAttend, setEventAttend] = useState([]);
-  const [eventForm, setEventForm] = useState({adultMembers:[], childMembers:[], preschoolMembers:[]});
+  const [eventForm, setEventForm] = useState({selectedMembers:[]});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
   const [deadlineDraft, setDeadlineDraft] = useState(String(schedule.deadline || "").trim());
@@ -6119,40 +6119,26 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
   )];
   const sanitizeEventForm = formValue => {
     const allowedSet = new Set(eventFamilyCandidates.map(n => String(n || "").trim()).filter(Boolean));
-    const next = {
-      adultMembers: parseMemberList(formValue?.adultMembers || []).filter(n => allowedSet.has(String(n || "").trim())),
-      childMembers: parseMemberList(formValue?.childMembers || []).filter(n => allowedSet.has(String(n || "").trim())),
-      preschoolMembers: parseMemberList(formValue?.preschoolMembers || []).filter(n => allowedSet.has(String(n || "").trim())),
-    };
+    const src = parseMemberList(formValue?.selectedMembers || []);
     const seen = new Set();
-    ["adultMembers","childMembers","preschoolMembers"].forEach(k => {
-      next[k] = next[k].filter(name => {
+    return {
+      selectedMembers: src.filter(name => {
         const key = String(name || "").trim();
-        if (!key || seen.has(key)) return false;
+        if (!key || !allowedSet.has(key) || seen.has(key)) return false;
         seen.add(key);
         return true;
-      });
-    });
-    return next;
+      }),
+    };
   };
-  const toggleEventMember = (categoryKey, name) => {
+  const toggleEventMember = (name) => {
     const targetName = String(name || "").trim();
     if (!targetName) return;
     setEventForm(prev => {
-      const keys = ["adultMembers", "childMembers", "preschoolMembers"];
-      const base = {
-        adultMembers: parseMemberList(prev.adultMembers),
-        childMembers: parseMemberList(prev.childMembers),
-        preschoolMembers: parseMemberList(prev.preschoolMembers),
-      };
-      keys.forEach(k => {
-        if (k !== categoryKey) base[k] = base[k].filter(n => n !== targetName);
-      });
-      const cur = base[categoryKey];
-      base[categoryKey] = cur.includes(targetName)
+      const cur = parseMemberList(prev.selectedMembers || []);
+      const next = cur.includes(targetName)
         ? cur.filter(n => n !== targetName)
         : [...cur, targetName];
-      return base;
+      return { selectedMembers: next };
     });
   };
   useEffect(() => {
@@ -6174,12 +6160,14 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
         const mine = rows.find(a => String(a.userId) === String(user.id));
         if (mine) {
           setEventForm(sanitizeEventForm({
-            adultMembers: parseMemberList(mine.adultMembers || []),
-            childMembers: parseMemberList(mine.childMembers || []),
-            preschoolMembers: parseMemberList(mine.preschoolMembers || []),
+            selectedMembers: [
+              ...parseMemberList(mine.adultMembers || []),
+              ...parseMemberList(mine.childMembers || []),
+              ...parseMemberList(mine.preschoolMembers || []),
+            ],
           }));
         } else {
-          setEventForm(sanitizeEventForm({ adultMembers: [], childMembers: [], preschoolMembers: [] }));
+          setEventForm(sanitizeEventForm({ selectedMembers: [] }));
         }
       } else {
         const map = {};
@@ -6204,19 +6192,17 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
     if (!canWrite) return;
     setSaving("event");
     const sanitized = sanitizeEventForm(eventForm);
-    const adultMembers = parseMemberList(sanitized.adultMembers || []);
-    const childMembers = parseMemberList(sanitized.childMembers || []);
-    const preschoolMembers = parseMemberList(sanitized.preschoolMembers || []);
+    const selectedMembers = parseMemberList(sanitized.selectedMembers || []);
     const payload = {
       scheduleId: schedule.id,
       userId: user.id,
       userName: user.name,
-      adultMembers,
-      childMembers,
-      preschoolMembers,
-      adultCount: adultMembers.length,
-      childCount: childMembers.length,
-      preschoolCount: preschoolMembers.length,
+      adultMembers: [],
+      childMembers: selectedMembers,
+      preschoolMembers: [],
+      adultCount: 0,
+      childCount: selectedMembers.length,
+      preschoolCount: 0,
     };
     try {
       await api("saveEventAttend", payload);
@@ -6298,10 +6284,8 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
   );
   if (isEventSchedule) {
     const totals = eventAttend.reduce((acc, row) => ({
-      adult: acc.adult + Number(row.adultCount || 0),
-      child: acc.child + Number(row.childCount || 0),
-      preschool: acc.preschool + Number(row.preschoolCount || 0),
-    }), {adult:0, child:0, preschool:0});
+      total: acc.total + Number(row.adultCount || 0) + Number(row.childCount || 0) + Number(row.preschoolCount || 0),
+    }), {total:0});
 
     return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}} ,
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}},
@@ -6309,39 +6293,30 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
         deadline&&h("div",{style:{fontSize:11,fontWeight:700,color:isPast?"#F44336":"#FF9800",background:isPast?"#FFEBEE":"#DBEAFE",borderRadius:8,padding:"3px 8px"}},
           isPast?"⚠ 締め切り済":"⏰ 締切 "+fmt(deadline).short)),
       deadlineEditor,
-      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}},
-        [
-          {label:"大人", value:totals.adult, color:"#1D4ED8", bg:"#DBEAFE"},
-          {label:"小学生", value:totals.child, color:"#4CAF50", bg:"#E8F5E9"},
-          {label:"幼児", value:totals.preschool, color:"#2196F3", bg:"#E3F2FD"},
-        ].map(item=>
-          h("div",{key:item.label,style:{textAlign:"center",padding:"12px 8px",borderRadius:12,background:item.bg}},
-            h("div",{style:{fontSize:22,fontWeight:900,color:item.color}},item.value),
-            h("div",{style:{fontSize:11,color:item.color,fontWeight:700,marginTop:4}},item.label)))),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(1,1fr)",gap:8,marginBottom:14}},
+        h("div",{style:{textAlign:"center",padding:"12px 8px",borderRadius:12,background:"#E8F5E9"}},
+          h("div",{style:{fontSize:22,fontWeight:900,color:"#2E7D32"}},totals.total),
+          h("div",{style:{fontSize:11,color:"#2E7D32",fontWeight:700,marginTop:4}},"参加人数"))),
       h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:12,marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:700,color:"#666",marginBottom:10}},"登録している家族から選択"),
         eventFamilyCandidates.length===0
           ? h("div",{style:{fontSize:12,color:"#64748B",marginBottom:10,lineHeight:1.6}},"設定タブで家族構成を登録し、子どもを紐づけるとここで選択できます")
-          : [
-              {key:"adultMembers",label:"大人",color:"#1D4ED8",bg:"#DBEAFE"},
-              {key:"childMembers",label:"小学生",color:"#4CAF50",bg:"#E8F5E9"},
-              {key:"preschoolMembers",label:"幼児",color:"#2563EB",bg:"#EFF6FF"},
-            ].map(cat => {
-              const selected = parseMemberList(eventForm[cat.key]);
-              return h("div",{key:cat.key,style:{marginBottom:10,padding:"10px",borderRadius:10,background:"#fff",border:`1px solid ${cat.bg}`}},
-                h("div",{style:{fontSize:11,fontWeight:700,color:cat.color,marginBottom:8}},`${cat.label} (${selected.length}人)`),
+          : (() => {
+              const selected = parseMemberList(eventForm.selectedMembers || []);
+              return h("div",{style:{marginBottom:10,padding:"10px",borderRadius:10,background:"#fff",border:"1px solid #DBEAFE"}},
+                h("div",{style:{fontSize:11,fontWeight:700,color:"#1D4ED8",marginBottom:8}},`選択中 (${selected.length}人)`),
                 h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6}},
                   eventFamilyCandidates.map(name => {
                     const active = selected.includes(name);
                     return h("button",{
-                      key:cat.key+"-"+name,
+                      key:"event-family-"+name,
                       type:"button",
-                      onClick:()=>toggleEventMember(cat.key, name),
+                      onClick:()=>toggleEventMember(name),
                       disabled:isPast||!canWrite,
                       style:{
-                        border:`1px solid ${active ? cat.color : "#E2E8F0"}`,
-                        background:active ? cat.bg : "#fff",
-                        color:active ? cat.color : "#334155",
+                        border:`1px solid ${active ? "#1D4ED8" : "#E2E8F0"}`,
+                        background:active ? "#DBEAFE" : "#fff",
+                        color:active ? "#1D4ED8" : "#334155",
                         borderRadius:999,
                         padding:"4px 10px",
                         fontSize:12,
@@ -6357,7 +6332,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
                   })
                 )
               );
-            }),
+            })(),
         h("button",{onClick:saveEventAttend,disabled:saving==="event"||isPast||!canWrite,style:{...css.bS,width:"100%",marginTop:12,opacity:(saving==="event"||isPast||!canWrite)?0.6:1,cursor:(isPast||!canWrite)?"not-allowed":"pointer"}},!canWrite?"閲覧専用":(saving==="event"?"保存中...":"💾 イベント出欠を保存"))),
       isAdmin&&h("div",{style:{padding:"12px 14px",background:"#F8F9FA",borderRadius:12}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"回答一覧"),
@@ -6367,17 +6342,14 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
               h("div",{key:row.userId,style:{padding:"10px 0",borderTop:"1px solid #eee"}},
                 h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}},
                   h("div",{style:{fontSize:13,fontWeight:700,color:"#333"}},row.userName||"名前未設定"),
-                  h("div",{style:{fontSize:12,color:"#666",textAlign:"right"}},`大人 ${Number(row.adultCount||0)} / 小学生 ${Number(row.childCount||0)} / 幼児 ${Number(row.preschoolCount||0)}`)),
+                  h("div",{style:{fontSize:12,color:"#666",textAlign:"right"}},`参加 ${Number(row.adultCount||0) + Number(row.childCount||0) + Number(row.preschoolCount||0)}人`)),
                 h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6}},
                   (() => {
                     const adults = parseMemberList(row.adultMembers || []);
                     const childs = parseMemberList(row.childMembers || []);
                     const pres = parseMemberList(row.preschoolMembers || []);
-                    const parts = [];
-                    if (adults.length) parts.push(`大人: ${adults.join("、")}`);
-                    if (childs.length) parts.push(`小学生: ${childs.join("、")}`);
-                    if (pres.length) parts.push(`幼児: ${pres.join("、")}`);
-                    return parts.length ? parts.join(" / ") : "カテゴリ別の名前未設定";
+                    const all = [...adults, ...childs, ...pres];
+                    return all.length ? all.join("、") : "未選択";
                   })()
                 ))))
     );
@@ -8736,7 +8708,7 @@ function MemberTab({members,liftings=[]}) {
     ));
 }
 
-function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile,uiTabVisibility,onSaveUiTabVisibility}) {
+function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile,onAdminUpdateUser,uiTabVisibility,onSaveUiTabVisibility}) {
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
   const child = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
   const familyListView = parseFamilyMembers(currentUserProfile.familyMembers || []);
@@ -8751,6 +8723,15 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
   const [saving,setSaving] = useState(false);
   const [tabVisibility,setTabVisibility] = useState(()=>normalizeUiTabVisibility(uiTabVisibility));
   const [tabVisibilitySaving,setTabVisibilitySaving] = useState(false);
+  const [userDrafts,setUserDrafts] = useState({});
+  const [userSavingId,setUserSavingId] = useState("");
+  const roleLabel = role => {
+    const r = String(role || "").trim();
+    if (r === "super_admin") return "super_admin";
+    if (r === "admin") return "admin";
+    if (r === "viewer") return "viewer";
+    return "member";
+  };
 
   useEffect(()=>{
     const latest = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
@@ -8761,6 +8742,20 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
   useEffect(()=>{
     setTabVisibility(normalizeUiTabVisibility(uiTabVisibility));
   },[uiTabVisibility?.member, uiTabVisibility?.memo]);
+  useEffect(()=>{
+    const next = {};
+    (users || []).forEach(u => {
+      const id = String(u.id || "").trim();
+      if (!id) return;
+      next[id] = {
+        name: String(u.name || "").trim(),
+        memberId: String(u.memberId || "").trim(),
+        familyText: parseFamilyMembers(u.familyMembers || u.familyComposition || []).join("\n"),
+        role: roleLabel(u.role),
+      };
+    });
+    setUserDrafts(next);
+  },[JSON.stringify((users||[]).map(u=>[u.id,u.name,u.memberId,u.role,parseFamilyMembers(u.familyMembers||u.familyComposition||[]).join(",")]))]);
 
   const generations = [...new Set(members.map(m=>String(m.generation||"").trim()).filter(Boolean))].sort((a,b)=>Number(b)-Number(a));
   const memberOptions = generations.flatMap(gen => {
@@ -8785,7 +8780,7 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
     setSaving(false);
   };
   const saveTabVisibility = async() => {
-    if (String(user?.role || "") !== "admin") return;
+    if (!["admin","super_admin"].includes(String(user?.role || "").trim())) return;
     if (typeof onSaveUiTabVisibility !== "function") return;
     setTabVisibilitySaving(true);
     try{
@@ -8796,6 +8791,41 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
       alert("タブ表示設定エラー: " + e.message);
     }
     setTabVisibilitySaving(false);
+  };
+  const updateUserDraftField = (targetUserId, field, value) => {
+    const uid = String(targetUserId || "").trim();
+    if (!uid) return;
+    setUserDrafts(prev => ({
+      ...prev,
+      [uid]: {
+        ...(prev[uid] || {}),
+        [field]: value,
+      }
+    }));
+  };
+  const saveManagedUser = async(targetUser) => {
+    if (!isSuperAdmin || typeof onAdminUpdateUser !== "function") return;
+    const uid = String(targetUser?.id || "").trim();
+    if (!uid) return;
+    const isSelf = uid === String(user?.id || "").trim();
+    const canSelfPromote = isSelf && String(user?.role || "").trim() === "admin";
+    if (isSelf && !canSelfPromote) return;
+    const draft = userDrafts[uid] || {};
+    const nextRole = canSelfPromote ? "super_admin" : String(draft.role || "member").trim();
+    setUserSavingId(uid);
+    try{
+      await onAdminUpdateUser({
+        targetUserId: uid,
+        name: String(draft.name || "").trim(),
+        memberId: String(draft.memberId || "").trim(),
+        familyMembers: parseFamilyMembers(draft.familyText || ""),
+        role: nextRole
+      });
+      alert("ユーザー設定を保存しました");
+    }catch(e){
+      alert("ユーザー設定保存エラー: " + (e?.message || e));
+    }
+    setUserSavingId("");
   };
 
   return h(Fragment,{},
@@ -8825,7 +8855,7 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
         h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e",marginBottom:12,whiteSpace:"pre-wrap"}},
           familyListView.length ? familyListView.join("、") : "未登録"),
         h("div",{style:{fontSize:12,color:"#888",marginBottom:8}},"権限"),
-        h("div",{style:{fontSize:15,fontWeight:700,color:"#1a1a2e",marginBottom:12}},user.role==="admin"?"admin":"member"),
+        h("div",{style:{fontSize:15,fontWeight:700,color:"#1a1a2e",marginBottom:12}},roleLabel(user.role)),
         h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
           h("div",{style:{background:"#F8FAFC",borderRadius:10,padding:"10px 12px"}},
             h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:2}},"アクセス回数"),
@@ -8849,7 +8879,7 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
         h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:"12px 14px"}},
           h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:4}},"背番号"),
           h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.number||"-")))),
-    String(user?.role||"")==="admin" && h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+    ["admin","super_admin"].includes(String(user?.role||"").trim()) && h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:10}},"🧩 タブ表示設定"),
       h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12}},"管理者で「選手」「メモ」タブの表示を切り替えできます（全員共通）"),
       h("div",{style:{display:"grid",gap:10,marginBottom:12}},
@@ -8878,6 +8908,52 @@ function SettingsTab({user,users=[],members,notificationEnabled,notificationBusy
       ),
       h("button",{onClick:saveTabVisibility,disabled:tabVisibilitySaving,style:{...css.bS,width:"100%",opacity:tabVisibilitySaving?0.75:1}},
         tabVisibilitySaving ? "保存中..." : "表示設定を保存")
+    ),
+    isSuperAdmin && h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:6}},"🛡️ 権限管理（super admin）"),
+      h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},"登録ユーザーの権限・紐づけ選手・家族構成をここで更新できます"),
+      h("div",{style:{display:"grid",gap:10}},
+        (users || []).slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"ja")).map(u=>{
+          const uid = String(u.id || "").trim();
+          const isMe = uid === String(user?.id || "").trim();
+          const canSelfPromote = isMe && String(user?.role || "").trim() === "admin";
+          const draft = userDrafts[uid] || {
+            name: String(u.name || "").trim(),
+            memberId: String(u.memberId || "").trim(),
+            familyText: parseFamilyMembers(u.familyMembers || u.familyComposition || []).join("\n"),
+            role: roleLabel(u.role),
+          };
+          const roleOptions = canSelfPromote ? ["super_admin"] : ["super_admin","admin","member","viewer"];
+          return h("div",{key:"manage-user-"+uid,style:{border:"1px solid #E2E8F0",borderRadius:12,padding:"10px 12px",background:"#F8FAFC"}},
+            h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:8}},
+              h("div",{style:{minWidth:0}},
+                h("div",{style:{fontSize:13,fontWeight:800,color:"#0F172A",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},u.name||"(名前未設定)"),
+                h("div",{style:{fontSize:11,color:"#64748B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},u.email||"-")),
+              h("div",{style:{fontSize:11,fontWeight:700,color:isMe?"#F97316":"#334155",background:isMe?"#FFF7ED":"#E2E8F0",padding:"3px 8px",borderRadius:999}},
+                isMe?(canSelfPromote?"自分(昇格可)":"自分"):"対象")),
+            h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+              h("div",{},
+                h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"表示名"),
+                h("input",{value:draft.name,onChange:e=>updateUserDraftField(uid,"name",e.target.value),style:css.inp,disabled:isMe})),
+              h("div",{},
+                h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"権限"),
+                h("select",{value:(isMe&&canSelfPromote)?"super_admin":draft.role,onChange:e=>updateUserDraftField(uid,"role",e.target.value),style:css.inp,disabled:isMe&&!canSelfPromote},
+                  roleOptions.map(r=>h("option",{key:uid+"-"+r,value:r},r))))),
+            h("div",{style:{marginBottom:8}},
+              h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"紐づけ選手"),
+              h("select",{value:draft.memberId,onChange:e=>updateUserDraftField(uid,"memberId",e.target.value),style:css.inp,disabled:isMe},
+                h("option",{value:""},"選択なし"),
+                memberOptions)),
+            h("div",{style:{marginBottom:8}},
+              h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"家族構成（1行1名）"),
+              h("textarea",{value:draft.familyText,onChange:e=>updateUserDraftField(uid,"familyText",e.target.value),rows:3,style:{...css.inp,resize:"none"},disabled:isMe})),
+            h("button",{onClick:()=>saveManagedUser(u),disabled:(isMe&&!canSelfPromote)||userSavingId===uid,style:{...css.bS,width:"100%",opacity:((isMe&&!canSelfPromote)||userSavingId===uid)?0.6:1,cursor:((isMe&&!canSelfPromote)||userSavingId===uid)?"not-allowed":"pointer"}},
+              isMe
+                ? (canSelfPromote ? (userSavingId===uid ? "保存中..." : "super_adminに昇格") : "自分の権限変更は不可")
+                : (userSavingId===uid ? "保存中..." : "このユーザーを保存"))
+          );
+        })
+      )
     ),
     h("div",{style:{background:"#fff",borderRadius:16,padding:18,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🔔 通知設定"),
@@ -8926,7 +9002,7 @@ function App() {
   const [liftings,setLiftings]=useState([]);
   const [users,setUsers]=useState([]);
   const [myFavorites,setMyFavorites]=useState({});
-  const [uiTabVisibility,setUiTabVisibility]=useState({member:true,memo:true});
+  const [uiTabVisibility,setUiTabVisibility]=useState({member:false,memo:false});
   const [deepLink,setDeepLink]=useState(()=>{
     const params = new URLSearchParams(location.search);
     return {
@@ -8938,8 +9014,12 @@ function App() {
   const [notificationPermission,setNotificationPermission]=useState(()=>("Notification" in window ? Notification.permission : "unsupported"));
   const [notificationEnabled,setNotificationEnabled]=useState(false);
   const [notificationBusy,setNotificationBusy]=useState(false);
-  const isAdmin=user?.role==="admin";
-  const canWrite=user?.role!=="viewer";
+  const role = String(user?.role || "");
+  const hasSuperAdmin = (users || []).some(u => String(u?.role || "").trim() === "super_admin");
+  const isSuperAdmin = role==="super_admin";
+  const canManageUsers = isSuperAdmin || (role==="admin" && !hasSuperAdmin);
+  const isAdmin = role==="admin" || isSuperAdmin;
+  const canWrite = role!=="viewer";
 
   const load=useCallback(async(msg="読み込み中...")=>{
     setLoadMsg(msg);setLoading(true);
@@ -9152,6 +9232,21 @@ function App() {
     saveUser({...user,...r.user});
     await load("更新中...");
   };
+  const handleAdminUpdateUser=async({targetUserId,name,memberId,familyMembers=[],role})=>{
+    const r=await api("updateUserBySuperAdmin",{
+      userId:String(user?.id||"").trim(),
+      targetUserId:String(targetUserId||"").trim(),
+      name:String(name||"").trim(),
+      memberId:String(memberId||"").trim(),
+      familyMembers:parseFamilyMembers(familyMembers||[]),
+      role:String(role||"").trim()
+    });
+    if(String(targetUserId||"").trim()===String(user?.id||"").trim() && r?.user){
+      saveUser({...user,...r.user});
+    }
+    await load("更新中...");
+    return r;
+  };
   const handleToggleFavorite=async(resultId,nextOn)=>{
     const r = await api("saveMyFavorite",{
       userId:String(user?.id||"").trim(),
@@ -9282,7 +9377,7 @@ function App() {
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
     : tab==="settings" ? (isAdmin
-        ? h(SettingsTab,{user,users,members,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile,uiTabVisibility,onSaveUiTabVisibility:handleSaveUiTabVisibility})
+        ? h(SettingsTab,{user,users,members,isSuperAdmin:canManageUsers,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile,onAdminUpdateUser:handleAdminUpdateUser,uiTabVisibility,onSaveUiTabVisibility:handleSaveUiTabVisibility})
         : null)
     : h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab});
 
