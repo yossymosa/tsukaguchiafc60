@@ -1441,8 +1441,48 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   // editGoal: {type:"our"|"their", idx:number}
   const [editGoal,setEditGoal]=useState(null);
   const [editNg,setEditNg]=useState(null);
-  const [shotByHalf,setShotByHalf]=useState(() => parseShotStatsDetail(match?.shotStats || {}, 0).byHalf);
-  const [theirShotsByHalf,setTheirShotsByHalf]=useState(() => parseShotStatsDetail(match?.shotStats || {}, 0).theirByHalf);
+  const shotCacheKey = rid => "afc_shot_cache_" + String(rid || "").trim();
+  const calcShotStateTotal = state => {
+    if (!state || typeof state !== "object") return 0;
+    return ALL_HALF_OPTIONS.reduce((sum, hf) => sum + sumShotMemberMap((state[hf] || {})), 0);
+  };
+  const calcTheirShotStateTotal = state => {
+    if (!state || typeof state !== "object") return 0;
+    return ALL_HALF_OPTIONS.reduce((sum, hf) => sum + Math.max(0, Number(state[hf] || 0) || 0), 0);
+  };
+  const readShotCache = rid => {
+    const key = shotCacheKey(rid);
+    if (!key || key.endsWith("_")) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || typeof obj !== "object") return null;
+      const parsed = parseShotStatsDetail(obj, 0);
+      return { byHalf: parsed.byHalf, theirByHalf: parsed.theirByHalf };
+    } catch (e) {
+      return null;
+    }
+  };
+  const writeShotCache = (rid, byHalfValue, theirByHalfValue) => {
+    const key = shotCacheKey(rid);
+    if (!key || key.endsWith("_")) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(buildShotStatsPayload(byHalfValue, theirByHalfValue)));
+    } catch (e) {}
+  };
+  const pickInitialShotState = m => {
+    const parsed = parseShotStatsDetail(m?.shotStats || {}, m?.theirShots || 0);
+    const parsedHasData = calcShotStateTotal(parsed.byHalf) > 0 || calcTheirShotStateTotal(parsed.theirByHalf) > 0 || String(m?.shotStats || "").trim();
+    if (parsedHasData) return parsed;
+    const cached = readShotCache(m?.id);
+    if (!cached) return parsed;
+    const cachedHasData = calcShotStateTotal(cached.byHalf) > 0 || calcTheirShotStateTotal(cached.theirByHalf) > 0;
+    return cachedHasData ? cached : parsed;
+  };
+  const initialShotState = pickInitialShotState(match);
+  const [shotByHalf,setShotByHalf]=useState(() => initialShotState.byHalf);
+  const [theirShotsByHalf,setTheirShotsByHalf]=useState(() => initialShotState.theirByHalf);
   const [activeShotHalf,setActiveShotHalf]=useState("1st");
   const [attendMap,setAttendMap]=useState(null);
   const [attendLoading,setAttendLoading]=useState(false);
@@ -1756,9 +1796,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     return () => clearInterval(timer);
   }, [clockRunning]);
   useEffect(() => {
-    const parsedShot = parseShotStatsDetail(match?.shotStats || {}, 0);
-    setShotByHalf(parsedShot.byHalf);
-    setTheirShotsByHalf(parsedShot.theirByHalf);
+    const initialShot = pickInitialShotState(match);
+    setShotByHalf(initialShot.byHalf);
+    setTheirShotsByHalf(initialShot.theirByHalf);
     setShotCountMissing(isTrueFlag(match?.shotCountMissing));
     const favoriteId = String(match?.id || "").trim();
     const favoriteRow = favoriteId ? favoriteMap[favoriteId] : null;
@@ -1794,6 +1834,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     clockBaseSecRef.current = 0;
     clockStartMsRef.current = 0;
   }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.formation, match?.formationSlots, match?.substitutions]);
+  useEffect(() => {
+    writeShotCache(match?.id, shotByHalf, theirShotsByHalf);
+  }, [match?.id, JSON.stringify(shotByHalf), JSON.stringify(theirShotsByHalf)]);
   useEffect(() => {
     let active = true;
     if (!scheduleIdForAttend) {
@@ -1926,6 +1969,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       const safeFormation = normalizeFormationLabel(formation || "");
       const normalizedSlots = normalizeFormationSlotsKeys(safeFormation ? formationSlots : {});
       writeLineupCache(match?.id, safeFormation || "", normalizedSlots);
+      writeShotCache(match?.id, shotByHalf, theirShotsByHalfSafe);
       await api("saveGoals",{
         resultId:match.id,goals,theirGoals:theirG,
         youtubeUrl:ytUrls.full,youtubeUrl1st:ytUrls.first,youtubeUrl2nd:ytUrls.second,
@@ -1955,6 +1999,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       if (typeof onShotSaved === "function") {
         await onShotSaved({
           id: String(match?.id || ""),
+          shotStats: JSON.stringify(shotStatsPayload),
+          ourShots: ourShotsTotal,
+          theirShots: theirShotsTotal,
+          shotCountMissing: shotCountMissing ? "1" : "",
           formation: safeFormation || "",
           formationSlots: safeFormation ? normalizedSlots : {},
           substitutions,
@@ -2442,6 +2490,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           h("button",{onClick:applyClockToSubDraft,style:{border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#1D4ED8",borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},
             "🕒 現在時刻を反映")
         ),
+        h("div",{style:{fontSize:11,color:"#64748B",margin:"-4px 0 10px",textAlign:"right"}},"※ 反映後に分・秒は手入力で変更できます"),
         h("div",{style:{display:"flex",gap:10,marginBottom:12}},
           h("div",{style:{flex:1}},
             h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:6}},"分"),
@@ -2679,6 +2728,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         h("button",{onClick:()=>applyClockToGoalDraft("their",-20),style:{border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#1D4ED8",borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},
           "🕒 現在時刻-20秒を反映")
       ),
+      h("div",{style:{fontSize:11,color:"#64748B",margin:"-4px 0 10px",textAlign:"right"}},"※ 反映後に分・秒は手入力で変更できます"),
       h("div",{style:{display:"flex",gap:10,marginBottom:14}},
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),h("input",{value:ntg.minute,onChange:e=>setNtg(p=>({...p,minute:e.target.value})),type:"number",placeholder:"8",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒"),h("input",{value:ntg.second,onChange:e=>setNtg(p=>({...p,second:e.target.value})),onBlur:e=>setNtg(p=>({...p,second:(String(e.target.value||"").trim()===""?"00":String(Math.max(0,Math.min(59,Number(e.target.value)||0))).padStart(2,"0"))})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
