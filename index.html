@@ -1483,6 +1483,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const initialShotState = pickInitialShotState(match);
   const [shotByHalf,setShotByHalf]=useState(() => initialShotState.byHalf);
   const [theirShotsByHalf,setTheirShotsByHalf]=useState(() => initialShotState.theirByHalf);
+  const [shotDirty,setShotDirty]=useState(false);
   const [activeShotHalf,setActiveShotHalf]=useState("1st");
   const [attendMap,setAttendMap]=useState(null);
   const [attendLoading,setAttendLoading]=useState(false);
@@ -1687,8 +1688,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     return acc;
   }, {});
   const shotStatsPayload = buildShotStatsPayload(shotByHalf, theirShotsByHalfSafe);
-  const ourShotsTotal = visibleHalfOptions.reduce((sum, hf) => sum + Math.max(0, Number(ourShotsByHalf[hf] || 0) || 0), 0);
-  const theirShotsTotal = visibleHalfOptions.reduce((sum, hf) => sum + Math.max(0, Number(theirShotsByHalfSafe[hf] || 0) || 0), 0);
+  const ourShotsTotalRaw = visibleHalfOptions.reduce((sum, hf) => sum + Math.max(0, Number(ourShotsByHalf[hf] || 0) || 0), 0);
+  const theirShotsTotalRaw = visibleHalfOptions.reduce((sum, hf) => sum + Math.max(0, Number(theirShotsByHalfSafe[hf] || 0) || 0), 0);
+  const legacyShotTotal = Math.max(
+    Math.max(0, Number(match?.ourShots || 0) || 0),
+    Math.max(0, Number(match?.theirShots || 0) || 0)
+  );
+  const shouldKeepLegacyShotTotals = !shotDirty && ourShotsTotalRaw === 0 && theirShotsTotalRaw === 0 && legacyShotTotal > 0;
+  const ourShotsTotal = shouldKeepLegacyShotTotals ? Math.max(0, Number(match?.ourShots || 0) || 0) : ourShotsTotalRaw;
+  const theirShotsTotal = shouldKeepLegacyShotTotals ? Math.max(0, Number(match?.theirShots || 0) || 0) : theirShotsTotalRaw;
   const halfScoreMapOur = { "1st": our1, "2nd": our2, "3rd": our3 };
   const halfScoreMapTheir = { "1st": th1, "2nd": th2, "3rd": th3 };
   const scoreHeaders = [...visibleHalfOptions, "計"];
@@ -1799,6 +1807,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     const initialShot = pickInitialShotState(match);
     setShotByHalf(initialShot.byHalf);
     setTheirShotsByHalf(initialShot.theirByHalf);
+    setShotDirty(false);
     setShotCountMissing(isTrueFlag(match?.shotCountMissing));
     const favoriteId = String(match?.id || "").trim();
     const favoriteRow = favoriteId ? favoriteMap[favoriteId] : null;
@@ -1880,6 +1889,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     if (!isAdmin) return;
     const id = String(memberId || "").trim();
     if (!id) return;
+    setShotDirty(true);
     setShotByHalf(prev => {
       const base = {...createEmptyShotByHalf(), ...(prev || {})};
       const curHalfMap = {...(base[safeActiveShotHalf] || {})};
@@ -1891,6 +1901,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   };
   const bumpTheirShot = delta => {
     if (!isAdmin) return;
+    setShotDirty(true);
     setTheirShotsByHalf(prev => {
       const base = {...createEmptyTheirShotsByHalf(), ...(prev || {})};
       const cur = Math.max(0, Number(base[safeActiveShotHalf] || 0) || 0);
@@ -1970,7 +1981,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       const normalizedSlots = normalizeFormationSlotsKeys(safeFormation ? formationSlots : {});
       writeLineupCache(match?.id, safeFormation || "", normalizedSlots);
       writeShotCache(match?.id, shotByHalf, theirShotsByHalfSafe);
-      await api("saveGoals",{
+      const savePayload = {
         resultId:match.id,goals,theirGoals:theirG,
         youtubeUrl:ytUrls.full,youtubeUrl1st:ytUrls.first,youtubeUrl2nd:ytUrls.second,
         ourShots:ourShotsTotal,
@@ -1988,18 +1999,20 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         substitutions,
         memo:matchMemo,
         matchStatus:matchStatus,
-        shotStats:shotStatsPayload,
         shotCountMissing: shotCountMissing ? "1" : "",
         pkKickers:hasPk?pkKickers:null,
         pkTheirSeq:hasPk?pkTheirSeq:null,
         pkOur:hasPk?pkOurScore:null,
         pkTheir:hasPk?pkTheirScore:null,
-      });
+      };
+      if (!shouldKeepLegacyShotTotals) {
+        savePayload.shotStats = shotStatsPayload;
+      }
+      await api("saveGoals",savePayload);
       writeLineupCache(match?.id, safeFormation || "", safeFormation ? normalizedSlots : {});
       if (typeof onShotSaved === "function") {
-        await onShotSaved({
+        const patchForUi = {
           id: String(match?.id || ""),
-          shotStats: JSON.stringify(shotStatsPayload),
           ourShots: ourShotsTotal,
           theirShots: theirShotsTotal,
           shotCountMissing: shotCountMissing ? "1" : "",
@@ -2008,7 +2021,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           substitutions,
           memo: matchMemo,
           matchStatus
-        });
+        };
+        if (!shouldKeepLegacyShotTotals) {
+          patchForUi.shotStats = JSON.stringify(shotStatsPayload);
+        }
+        await onShotSaved(patchForUi);
       } else if (typeof onSaved === "function") {
         await onSaved();
       }
