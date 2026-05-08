@@ -3966,7 +3966,13 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
 function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=[]}) {
   const isReadOnly = !canWrite;
   const ROLE_COLORS = { child:"#1D4ED8", adult:"#16A34A", coach:"#7C3AED" };
+  const DEFAULT_CARPOOL_COACHES = ["丸尾コーチ", "健太郎コーチ", "博多コーチ"];
   const normalizeName = v => String(v||"").replace(/\s+/g," ").replace(/さん$/,"").trim();
+  const splitCoachNames = value => String(value || "")
+    .split(/[、,\n\/]/)
+    .map(v => String(v || "").trim())
+    .filter(Boolean);
+  const uniqCoachNames = list => [...new Set((list || []).map(v => String(v || "").trim()).filter(Boolean))];
   const dedupeCarpoolRows = rows => {
     const byUser = {};
     (rows || []).forEach(row => {
@@ -4022,6 +4028,9 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
   const luggageLabel = String(schedule.luggagePerson || "").trim();
   const luggageKey = normalizeName(luggageLabel);
   const luggageSurnameKey = getSurname(luggageLabel);
+  const scheduleCoachNames = uniqCoachNames(splitCoachNames(schedule.coach || ""));
+  const [dayCoachNames, setDayCoachNames] = useState(() => uniqCoachNames(scheduleCoachNames));
+  const [coachInputName, setCoachInputName] = useState("");
   const [carpoolDeadlineDraft, setCarpoolDeadlineDraft] = useState(String(schedule.carpoolDeadline || "").trim());
   const [carpoolDeadlineSaving, setCarpoolDeadlineSaving] = useState(false);
   const carpoolDeadline = String(carpoolDeadlineDraft || "").trim();
@@ -4053,7 +4062,9 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
   const [selectedFleetUserIds, setSelectedFleetUserIds] = useState([]);
   useEffect(() => {
     setCarpoolDeadlineDraft(String(schedule.carpoolDeadline || "").trim());
-  }, [schedule?.id, schedule?.carpoolDeadline]);
+    setDayCoachNames(uniqCoachNames(splitCoachNames(schedule.coach || "")));
+    setCoachInputName("");
+  }, [schedule?.id, schedule?.carpoolDeadline, schedule?.coach]);
   const saveCarpoolDeadline = async () => {
     if (!isAdmin) return;
     setCarpoolDeadlineSaving(true);
@@ -4120,6 +4131,28 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
     const adults = getAdultNames(car.userId);
     return !!driver && adults.length >= 1;
   };
+  const dayCoachCandidates = uniqCoachNames([
+    ...DEFAULT_CARPOOL_COACHES,
+    ...scheduleCoachNames,
+    ...dayCoachNames
+  ]);
+  const toggleDayCoachName = name => {
+    const v = String(name || "").trim();
+    if (!v) return;
+    setDayCoachNames(prev => {
+      const cur = uniqCoachNames(prev);
+      return cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v];
+    });
+  };
+  const addDayCoachName = () => {
+    const v = String(coachInputName || "").trim();
+    if (!v) return;
+    setDayCoachNames(prev => {
+      const cur = uniqCoachNames(prev);
+      return cur.includes(v) ? cur : [...cur, v];
+    });
+    setCoachInputName("");
+  };
   const showCarpoolRule = () => {
     alert([
       "【配車ルール】",
@@ -4152,6 +4185,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
             if (savedPlan.carMeta && typeof savedPlan.carMeta === "object") setCarMeta(savedPlan.carMeta);
             if (savedPlan.seatAssignments && typeof savedPlan.seatAssignments === "object") setSeatAssignments(savedPlan.seatAssignments);
             if (Array.isArray(savedPlan.selectedFleetUserIds)) setSelectedFleetUserIds(savedPlan.selectedFleetUserIds.map(v=>String(v||"")).filter(Boolean));
+            if (Array.isArray(savedPlan.dayCoachNames)) setDayCoachNames(uniqCoachNames(savedPlan.dayCoachNames));
             if (typeof savedPlan.planNote === "string") setPlanNote(savedPlan.planNote);
           }
       }
@@ -4168,10 +4202,11 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
         carMeta,
         seatAssignments,
         selectedFleetUserIds,
+        dayCoachNames,
         planNote
       }));
     } catch (e) {}
-  }, [schedule.id, assignment, familyRideAssign, pickupInfo, carMeta, seatAssignments, selectedFleetUserIds, planNote, planLoaded]);
+  }, [schedule.id, assignment, familyRideAssign, pickupInfo, carMeta, seatAssignments, selectedFleetUserIds, dayCoachNames, planNote, planLoaded]);
 
   useEffect(()=>{
     let cancelled=false;
@@ -4232,6 +4267,9 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
         const planObj = (pr.plan && typeof pr.plan === "object") ? pr.plan : null;
         if (planObj && typeof planObj.note === "string") {
           setPlanNote(planObj.note);
+        }
+        if (planObj && Array.isArray(planObj.dayCoachNames)) {
+          setDayCoachNames(uniqCoachNames(planObj.dayCoachNames));
         }
         if (planObj && planObj.confirmed) {
           setConfirmedPlan(planObj);
@@ -4466,12 +4504,9 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
   const participants = attendingChildren;
   const seatRowKey = row => `${row.kind}:${String(row?.car?.userId || "")}`;
   const seatKeyFor = (row, slotIndex) => `${seatRowKey(row)}:${slotIndex}`;
-  const scheduleCoachNames = String(schedule.coach || "")
-    .split(/[、,\n\/]/)
-    .map(v => String(v || "").trim())
-    .filter(Boolean);
+  const activeCoachNames = uniqCoachNames(dayCoachNames);
   const coachNameKeySet = new Set(
-    [...scheduleCoachNames, "丸尾コーチ", "健太郎コーチ", "博多コーチ"]
+    [...activeCoachNames, ...DEFAULT_CARPOOL_COACHES]
       .map(normalizeName)
       .filter(Boolean)
   );
@@ -4518,7 +4553,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
       }
     }
   });
-  scheduleCoachNames.forEach(name => goingPeopleNameSet.add(name));
+  activeCoachNames.forEach(name => goingPeopleNameSet.add(name));
   const accountAdultNameKeySet = new Set(
     effectiveCarpools
       .map(cp => normalizeName(cp.userName || ""))
@@ -4800,6 +4835,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
       selectedFleetUserIds: selectedFleetUserIds.map(v=>String(v||"")).filter(Boolean),
       seatAssignments: mergedSeatAssignments,
       carMeta: carMeta || {},
+      dayCoachNames: uniqCoachNames(dayCoachNames),
       riderLabelMap: Object.fromEntries(riderOptions.map(opt => [opt.id, opt.label])),
       note: String(planNote || "").trim(),
     };
@@ -5052,6 +5088,22 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"🗺 配車割り当て"),
         selectedFleetRows.length>0&&h("button",{onClick:autoAssign,
           style:{fontSize:11,fontWeight:700,color:"#0F172A",background:"#E2E8F0",border:"1px solid #CBD5E1",borderRadius:8,padding:"4px 10px",cursor:"pointer"}},"子供を自動割り当て")),
+      h("div",{style:{marginBottom:12,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8}},"本日の同乗コーチ（配車割り当てで選択可）"),
+        h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
+          dayCoachCandidates.map(name=>{
+            const selected = dayCoachNames.includes(name);
+            return h("button",{key:"carpool-coach-tag-"+name,onClick:()=>toggleDayCoachName(name),
+              style:{border:"1px solid " + (selected ? "#7C3AED" : "#D1D5DB"),background:selected?"#EDE9FE":"#fff",color:selected?"#6D28D9":"#6B7280",borderRadius:999,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}},
+              selected ? "✓ " + name : name);
+          })
+        ),
+        h("div",{style:{display:"flex",gap:6}},
+          h("input",{value:coachInputName,onChange:e=>setCoachInputName(e.target.value),placeholder:"コーチ名を追加（例: 山田コーチ）",style:{...css.inp,flex:1,margin:0,fontSize:12}}),
+          h("button",{onClick:addDayCoachName,style:{border:"1px solid #7C3AED",background:"#7C3AED",color:"#fff",borderRadius:9,padding:"0 12px",fontSize:12,fontWeight:700,cursor:"pointer"}},"追加")
+        ),
+        h("div",{style:{fontSize:10,color:"#64748B",marginTop:6}},"ここで選んだコーチが「同乗者」の選択肢に表示されます")
+      ),
 
       h("div",{style:{marginBottom:12,padding:10,background:"#F8FAFC",borderRadius:10,border:"1px solid #E2E8F0"}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:8}},"配車候補リスト（先に使う車を選択）"),
