@@ -6816,6 +6816,12 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
       const dt = fmt(s.date);
       const dayRows = getResultsForSchedule(s);
       const st = calcStats(dayRows);
+      const favoriteDayRows = dayRows
+        .filter(r => favoriteResultIds.has(String(r?.id || "").trim()))
+        .sort((a,b)=>
+          Number(a?.gameNumber||0)-Number(b?.gameNumber||0) ||
+          String(a?.opponent||"").localeCompare(String(b?.opponent||""))
+        );
       return h("div",{key:s.id || `${s.date}-${i}`,onClick:()=>onGoToDay&&onGoToDay(s,"match"),
         style:{background:"#fff",borderRadius:14,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:10,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",cursor:"pointer"}},
         h("div",{style:{textAlign:"center",flexShrink:0,width:40}},
@@ -6825,7 +6831,16 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
         h("div",{style:{flex:1,minWidth:0}},
           h("div",{style:{marginBottom:3}},h(Bdg,{label:tc.lb,color:tc.bg,small:true})),
           h("div",{style:{fontSize:14,fontWeight:700,color:"#1E293B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},s.title||"（タイトルなし）"),
-          s.location&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"📍 "+s.location)),
+          s.location&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"📍 "+s.location),
+          matchView==="favorite"&&favoriteDayRows.length>0&&h("div",{style:{marginTop:7,padding:"6px 8px",background:"#FFFDF5",border:"1px solid #FDE68A",borderRadius:8}},
+            h("div",{style:{fontSize:10,fontWeight:800,color:"#92400E",marginBottom:3}},"★ お気に入り " + favoriteDayRows.length + "試合"),
+            favoriteDayRows.slice(0,3).map((r,idx)=>
+              h("div",{key:`fav-day-${s.id||i}-${idx}`,style:{fontSize:10,color:"#7C5A19",lineHeight:1.45,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
+                `・第${r.gameNumber||"-"}試合 vs ${r.opponent||"（相手未設定）"}`)
+            ),
+            favoriteDayRows.length>3&&h("div",{style:{fontSize:10,color:"#A16207",marginTop:2}},"…ほか"+(favoriteDayRows.length-3)+"試合")
+          )
+        ),
         h("div",{style:{textAlign:"right",flexShrink:0,color:"#64748B"}},
           h("div",{style:{fontSize:11,fontWeight:700,color:"#4CAF50"}},st.wins+"勝"),
           h("div",{style:{fontSize:11,fontWeight:700,color:"#FFC107"}},st.draws+"分"),
