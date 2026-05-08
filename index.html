@@ -2080,12 +2080,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     `${halfScoreMapOur["2nd"]||0}-${halfScoreMapTheir["2nd"]||0}`,
     ...(visibleHalfOptions.includes("3rd") ? [`${halfScoreMapOur["3rd"]||0}-${halfScoreMapTheir["3rd"]||0}`] : []),
   ];
-  const favoriteAtLabel = (() => {
-    const d = new Date(String(favoriteAt || ""));
-    if (isNaN(d.getTime())) return "";
-    return `${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-  })();
-
   const headerBlock = h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"14px 16px 12px",position:"sticky",top:0,zIndex:1400}},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}},
       h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
@@ -2131,8 +2125,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         : h("span",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.45)"}},"試合動画未登録")
     ),
     isFavorite && h("div",{style:{marginTop:10,padding:"8px 10px",background:"rgba(255,255,255,0.1)",borderRadius:10,border:"1px solid rgba(255,255,255,0.2)"}},
-      h("div",{style:{fontSize:11,fontWeight:800,color:"#FCD34D"}},"★ あなたのお気に入り"),
-      favoriteAtLabel && h("div",{style:{fontSize:10,color:"rgba(255,255,255,0.6)",marginTop:4}},"登録: " + favoriteAtLabel)
+      h("div",{style:{fontSize:11,fontWeight:800,color:"#FCD34D"}},"★ あなたのお気に入り")
     )
   );
 
@@ -6684,7 +6677,7 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
 }
 
 // ── 試合タブ：月タブ + 日程カード一覧 ───────────────────────────
-function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd}) {
+function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd,favoriteMap={}}) {
   const matchSchedules = useMemo(() =>
     (schedules || [])
       .filter(s => {
@@ -6693,6 +6686,11 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
       })
       .sort((a,b) => nd(a.date).localeCompare(nd(b.date)))
   , [schedules]);
+  const privateFavoriteMap = useMemo(() => normalizeFavoriteMap(favoriteMap), [favoriteMap]);
+  const favoriteResultIds = useMemo(() =>
+    new Set(Object.keys(privateFavoriteMap || {}).map(k=>String(k||"").trim()).filter(Boolean))
+  , [privateFavoriteMap]);
+  const [matchView,setMatchView] = useState("all"); // "all" | "favorite"
 
   const getResultsForSchedule = (schedule) => {
     const sid = String(schedule?.id || "").trim();
@@ -6703,9 +6701,16 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
     return (results || []).filter(r => !String(r.scheduleId || "").trim() && nd(r.date) === d);
   };
 
+  const visibleMatchSchedules = useMemo(() => {
+    if (matchView !== "favorite") return matchSchedules;
+    return matchSchedules.filter(s =>
+      getResultsForSchedule(s).some(r => favoriteResultIds.has(String(r?.id || "").trim()))
+    );
+  }, [matchSchedules, matchView, favoriteResultIds, results]);
+
   const monthGroups = useMemo(() => {
     const map = {};
-    matchSchedules.forEach(s => {
+    visibleMatchSchedules.forEach(s => {
       const d = nd(s.date);
       if (!d) return;
       const ym = d.slice(0, 7);
@@ -6719,7 +6724,7 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
         label: Number(ym.slice(0,4)) + "年" + Number(ym.slice(5,7)) + "月",
         scheds: scheds.sort((a,b) => nd(a.date).localeCompare(nd(b.date))),
       }));
-  }, [matchSchedules]);
+  }, [visibleMatchSchedules]);
 
   const currentYm = useMemo(() => {
     const now = new Date();
@@ -6739,6 +6744,10 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
   if (matchSchedules.length === 0) {
     return h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"試合日程がありません");
   }
+  if (visibleMatchSchedules.length === 0) {
+    return h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},
+      matchView==="favorite" ? "お気に入り登録された試合がありません" : "試合日程がありません");
+  }
 
   const cur = monthGroups.find(g => g.ym === selYm) || monthGroups[0];
   const monthResults = (() => {
@@ -6757,6 +6766,14 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
   const monthStat = calcStats(monthResults);
 
   return h(Fragment,{},
+    h("div",{style:{background:"#fff",borderRadius:14,padding:6,marginBottom:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}} ,
+      h("button",{onClick:()=>setMatchView("all"),
+        style:{border:"none",borderRadius:10,padding:"9px 10px",fontSize:12,fontWeight:800,cursor:"pointer",
+          background:matchView==="all"?"#1D4ED8":"#EEF2FF",color:matchView==="all"?"#fff":"#334155"}},"すべて"),
+      h("button",{onClick:()=>setMatchView("favorite"),
+        style:{border:"none",borderRadius:10,padding:"9px 10px",fontSize:12,fontWeight:800,cursor:"pointer",
+          background:matchView==="favorite"?"#1D4ED8":"#EEF2FF",color:matchView==="favorite"?"#fff":"#334155"}},"★ お気に入り")
+    ),
     h("div",{style:{overflowX:"auto",marginBottom:12,paddingBottom:4}},
       h("div",{style:{display:"flex",gap:6,width:"max-content"}},
         monthGroups.map(g => {
@@ -6929,7 +6946,7 @@ function RankList({title,icon,data,unit}) {
     }));
 }
 
-function DashTab({results,members,schedules,liftings=[],isAdmin=false,favoriteMap={},initialDashTab="result",onGoToMatch,onGoToDay}) {
+function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDashTab="result",onGoToMatch,onGoToDay}) {
   const SHOT_RATE_START_DATE = "2026-04-12";
   const [dashTab,setDashTab]=useState(initialDashTab); // "result" | "tournament" | "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
@@ -7007,25 +7024,6 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,favoriteMa
   const oppFiltered=useMemo(()=>
     oppFilter==="all"?searchedResults:searchedResults.filter(r=>r.opponent===oppFilter)
   ,[searchedResults,oppFilter]);
-  const privateFavoriteMap = useMemo(() => normalizeFavoriteMap(favoriteMap), [favoriteMap]);
-  const favoriteRows = useMemo(() => {
-    const rows = (results || [])
-      .map(r => {
-        const id = String(r?.id || "").trim();
-        const row = id ? privateFavoriteMap[id] : null;
-        if (!row) return null;
-        return {...r, _privateFavoriteAt: String(row.updatedAt || "")};
-      })
-      .filter(Boolean);
-    return [...rows].sort((a,b) => {
-      const ta = new Date(String(a._privateFavoriteAt || a.date || "")).getTime();
-      const tb = new Date(String(b._privateFavoriteAt || b.date || "")).getTime();
-      if (isNaN(ta) && isNaN(tb)) return nd(b.date).localeCompare(nd(a.date));
-      if (isNaN(ta)) return 1;
-      if (isNaN(tb)) return -1;
-      return tb - ta;
-    });
-  }, [results, privateFavoriteMap]);
   const st=calcStats(filtered);
   const tournamentFiltered=useMemo(()=>schedules.filter(s=>{
     if(!["official","cup","公式戦","カップ戦"].includes(s.type)) return false;
@@ -7166,32 +7164,6 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,favoriteMa
 
     // ── 対戦成績タブ ──
     dashTab==="result"&&h(Fragment,{},
-      h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
-        h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:10}},"⭐ お気に入りリスト（自分のみ）"),
-        favoriteRows.length===0
-          ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"あなたのお気に入りはまだありません")
-          : h("div",{style:{display:"grid",gap:8}},
-              favoriteRows.map(r=>{
-                const linkedSchedule = findLinkedScheduleForResult(r, schedules);
-                const tc = getTC(r.type);
-                const dt = fmt(r.date);
-                const favDt = new Date(String(r._privateFavoriteAt || ""));
-                const favLabel = isNaN(favDt.getTime())
-                  ? ""
-                  : `${String(favDt.getMonth()+1).padStart(2,"0")}/${String(favDt.getDate()).padStart(2,"0")} ${String(favDt.getHours()).padStart(2,"0")}:${String(favDt.getMinutes()).padStart(2,"0")}`;
-                return h("div",{key:"fav-"+r.id,onClick:()=>linkedSchedule&&onGoToMatch&&onGoToMatch(r,linkedSchedule),style:{
-                    padding:"10px 12px",borderRadius:12,background:"#FFFDF5",border:"1px solid #FDE68A",cursor:linkedSchedule?"pointer":"default"
-                  }},
-                  h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},
-                    h("span",{style:{fontSize:11,fontWeight:800,color:"#92400E",background:"#FEF3C7",borderRadius:999,padding:"2px 8px"}},"★ お気に入り"),
-                    h(Bdg,{label:tc.lb,color:tc.bg,small:true}),
-                    h("span",{style:{fontSize:11,color:"#94A3B8"}},dt.short),
-                    favLabel&&h("span",{style:{fontSize:11,color:"#94A3B8",marginLeft:"auto"}},"登録 " + favLabel)
-                  ),
-                  h("div",{style:{fontSize:14,fontWeight:800,color:"#1E293B"}},`vs ${r.opponent||"（相手未設定）"}`)
-                );
-              }))
-      ),
       (()=>{
         const statRows = searchedResults.filter(shouldCountMatchForStats);
         const oppStatRows = oppFilter==="all" ? statRows : statRows.filter(r=>r.opponent===oppFilter);
@@ -9473,8 +9445,8 @@ function App() {
   const currentTabContent =
     tab==="home" ? h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab})
     : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule,onImportFc2Practice:handleImportFc2Practice})
-    : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay})
-    : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,favoriteMap:myFavorites,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
+    : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,favoriteMap:myFavorites,onGoToMatch:goToMatch,onGoToDay:goToDay})
+    : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
