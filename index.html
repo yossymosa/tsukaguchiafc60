@@ -115,8 +115,9 @@ function parseFormatSelection(formatLabel) {
   const raw = String(formatLabel || "").trim();
   const m = raw.match(/(\d+)\s*分/);
   const time = m ? Number(m[1]) : DEFAULT_FORMAT_TIME;
-  const has3 = /(^|[\s　])3本|3rd|三本|三本目/i.test(raw);
-  const has1 = /(^|[\s　])1本|single|一本/i.test(raw);
+  // 「10分1本」「10分3本」のような空白なし表記にも対応
+  const has3 = /3本|3rd|三本|三本目/i.test(raw);
+  const has1 = /1本|single|一本/i.test(raw);
   const hasHalf = /ハーフ|half|前後半|2本|二本/i.test(raw);
   let mode = DEFAULT_FORMAT_MODE;
   if (has3) mode = "triple";
