@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzHd4D8CiXWujSe60pdqLz7yHjb1673i5J4-jLxLZGZzvNZMZtNON7C5lvnuwvd_IHK/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyjEYodKCdELeLtsbrKd021K6PxzBjOlxepEgEJCR2hK299wVye3Kr9z3oDGJh-eM00/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -8140,17 +8140,33 @@ function MemoTab({news,isAdmin,user,onAdd,onDelete}) {
 }
 
 // ── 資料/FAQタブ ────────────────────────────────────────────────
-function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
+function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate,onReorder}) {
   const [openId,setOpenId]=useState("");
   const [createModal,setCreateModal]=useState(false);
   const [editModal,setEditModal]=useState(false);
   const [saving,setSaving]=useState(false);
+  const [orderSaving,setOrderSaving]=useState(false);
+  const [orderDirty,setOrderDirty]=useState(false);
+  const [dragId,setDragId]=useState("");
   const [fd,setFd]=useState({title:"",content:"",file:null});
-  const [ed,setEd]=useState({id:"",title:"",content:"",attachmentUrl:"",attachmentName:"",file:null,removeAttachment:false});
+  const [ed,setEd]=useState({id:"",title:"",content:"",attachmentUrl:"",attachmentName:"",sortOrder:"",file:null,removeAttachment:false});
+  const [orderIds,setOrderIds]=useState([]);
 
-  const items=(news||[])
+  const parseSortOrder = value => {
+    if (value === "" || value === null || value === undefined) return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const sortedItems = useMemo(() => (news||[])
     .filter(n=>(n.category||"")==="資料")
-    .sort((a,b)=>new Date(String(b.date||0)).getTime()-new Date(String(a.date||0)).getTime())
+    .sort((a,b)=>{
+      const ao=parseSortOrder(a.sortOrder), bo=parseSortOrder(b.sortOrder);
+      if(ao!==null && bo!==null && ao!==bo) return ao-bo;
+      if(ao!==null && bo===null) return -1;
+      if(ao===null && bo!==null) return 1;
+      return new Date(String(b.date||0)).getTime()-new Date(String(a.date||0)).getTime();
+    })
     .map(n=>({
       id:String(n.id||""),
       title:n.title||"資料",
@@ -8159,7 +8175,29 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
       author:n.author||"",
       attachmentUrl:n.attachmentUrl||"",
       attachmentName:n.attachmentName||"",
-    }));
+      sortOrder:n.sortOrder
+    })),[news]);
+  const orderSeed = sortedItems.map(i=>`${i.id}:${i.sortOrder===undefined?"":String(i.sortOrder)}`).join("|");
+  useEffect(()=>{
+    setOrderIds(sortedItems.map(i=>i.id));
+    setOrderDirty(false);
+  },[orderSeed]);
+  const items = useMemo(()=>{
+    const map = {};
+    sortedItems.forEach(i=>{ map[i.id]=i; });
+    const arranged = [];
+    const used = {};
+    orderIds.forEach(id=>{
+      if(!map[id]) return;
+      arranged.push(map[id]);
+      used[id]=true;
+    });
+    sortedItems.forEach(i=>{
+      if(used[i.id]) return;
+      arranged.push(i);
+    });
+    return arranged;
+  },[orderIds,sortedItems]);
   const attachmentPreviewUrl = url => String(url || "").replace("/view?usp=sharing", "/preview").replace("/view", "/preview");
   const isPdfAttachment = item => {
     const url = String(item?.attachmentUrl || "");
@@ -8184,19 +8222,52 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
     };
   };
 
+  const moveDocOrder = (fromId,toId) => {
+    const from = String(fromId || "").trim();
+    const to = String(toId || "").trim();
+    if(!from || !to || from===to) return;
+    setOrderIds(prev=>{
+      const list = Array.isArray(prev) ? prev.slice() : [];
+      const fromIdx = list.indexOf(from);
+      const toIdx = list.indexOf(to);
+      if(fromIdx<0 || toIdx<0) return prev;
+      const [picked] = list.splice(fromIdx,1);
+      list.splice(toIdx,0,picked);
+      return list;
+    });
+    setOrderDirty(true);
+  };
+
+  const saveOrder = async () => {
+    if(!isAdmin || !orderDirty || orderSaving || !onReorder) return;
+    setOrderSaving(true);
+    try{
+      await onReorder(items.map(i=>i.id));
+      setOrderDirty(false);
+    }catch(e){
+      alert("並び順保存エラー: " + (e && e.message ? e.message : e));
+    }
+    setOrderSaving(false);
+  };
+
   const saveDoc=async()=>{
     if(saving) return;
     if(!fd.title||!fd.content) return alert("タイトルと内容を入力してください");
     setSaving(true);
     try{
       const uploaded = fd.file ? await uploadAttachment(fd.file) : {attachmentUrl:"",attachmentName:""};
+      const existingOrders = items
+        .map(i => (i && i.sortOrder !== undefined && i.sortOrder !== null && i.sortOrder !== "" ? Number(i.sortOrder) : NaN))
+        .filter(v => Number.isFinite(v));
+      const nextTopOrder = existingOrders.length ? Math.min.apply(null, existingOrders) - 1 : 1;
       await onAdd({
         title:fd.title,
         content:fd.content,
         category:"資料",
         author:user.name,
         attachmentUrl:uploaded.attachmentUrl,
-        attachmentName:uploaded.attachmentName
+        attachmentName:uploaded.attachmentName,
+        sortOrder: nextTopOrder
       });
       setFd({title:"",content:"",file:null});
       setCreateModal(false);
@@ -8213,6 +8284,7 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
       content:item.content||"",
       attachmentUrl:item.attachmentUrl||"",
       attachmentName:item.attachmentName||"",
+      sortOrder:item.sortOrder ?? "",
       file:null,
       removeAttachment:false
     });
@@ -8239,7 +8311,8 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
         category:"資料",
         author:user.name,
         attachmentUrl,
-        attachmentName
+        attachmentName,
+        sortOrder: ed.sortOrder
       });
       setEditModal(false);
     }catch(e){
@@ -8250,9 +8323,43 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
 
   const renderItem=(item)=>{
     const opened=openId===item.id;
-    return h("div",{key:item.id,style:{background:"#fff",borderRadius:14,marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",overflow:"hidden"}},
+    return h("div",{
+      key:item.id,
+      draggable:isAdmin,
+      onDragStart:e=>{
+        if(!isAdmin) return;
+        setDragId(item.id);
+        try{
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", item.id);
+        }catch(_){}
+      },
+      onDragOver:e=>{
+        if(!isAdmin) return;
+        e.preventDefault();
+      },
+      onDrop:e=>{
+        if(!isAdmin) return;
+        e.preventDefault();
+        const from = dragId || (e.dataTransfer ? e.dataTransfer.getData("text/plain") : "");
+        moveDocOrder(from, item.id);
+        setDragId("");
+      },
+      onDragEnd:()=>setDragId(""),
+      style:{
+        background:"#fff",
+        borderRadius:14,
+        marginBottom:10,
+        boxShadow:"0 2px 8px rgba(0,0,0,0.05)",
+        overflow:"hidden",
+        border:isAdmin&&dragId===item.id?"2px solid #60A5FA":"2px solid transparent"
+      }
+    },
       h("button",{onClick:()=>setOpenId(opened?"":item.id),style:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"14px 14px",border:"none",background:"#fff",cursor:"pointer"}},
-        h("div",{style:{fontSize:14,fontWeight:800,color:"#1E293B",textAlign:"left",flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},item.title),
+        h("div",{style:{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}},
+          isAdmin ? h("span",{style:{fontSize:14,color:"#94A3B8",cursor:"grab",flexShrink:0}},"⋮⋮") : null,
+          h("div",{style:{fontSize:14,fontWeight:800,color:"#1E293B",textAlign:"left",flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},item.title)
+        ),
         h("div",{style:{fontSize:16,color:"#94A3B8",fontWeight:800,flexShrink:0}},opened?"−":"+")
       ),
       opened ? h("div",{style:{padding:"0 14px 14px",borderTop:"1px solid #F1F5F9"}},
@@ -8282,9 +8389,15 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate}) {
   return h(Fragment,{},
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",letterSpacing:1.2}},"資料・FAQ"),
-      isAdmin ? h("button",{onClick:()=>setCreateModal(true),style:{...css.bO,padding:"8px 12px",fontSize:12,borderRadius:12}},"+ 追加") : null
+      isAdmin ? h("div",{style:{display:"flex",gap:8,alignItems:"center"}},
+        orderDirty ? h("button",{onClick:saveOrder,disabled:orderSaving,style:{...css.bG,padding:"8px 10px",fontSize:12,borderRadius:10,minWidth:92,opacity:orderSaving?0.7:1,cursor:orderSaving?"wait":"pointer"}},orderSaving?"保存中...":"並び順を保存") : null,
+        h("button",{onClick:()=>setCreateModal(true),style:{...css.bO,padding:"8px 12px",fontSize:12,borderRadius:12}},"+ 追加")
+      ) : null
     ),
-    h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},"チーム運営に必要な情報をためていく"),
+    h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},
+      "チーム運営に必要な情報をためていく",
+      isAdmin ? "（カードをドラッグして並び替え可）" : ""
+    ),
     items.length===0 ? h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"資料はまだありません") : null,
     items.map(renderItem),
 
@@ -9444,6 +9557,18 @@ function App() {
     catch(e){alert("エラー: "+e.message);}
     setLoading(false);
   };
+  const handleReorderNewsDocs=async ids=>{
+    setLoading(true);setLoadMsg("並び順を保存中...");
+    try{
+      await api("reorderNewsDocs",{userId:String(user?.id||"").trim(),ids:Array.isArray(ids)?ids:[]});
+      await load("更新中...");
+    }catch(e){
+      alert("並び順保存エラー: "+e.message);
+      throw e;
+    }finally{
+      setLoading(false);
+    }
+  };
   const handleUpdateProfile=async({name,memberId,familyMembers=[]})=>{
     const r=await api("updateUserProfile",{userId:user.id,name,memberId,familyMembers});
     saveUser({...user,...r.user});
@@ -9592,7 +9717,7 @@ function App() {
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
-    : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews})
+    : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews,onReorder:handleReorderNewsDocs})
     : tab==="settings" ? (isAdmin
         ? h(SettingsTab,{user,users,members,isSuperAdmin:canManageUsers,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile,onAdminUpdateUser:handleAdminUpdateUser,uiTabVisibility,onSaveUiTabVisibility:handleSaveUiTabVisibility})
         : null)
