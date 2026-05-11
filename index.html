@@ -7733,8 +7733,17 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,box
     h("button",{onClick:next,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"›")
   ),
 
-  h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",marginBottom:4}},
-    ["日","月","火","水","木","金","土"].map((d,i)=>h("div",{key:d,style:{textAlign:"center",fontSize:11,fontWeight:700,color:i===0?"#F44336":i===6?"#2196F3":"#aaa",padding:"4px 0"}},d))
+  h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:4,marginBottom:6}},
+    ["日","月","火","水","木","金","土"].map((d,i)=>h("div",{key:d,style:{
+      textAlign:"center",
+      fontSize:11,
+      fontWeight:800,
+      color:i===0?"#DC2626":i===6?"#2563EB":"#64748B",
+      padding:"6px 0",
+      background:"#F8FAFC",
+      border:"1px solid #E2E8F0",
+      borderRadius:8
+    }},d))
   ),
 
   weeks.map((wk,wi)=>h("div",{key:wi,style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:1}},
