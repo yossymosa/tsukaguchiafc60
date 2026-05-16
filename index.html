@@ -1994,16 +1994,24 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       }
       await api("saveGoals",savePayload);
       writeLineupCache(match?.id, safeFormation || "", safeFormation ? normalizedSlots : {});
-      if (typeof onShotSaved === "function") {
-        const patchForUi = {
-          id: String(match?.id || ""),
-          ourShots: ourShotsTotal,
-          theirShots: theirShotsTotal,
-          shotCountMissing: shotCountMissing ? "1" : "",
-          formation: safeFormation || "",
-          formationSlots: safeFormation ? normalizedSlots : {},
-          substitutions,
-          memo: matchMemo,
+        if (typeof onShotSaved === "function") {
+          const patchForUi = {
+            id: String(match?.id || ""),
+            ourShots: ourShotsTotal,
+            theirShots: theirShotsTotal,
+            ourCorners: getStatValue("ourCorners"),
+            theirCorners: getStatValue("theirCorners"),
+            ourFreeKicks: getStatValue("ourFreeKicks"),
+            theirFreeKicks: getStatValue("theirFreeKicks"),
+            ourPkCount: getStatValue("ourPkCount"),
+            theirPkCount: getStatValue("theirPkCount"),
+            ourOffsides: getStatValue("ourOffsides"),
+            theirOffsides: getStatValue("theirOffsides"),
+            shotCountMissing: shotCountMissing ? "1" : "",
+            formation: safeFormation || "",
+            formationSlots: safeFormation ? normalizedSlots : {},
+            substitutions,
+            memo: matchMemo,
           matchStatus
         };
         if (!shouldKeepLegacyShotTotals) {
