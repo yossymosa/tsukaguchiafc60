@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzFFjjqboWMKga3mCDgtFsROUiYCvOAo8W6ArzgmL25HPmipi9nSIEa2gIk6CaUUUSA/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxlKTwJFPsrqzmtbqTQpSOp4uRZEBMTifbDBKooM3Kc0sXCp2SsJAgMjn-Tqp847qan/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -9001,7 +9001,7 @@ function MemberTab({members,liftings=[]}) {
     ));
 }
 
-function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile,onAdminUpdateUser,uiTabVisibility,onSaveUiTabVisibility}) {
+function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile,onAdminUpdateUser,onAddMember,uiTabVisibility,onSaveUiTabVisibility}) {
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
   const child = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
   const familyListView = parseFamilyMembers(currentUserProfile.familyMembers || []);
@@ -9018,6 +9018,9 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
   const [tabVisibilitySaving,setTabVisibilitySaving] = useState(false);
   const [userDrafts,setUserDrafts] = useState({});
   const [userSavingId,setUserSavingId] = useState("");
+  const [newMember,setNewMember] = useState({name:"",generation:"",grade:"3年",position:"MF",number:""});
+  const [memberAdding,setMemberAdding] = useState(false);
+  const [memberAddedId,setMemberAddedId] = useState("");
   const roleLabel = role => {
     const r = String(role || "").trim();
     if (r === "super_admin") return "super_admin";
@@ -9060,6 +9063,10 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
       grouped.map(m=>h("option",{key:m.id,value:m.id},`${m.name} #${m.number||"-"} (${formatMemberGenerationGrade(m)||m.grade||""})`))
     )];
   });
+  useEffect(()=>{
+    if (newMember.generation || !generations.length) return;
+    setNewMember(prev=>({...prev,generation:generations[0]}));
+  },[newMember.generation, generations.join("|")]);
 
   const save = async() => {
     setSaving(true);
@@ -9119,6 +9126,35 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
       alert("ユーザー設定保存エラー: " + (e?.message || e));
     }
     setUserSavingId("");
+  };
+  const addManagedMember = async() => {
+    if (!isSuperAdmin || typeof onAddMember !== "function") return;
+    const payload = {
+      name: String(newMember.name || "").trim(),
+      generation: String(newMember.generation || "").trim(),
+      grade: String(newMember.grade || "").trim(),
+      position: String(newMember.position || "").trim(),
+      number: String(newMember.number || "").trim(),
+    };
+    if (!payload.name) {
+      alert("名前を入力してください");
+      return;
+    }
+    if (!payload.generation) {
+      alert("期生を入力してください");
+      return;
+    }
+    setMemberAdding(true);
+    try{
+      const r = await onAddMember(payload);
+      const issuedId = String((r && r.id) || "").trim();
+      setMemberAddedId(issuedId);
+      setNewMember(prev=>({...prev,name:"",number:""}));
+      alert("メンバーを追加しました" + (issuedId ? ("（ID: " + issuedId + "）") : ""));
+    }catch(e){
+      alert("メンバー追加エラー: " + (e?.message || e));
+    }
+    setMemberAdding(false);
   };
 
   return h(Fragment,{},
@@ -9247,6 +9283,33 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
           );
         })
       )
+    ),
+    isSuperAdmin && h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+      h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:6}},"👟 メンバー追加（ID自動発番）"),
+      h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},"追加時にメンバーIDは自動発番されます"),
+      memberAddedId && h("div",{style:{fontSize:12,fontWeight:700,color:"#1D4ED8",background:"#EEF2FF",border:"1px solid #D8E1FF",borderRadius:10,padding:"8px 10px",marginBottom:10}},
+        "最新発行ID: " + memberAddedId),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+        h("div",{},
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"名前"),
+          h("input",{value:newMember.name,onChange:e=>setNewMember(p=>({...p,name:e.target.value})),style:css.inp,placeholder:"例: 山田 太郎"})),
+        h("div",{},
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"背番号"),
+          h("input",{value:newMember.number,onChange:e=>setNewMember(p=>({...p,number:e.target.value})),style:css.inp,placeholder:"例: 18"})),
+        h("div",{},
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"期生"),
+          h("input",{value:newMember.generation,onChange:e=>setNewMember(p=>({...p,generation:e.target.value})),style:css.inp,placeholder:"例: 60"})),
+        h("div",{},
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"学年"),
+          h("select",{value:newMember.grade,onChange:e=>setNewMember(p=>({...p,grade:e.target.value})),style:css.inp},
+            ["4年","3年","2年","1年","その他"].map(g=>h("option",{key:"new-grade-"+g,value:g},g)))),
+        h("div",{style:{gridColumn:"1 / span 2"}},
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"ポジション"),
+          h("select",{value:newMember.position,onChange:e=>setNewMember(p=>({...p,position:e.target.value})),style:css.inp},
+            h("option",{value:""},"未設定"),
+            ["GK","DF","MF","FW"].map(pos=>h("option",{key:"new-pos-"+pos,value:pos},pos))))),
+      h("button",{onClick:addManagedMember,disabled:memberAdding||!String(newMember.name||"").trim()||!String(newMember.generation||"").trim(),style:{...css.bS,width:"100%",opacity:(memberAdding||!String(newMember.name||"").trim()||!String(newMember.generation||"").trim())?0.65:1}},
+        memberAdding ? "追加中..." : "メンバーを追加する")
     ),
     h("div",{style:{background:"#fff",borderRadius:16,padding:18,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🔔 通知設定"),
@@ -9552,6 +9615,21 @@ function App() {
     await load("更新中...");
     return r;
   };
+  const handleAddMember=async(member={})=>{
+    const payload = {
+      userId:String(user?.id||"").trim(),
+      member:{
+        name:String(member.name||"").trim(),
+        generation:String(member.generation||"").trim(),
+        grade:String(member.grade||"").trim(),
+        position:String(member.position||"").trim(),
+        number:String(member.number||"").trim()
+      }
+    };
+    const r = await api("addMember",payload);
+    await load("更新中...");
+    return r || {};
+  };
   const handleToggleFavorite=async(resultId,nextOn)=>{
     const r = await api("saveMyFavorite",{
       userId:String(user?.id||"").trim(),
@@ -9682,7 +9760,7 @@ function App() {
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews,onReorder:handleReorderNewsDocs})
     : tab==="settings" ? (isAdmin
-        ? h(SettingsTab,{user,users,members,isSuperAdmin:canManageUsers,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile,onAdminUpdateUser:handleAdminUpdateUser,uiTabVisibility,onSaveUiTabVisibility:handleSaveUiTabVisibility})
+        ? h(SettingsTab,{user,users,members,isSuperAdmin:canManageUsers,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile,onAdminUpdateUser:handleAdminUpdateUser,onAddMember:handleAddMember,uiTabVisibility,onSaveUiTabVisibility:handleSaveUiTabVisibility})
         : null)
     : h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab});
 
