@@ -1322,6 +1322,30 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     return v==="1st" ? 0 : v==="2nd" ? 1 : v==="3rd" ? 2 : 99;
   };
   const normalizeGoalItem=g=>({...g,half:normalizeHalfLabel(g.half)});
+  const goalDraftKey = rid => "afc_goal_draft_" + String(rid || "").trim();
+  const readGoalDraft = rid => {
+    const key = goalDraftKey(rid);
+    if (!key || key.endsWith("_")) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      return obj && typeof obj === "object" ? obj : null;
+    } catch (e) {
+      return null;
+    }
+  };
+  const clearGoalDraft = rid => {
+    const key = goalDraftKey(rid);
+    if (!key || key.endsWith("_")) return;
+    try { localStorage.removeItem(key); } catch (e) {}
+  };
+  const writeGoalDraft = (rid, payload) => {
+    const key = goalDraftKey(rid);
+    if (!key || key.endsWith("_")) return;
+    try { localStorage.setItem(key, JSON.stringify(payload)); } catch (e) {}
+  };
+  const goalDraftInit = readGoalDraft(match?.id);
   const [goals,setGoals]=useState(() => {
     const source = Array.isArray(goalDraftInit?.goals) && goalDraftInit.goals.length ? goalDraftInit.goals : (match.goals || []);
     return source.map(normalizeGoalItem);
@@ -1432,30 +1456,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   // editGoal: {type:"our"|"their", idx:number}
   const [editGoal,setEditGoal]=useState(null);
   const [editNg,setEditNg]=useState(null);
-  const goalDraftKey = rid => "afc_goal_draft_" + String(rid || "").trim();
-  const readGoalDraft = rid => {
-    const key = goalDraftKey(rid);
-    if (!key || key.endsWith("_")) return null;
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return null;
-      const obj = JSON.parse(raw);
-      return obj && typeof obj === "object" ? obj : null;
-    } catch (e) {
-      return null;
-    }
-  };
-  const clearGoalDraft = rid => {
-    const key = goalDraftKey(rid);
-    if (!key || key.endsWith("_")) return;
-    try { localStorage.removeItem(key); } catch (e) {}
-  };
-  const writeGoalDraft = (rid, payload) => {
-    const key = goalDraftKey(rid);
-    if (!key || key.endsWith("_")) return;
-    try { localStorage.setItem(key, JSON.stringify(payload)); } catch (e) {}
-  };
-  const goalDraftInit = readGoalDraft(match?.id);
   const shotCacheKey = rid => "afc_shot_cache_" + String(rid || "").trim();
   const calcShotStateTotal = state => {
     if (!state || typeof state !== "object") return 0;
