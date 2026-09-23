@@ -876,12 +876,12 @@ function RWdg({our,their,pk,status,date}) {
   const pkW=isDraw&&pk&&Number(pk.our)>Number(pk.their);
   const pkL=isDraw&&pk&&Number(pk.our)<Number(pk.their);
   const win=w||pkW, lose=(!w&&!isDraw)||pkL;
-  const c=win?"#4CAF50":lose?"#F44336":"#FFC107";
+  const c=win?"#15803D":lose?"#B91C1C":"#A16207";
   const label=win?"勝ち":lose?"負け":"引分";
   return h("span",{style:{background:c,color:"#fff",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},label+(pkW?" (PK)":pkL?" (PK)":""));
 }
 function ScoreLine({our,their,size=18}) {
-  const c=Number(our)>Number(their)?"#4CAF50":Number(our)===Number(their)?"#FFC107":"#F44336";
+  const c=Number(our)>Number(their)?"#15803D":Number(our)===Number(their)?"#A16207":"#B91C1C";
   return h("span",{style:{fontSize:size,fontWeight:900,color:c,whiteSpace:"nowrap"}},Number(our),h("span",{style:{color:"#ddd",fontSize:size*0.7,margin:"0 3px"}},"-"),Number(their));
 }
 function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy,onEnableNotifications,onOpenTactics}) {
@@ -1675,14 +1675,14 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setFormation(key);
     setFormationSlots(prev=>key ? buildFormationSlots(key, prev) : {});
   };
-  const won=ourT>thT,draw=ourT===thT,rc=won?"#4CAF50":draw?"#FFC107":"#F44336";
+  const won=ourT>thT,draw=ourT===thT,rc=won?"#15803D":draw?"#A16207":"#B91C1C";
   // PK集計
   const pkOurScore=pkKickers.filter(k=>k.success).length;
   const pkTheirScore=pkTheirSeq.filter(Boolean).length;
   const pkOn=hasPk;
   const pkWin=pkOn&&pkOurScore>pkTheirScore;
   const pkLose=pkOn&&pkOurScore<pkTheirScore;
-  const finalColor=pkWin?"#4CAF50":pkLose?"#F44336":rc;
+  const finalColor=pkWin?"#15803D":pkLose?"#B91C1C":rc;
   // PK表示文字列
   const pkOurStr=pkKickers.map(k=>k.success?"○":"×").join("");
   const pkTheirStr=pkTheirSeq.map(s=>s?"○":"×").join("");
@@ -6951,9 +6951,9 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
     cur&&st&&h("div",{style:{background:"#fff",borderRadius:14,padding:"12px 16px",marginBottom:12,display:"flex",gap:16,alignItems:"center",boxShadow:"0 2px 6px rgba(0,0,0,0.05)"}},
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",flex:1}},cur.label),
       h("div",{style:{display:"flex",gap:12,fontSize:13}},
-        h("span",{style:{color:"#4CAF50",fontWeight:700}},st.wins+"勝"),
-        h("span",{style:{color:"#FFC107",fontWeight:700}},st.draws+"分"),
-        h("span",{style:{color:"#F44336",fontWeight:700}},st.losses+"敗"),
+        h("span",{style:{color:"#15803D",fontWeight:700}},st.wins+"勝"),
+        h("span",{style:{color:"#A16207",fontWeight:700}},st.draws+"分"),
+        h("span",{style:{color:"#B91C1C",fontWeight:700}},st.losses+"敗"),
         h("span",{style:{color:"#666"}},st.gf+"得点 "+st.ga+"失点"))),
 
     // 試合リスト
@@ -7104,9 +7104,9 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
     cur && h("div",{style:{background:"#fff",borderRadius:8,padding:"12px 16px",marginBottom:12,display:"flex",gap:16,alignItems:"center",boxShadow:"none",border:"1px solid #D8E0E8"}},
       h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:17,fontWeight:800,letterSpacing:0.5,color:"#102A43",flex:1}},cur.label),
       h("div",{style:{display:"flex",gap:10,fontSize:12,flexWrap:"wrap",justifyContent:"flex-end"}},
-        h("span",{style:{color:"#4CAF50",fontWeight:700}},monthStat.wins+"勝"),
-        h("span",{style:{color:"#FFC107",fontWeight:700}},monthStat.draws+"分"),
-        h("span",{style:{color:"#F44336",fontWeight:700}},monthStat.losses+"敗"),
+        h("span",{style:{color:"#15803D",fontWeight:700}},monthStat.wins+"勝"),
+        h("span",{style:{color:"#A16207",fontWeight:700}},monthStat.draws+"分"),
+        h("span",{style:{color:"#B91C1C",fontWeight:700}},monthStat.losses+"敗"),
         h("span",{style:{color:"#64748B"}},(cur.scheds.length || 0)+"日程 / "+monthStat.games+"試合"))),
 
     (cur?.scheds || []).map((s,i) => {
@@ -7140,9 +7140,9 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
           )
         ),
         h("div",{style:{textAlign:"right",flexShrink:0,color:"#64748B"}},
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#4CAF50"}},st.wins+"勝"),
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#FFC107"}},st.draws+"分"),
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#F44336"}},st.losses+"敗"),
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#15803D"}},st.wins+"勝"),
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#A16207"}},st.draws+"分"),
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#B91C1C"}},st.losses+"敗"),
           h("div",{style:{fontSize:10,color:"#94A3B8",marginTop:2}},st.games+"試合")));
     })
   );
@@ -7518,13 +7518,13 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
               (oppFilter==="all"?"全体":"vs "+oppFilter)+" · "+oppStatRows.length+"試合"),
             st2.games>0&&h(Fragment,{},
               h("div",{style:{display:"flex",gap:2,height:8,borderRadius:4,overflow:"hidden",background:"#E2E8F0",marginBottom:8}},
-                h("div",{style:{width:`${st2.wins/st2.games*100}%`,background:"#4CAF50"}}),
-                h("div",{style:{width:`${st2.draws/st2.games*100}%`,background:"#FFC107"}}),
-                h("div",{style:{width:`${st2.losses/st2.games*100}%`,background:"#F44336"}})),
+                h("div",{style:{width:`${st2.wins/st2.games*100}%`,background:"#15803D"}}),
+                h("div",{style:{width:`${st2.draws/st2.games*100}%`,background:"#A16207"}}),
+                h("div",{style:{width:`${st2.losses/st2.games*100}%`,background:"#B91C1C"}})),
               h("div",{style:{display:"flex",gap:8,fontSize:10,color:"#94A3B8",marginBottom:12}},
                 h("span",{},"■ 勝 "+st2.wins),h("span",{},"■ 分 "+st2.draws),h("span",{},"■ 負 "+st2.losses))),
             h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,textAlign:"center"}},
-              [{l:"勝率",v:st2.pct,c:"#1D4ED8"},{l:"総得点",v:st2.gf,c:"#1D4ED8"},{l:"総失点",v:st2.ga,c:"#F44336"}]
+              [{l:"勝率",v:st2.pct,c:"#1D4E89"},{l:"総得点",v:st2.gf,c:"#1D4E89"},{l:"総失点",v:st2.ga,c:"#B91C1C"}]
                 .map(x=>h("div",{key:x.l,style:{background:"#F8FAFC",borderRadius:10,padding:"8px 4px"}},
                   h("div",{style:{fontSize:20,fontWeight:900,color:x.c}},x.v),
                   h("div",{style:{fontSize:10,color:"#94A3B8",marginTop:2}},x.l))))),
@@ -7540,9 +7540,9 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
                     style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",border:"none",background:"transparent",cursor:"pointer",textAlign:"left"}},
                     h("div",{style:{flex:1,fontSize:13,fontWeight:700,color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},opp),
                     h("div",{style:{display:"flex",gap:4,flexShrink:0}},
-                      h("span",{style:{fontSize:11,fontWeight:700,color:"#4CAF50",background:"#E8F5E9",borderRadius:6,padding:"2px 6px"}},s.w+"勝"),
-                      h("span",{style:{fontSize:11,fontWeight:700,color:"#FFC107",background:"#FFFDE7",borderRadius:6,padding:"2px 6px"}},s.d+"分"),
-                      h("span",{style:{fontSize:11,fontWeight:700,color:"#F44336",background:"#FFEBEE",borderRadius:6,padding:"2px 6px"}},s.l+"敗")),
+                      h("span",{style:{fontSize:11,fontWeight:700,color:"#15803D",background:"#F1F7F2",borderRadius:6,padding:"2px 6px"}},s.w+"勝"),
+                      h("span",{style:{fontSize:11,fontWeight:700,color:"#A16207",background:"#FAF7EF",borderRadius:6,padding:"2px 6px"}},s.d+"分"),
+                      h("span",{style:{fontSize:11,fontWeight:700,color:"#B91C1C",background:"#FBEFF0",borderRadius:6,padding:"2px 6px"}},s.l+"敗")),
                     h("div",{style:{color:"#94A3B8",fontSize:12,fontWeight:700,marginLeft:4}},isOpen?"▲":"▼")
                   ),
                   isOpen&&h("div",{style:{padding:"0 10px 10px",background:"#fff",borderTop:"1px solid #E2E8F0"}},
@@ -7589,7 +7589,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
               const dt=fmt(r.date);
               const our=Number(r.ourScore||0),their=Number(r.theirScore||0);
               const rw=our>their?"勝":our===their?"分":"負";
-              const rwc=our>their?"#4CAF50":our===their?"#FFC107":"#F44336";
+              const rwc=our>their?"#15803D":our===their?"#A16207":"#B91C1C";
               return h("div",{key:r.id,onClick:()=>linkedSchedule&&onGoToMatch&&onGoToMatch(r,linkedSchedule),style:{
                   marginBottom:i<oppStatRows.length-1?8:0,padding:"10px 10px",background:"#F8F9FA",borderRadius:10,cursor:linkedSchedule?"pointer":"default"
                 }},
@@ -7660,7 +7660,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
         return h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
           h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🥅 PK戦"),
           h("div",{style:{display:"flex",gap:8}},
-            [{l:"PK勝ち",v:pkW,c:"#4CAF50"},{l:"PK負け",v:pkL,c:"#F44336"},{l:"PK試合",v:pkGames.length,c:"#607D8B"},{l:"PK勝率",v:pkRate,c:"#1D4ED8"}]
+            [{l:"PK勝ち",v:pkW,c:"#15803D"},{l:"PK負け",v:pkL,c:"#B91C1C"},{l:"PK試合",v:pkGames.length,c:"#607D8B"},{l:"PK勝率",v:pkRate,c:"#1D4E89"}]
               .map(x=>h("div",{key:x.l,style:{flex:1,textAlign:"center",background:"#F8F9FA",borderRadius:12,padding:"10px 4px"}},
                 h("div",{style:{fontSize:20,fontWeight:900,color:x.c}},x.v),
                 h("div",{style:{fontSize:10,color:"#aaa",marginTop:2}},x.l)))));
@@ -9048,14 +9048,14 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:12}},"TODAY'S RESULTS"),
         h("div",{style:{display:"flex",justifyContent:"center",gap:0,border:"1px solid #E2E8F0",borderRadius:6,overflow:"hidden"}},
           h("div",{style:{textAlign:"center",padding:"10px 20px",flex:1,borderRight:"1px solid #E2E8F0",background:"#fff"}},
-            h("div",{style:{fontSize:28,fontWeight:900,color:"#4CAF50"}},st.wins),
-            h("div",{style:{fontSize:11,color:"#4CAF50",fontWeight:700,marginTop:2}},"勝")),
+            h("div",{style:{fontSize:28,fontWeight:900,color:"#15803D"}},st.wins),
+            h("div",{style:{fontSize:11,color:"#15803D",fontWeight:700,marginTop:2}},"勝")),
           h("div",{style:{textAlign:"center",padding:"10px 20px",flex:1,borderRight:"1px solid #E2E8F0",background:"#fff"}},
-            h("div",{style:{fontSize:28,fontWeight:900,color:"#FFC107"}},st.draws),
-            h("div",{style:{fontSize:11,color:"#FFC107",fontWeight:700,marginTop:2}},"分")),
+            h("div",{style:{fontSize:28,fontWeight:900,color:"#A16207"}},st.draws),
+            h("div",{style:{fontSize:11,color:"#A16207",fontWeight:700,marginTop:2}},"分")),
           h("div",{style:{textAlign:"center",padding:"10px 20px",flex:1,background:"#fff"}},
-            h("div",{style:{fontSize:28,fontWeight:900,color:"#F44336"}},st.losses),
-            h("div",{style:{fontSize:11,color:"#F44336",fontWeight:700,marginTop:2}},"敗"))),
+            h("div",{style:{fontSize:28,fontWeight:900,color:"#B91C1C"}},st.losses),
+            h("div",{style:{fontSize:11,color:"#B91C1C",fontWeight:700,marginTop:2}},"敗"))),
         isTournamentTarget&&h("div",{style:{marginTop:16,paddingTop:14,borderTop:"1px solid #F3F4F6"}},
           h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:800,color:"#102A43",letterSpacing:1.1,marginBottom:8}},"TOURNAMENT RESULT"),
           h("div",{style:{fontSize:15,fontWeight:800,color:schedule.rank?"#1D4E89":"#94A3B8",background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,padding:"10px 12px",textAlign:"center"}},schedule.rank||"未入力"),
@@ -9086,11 +9086,11 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
                   try{const k=JSON.parse(r.pkKickers);if(Array.isArray(k)&&k.length>0){
                     const po=k.filter(x=>x.success).length;
                     const pt=Array.isArray(r.pkTheirSeq)?r.pkTheirSeq.filter(Boolean).length:Number(r.pkTheir||0);
-                    return h("span",{style:{fontSize:10,fontWeight:700,color:po>pt?"#4CAF50":"#F44336",background:po>pt?"#E8F5E9":"#FFEBEE",borderRadius:6,padding:"2px 6px"}},"PK "+po+"-"+pt);
+                    return h("span",{style:{fontSize:10,fontWeight:700,color:po>pt?"#15803D":"#B91C1C",background:po>pt?"#F1F7F2":"#FBEFF0",borderRadius:6,padding:"2px 6px"}},"PK "+po+"-"+pt);
                   }}catch(e){}
                   if(r.pkOur!==""&&r.pkTheir!==""&&(Number(r.pkOur)+Number(r.pkTheir))>0){
                     const po=Number(r.pkOur),pt=Number(r.pkTheir);
-                    return h("span",{style:{fontSize:10,fontWeight:700,color:po>pt?"#4CAF50":"#F44336",background:po>pt?"#E8F5E9":"#FFEBEE",borderRadius:6,padding:"2px 6px"}},"PK "+po+"-"+pt);
+                    return h("span",{style:{fontSize:10,fontWeight:700,color:po>pt?"#15803D":"#B91C1C",background:po>pt?"#F1F7F2":"#FBEFF0",borderRadius:6,padding:"2px 6px"}},"PK "+po+"-"+pt);
                   }
                   return null;
                 })()),
