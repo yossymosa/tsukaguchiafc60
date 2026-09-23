@@ -45,7 +45,7 @@ const MAPS = {
     "ID":"id", "日付":"date", "相手チーム":"opponent",
     "試合形式":"formatLabel", "第○試合":"gameNumber", "メモ":"memo",
     "スケジュールID":"scheduleId", "種類":"type",
-    "YouTubeURL":"youtubeUrl", "前半URL":"youtubeUrl1st", "後半URL":"youtubeUrl2nd",
+    "YouTubeURL":"youtubeUrl", "前半URL":"youtubeUrl1st", "後半URL":"youtubeUrl2nd", "PK戦URL":"youtubeUrlPk",
     "PK塚口":"pkOur", "PK相手":"pkTheir",
     "PKキッカー":"pkKickers", "PK相手シーケンス":"pkTheirSeq"
   },
@@ -1070,6 +1070,8 @@ function dispatch(req) {
 
     // ── 全データ取得 ──────────────────────────────────────────
     case "getAll": {
+      // 新しい結果項目（PK戦動画URLを含む）を既存シートにも安全に追加
+      ensureSheetColumnsByMap("試合結果", MAPS.result);
       const members   = sheetToObjects("メンバー",     MAPS.member);
       const schedules = sheetToObjects("スケジュール", MAPS.schedule);
       const results   = sheetToObjects("試合結果",     MAPS.result);
@@ -1088,9 +1090,10 @@ function dispatch(req) {
         const myGoals = goals.filter(g => g.resultId === r.id && resolveTeam(g) === "us");
         const theirGoals = goals.filter(g => g.resultId === r.id && resolveTeam(g) === "them");
 
-        // スケジュールと紐付け（scheduleId優先、なければ日付一致）
+        // スケジュールIDを最優先。IDのない旧データは同日の予定が1件だけの場合に限り補完する。
+        const sameDateSchedules = schedules.filter(s => s.date === r.date);
         const sch = schedules.find(s => s.id === r.scheduleId) ||
-                    schedules.find(s => s.date === r.date);
+                    (sameDateSchedules.length === 1 ? sameDateSchedules[0] : null);
         if (sch && !r.type) r.type = sch.type;
 
         return {
@@ -1377,6 +1380,7 @@ function dispatch(req) {
 
     // ── 試合結果追加 ──────────────────────────────────────────
     case "addResult": {
+      ensureSheetColumnsByMap("試合結果", MAPS.result);
       const r = req.result;
       const obj = {
         id:           genId(),
@@ -1390,6 +1394,7 @@ function dispatch(req) {
         youtubeUrl:   r.youtubeUrl   || "",
         youtubeUrl1st:r.youtubeUrl1st|| "",
         youtubeUrl2nd:r.youtubeUrl2nd|| "",
+        youtubeUrlPk: r.youtubeUrlPk || "",
       };
       appendObject("試合結果", MAPS.result, obj);
       return { id: obj.id };
@@ -1417,8 +1422,10 @@ function dispatch(req) {
       const members = sheetToObjects("メンバー", MAPS.member);
 
       // YouTube URL・PKスコアを試合結果シートに保存
+      ensureSheetColumnsByMap("試合結果", MAPS.result);
       const needsResultUpdate = req.youtubeUrl !== undefined || req.youtubeUrl1st !== undefined
-        || req.youtubeUrl2nd !== undefined || req.pkOur !== undefined || req.pkTheir !== undefined;
+        || req.youtubeUrl2nd !== undefined || req.youtubeUrlPk !== undefined
+        || req.pkOur !== undefined || req.pkTheir !== undefined;
       if (needsResultUpdate) {
         const rsh = getSheet("試合結果");
         if (rsh && rsh.getLastRow() > 1) {
@@ -1434,6 +1441,7 @@ function dispatch(req) {
               set("YouTubeURL", req.youtubeUrl   || "");
               set("前半URL",    req.youtubeUrl1st || "");
               set("後半URL",    req.youtubeUrl2nd || "");
+              set("PK戦URL",    req.youtubeUrlPk || "");
               if (req.pkOur   !== undefined) set("PK塚口",  req.pkOur  != null ? req.pkOur  : "");
               if (req.pkTheir !== undefined) set("PK相手",  req.pkTheir != null ? req.pkTheir : "");
               if (req.pkKickers  !== undefined) set("PKキッカー",      req.pkKickers  ? JSON.stringify(req.pkKickers)  : "");

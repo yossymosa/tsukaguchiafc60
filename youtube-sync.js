@@ -6,11 +6,13 @@
 
 const YOUTUBE_API_KEY = ""; // Optional. If empty, Script Property YOUTUBE_API_KEY is used.
 const PLAYLIST_URLS = [
+  "https://www.youtube.com/playlist?list=PLLo2VVDM0WenwtPBIdaiRfcqji7Q5hlor",
   "https://www.youtube.com/playlist?list=PLLo2VVDM0WelHQk4YEdf-dvejZLkVbJ2N",
 ];
 const YOUTUBE_SYNC_TIMEZONE = "Asia/Tokyo";
 
 const SHEET_RESULTS = "\u8a66\u5408\u7d50\u679c";
+const SHEET_SCHEDULES = "\u30b9\u30b1\u30b8\u30e5\u30fc\u30eb";
 const SHEET_MEMBERS = "\u30e1\u30f3\u30d0\u30fc";
 const SHEET_VIDEO_LOG = "\u52d5\u753b\u30ed\u30b0";
 
@@ -19,21 +21,25 @@ const HEADER_DATE = "\u65e5\u4ed8";
 const HEADER_OPPONENT = "\u76f8\u624b\u30c1\u30fc\u30e0";
 const HEADER_GAME_NUMBER = "\u7b2c\u25cb\u8a66\u5408";
 const HEADER_SCHEDULE_ID = "\u30b9\u30b1\u30b8\u30e5\u30fc\u30ebID";
+const HEADER_SCHEDULE_TITLE = "\u8a66\u5408\u5206\u985e";
 
 const COL_YT = "YouTubeURL";
 const COL_YT_1ST = "\u524d\u534aURL";
 const COL_YT_2ND = "\u5f8c\u534aURL";
+const COL_YT_PK = "PK\u6226URL";
 const COL_YT_DESC = "YouTube\u6982\u8981";
 const COL_YT_GOALS = "YouTube\u62bd\u51fa\u30b4\u30fc\u30eb";
 
 const HALF_FIRST_JA = "\u524d\u534a";
 const HALF_SECOND_JA = "\u5f8c\u534a";
+const HALF_PK = "pk";
 const LABEL_GOAL = "\u5f97\u70b9";
 const LABEL_CONCEDE = "\u5931\u70b9";
 
 function syncYouTubePlaylist() {
   const ss = SpreadsheetApp.openById(getSpreadsheetIdForYoutube_());
   const resultSh = ss.getSheetByName(SHEET_RESULTS);
+  const scheduleSh = ss.getSheetByName(SHEET_SCHEDULES);
   const memberSh = ss.getSheetByName(SHEET_MEMBERS);
   if (!resultSh) throw new Error("Results sheet not found");
 
@@ -45,11 +51,13 @@ function syncYouTubePlaylist() {
     yt: ensureColumn_(resultSh, resultHeaders, COL_YT),
     yt1st: ensureColumn_(resultSh, resultHeaders, COL_YT_1ST),
     yt2nd: ensureColumn_(resultSh, resultHeaders, COL_YT_2ND),
+    ytPk: ensureColumn_(resultSh, resultHeaders, COL_YT_PK),
     ytDesc: ensureColumn_(resultSh, resultHeaders, COL_YT_DESC),
     ytGoals: ensureColumn_(resultSh, resultHeaders, COL_YT_GOALS),
   };
 
-  const results = loadResults_(resultSh, resultHeaders);
+  const scheduleTitles = loadScheduleTitles_(scheduleSh);
+  const results = loadResults_(resultSh, resultHeaders, scheduleTitles);
 
   let allVideos = [];
   PLAYLIST_URLS.forEach(url => {
@@ -87,6 +95,7 @@ function syncYouTubePlaylist() {
     let targetCol = col.yt;
     if (parsed.half === HALF_FIRST_JA || parsed.half === "1st") targetCol = col.yt1st;
     if (parsed.half === HALF_SECOND_JA || parsed.half === "2nd") targetCol = col.yt2nd;
+    if (parsed.half === HALF_PK) targetCol = col.ytPk;
 
     const current = String(resultSh.getRange(row, targetCol).getValue() || "").trim();
     const goalLines = (video.parsedGoals || [])
@@ -225,13 +234,20 @@ function parseTitle_(title) {
   const opponent = cleanOpponent_(extractOpponent_(t));
   const gameNumber = extractGameNumber_(t);
   const half = extractHalf_(t);
+  const tournament = extractTournamentTitle_(t);
   return {
     date,
     opponent,
     gameNumber: gameNumber ? String(gameNumber) : "",
     half,
+    tournament,
     raw: t,
   };
+}
+
+function extractTournamentTitle_(text) {
+  const m = String(text || "").match(/[【\[]([^】\]]+)[】\]]/);
+  return m ? String(m[1] || "").trim() : "";
 }
 
 function extractDateFromText_(text) {
@@ -252,7 +268,9 @@ function extractOpponent_(text) {
 function cleanOpponent_(name) {
   return String(name || "")
     .replace(/\s+/g, " ")
+    .replace(/(?:PK\s*戦|ＰＫ\s*戦|penalty\s*shootout)\s*$/i, "")
     .replace(/(?:前半|後半|1st|2nd|3rd|第\d+試合|\d+本目|TM|トレマ)\s*$/i, "")
+    .replace(/(?:公式戦|カップ戦|練習試合|トレマ|TM)\s*$/i, "")
     .trim();
 }
 
@@ -267,6 +285,7 @@ function extractGameNumber_(text) {
 
 function extractHalf_(text) {
   const t = String(text || "");
+  if (/PK\s*戦|ＰＫ\s*戦|penalty\s*shootout/i.test(t)) return HALF_PK;
   if (/前半|1st/i.test(t)) return "1st";
   if (/後半|2nd/i.test(t)) return "2nd";
   if (/3rd/i.test(t)) return "3rd";
@@ -291,6 +310,9 @@ function applyFallbackGameNumbers_(videos) {
     rows.forEach(v => {
       const p = v.parsedTitle || parseTitle_(v.title) || {};
       if (!p.gameNumber) {
+        // PK動画だけでは何試合目かを安全に推測できない。タイトルに第○試合を
+        // 付けるか、日付＋相手が一意に一致する場合だけfindResult_で紐付ける。
+        if (p.half === HALF_PK) return;
         p.gameNumber = String(nextNo++);
         v.parsedTitle = p;
       } else {
@@ -369,7 +391,21 @@ function writeVideoLog_(ss, videos) {
   sh.setFrozenRows(1);
 }
 
-function loadResults_(resultSh, headers) {
+function loadScheduleTitles_(scheduleSh) {
+  if (!scheduleSh || scheduleSh.getLastRow() < 2) return {};
+  const headers = scheduleSh.getRange(1, 1, 1, scheduleSh.getLastColumn()).getValues()[0].map(String);
+  const idIdx = headers.indexOf(HEADER_ID);
+  const titleIdx = headers.indexOf(HEADER_SCHEDULE_TITLE);
+  if (idIdx < 0 || titleIdx < 0) return {};
+  const rows = scheduleSh.getRange(2, 1, scheduleSh.getLastRow() - 1, scheduleSh.getLastColumn()).getValues();
+  return rows.reduce((map, row) => {
+    const id = String(row[idIdx] || "").trim();
+    if (id) map[id] = String(row[titleIdx] || "").trim();
+    return map;
+  }, {});
+}
+
+function loadResults_(resultSh, headers, scheduleTitles={}) {
   if (!resultSh || resultSh.getLastRow() < 2) return [];
   const rows = resultSh.getRange(2, 1, resultSh.getLastRow() - 1, resultSh.getLastColumn()).getValues();
   const idIdx = headers.indexOf(HEADER_ID);
@@ -385,6 +421,7 @@ function loadResults_(resultSh, headers) {
     opponent: String(oppIdx >= 0 ? r[oppIdx] : ""),
     gameNumber: String(gameIdx >= 0 ? r[gameIdx] : ""),
     scheduleId: String(sidIdx >= 0 ? r[sidIdx] : ""),
+    scheduleTitle: String(scheduleTitles[String(sidIdx >= 0 ? r[sidIdx] : "") || ""] || ""),
   })).filter(r => r.id);
 }
 
@@ -393,29 +430,26 @@ function findResult_(results, parsed) {
   const date = normalizeDate_(parsed.date);
   const gameNumber = String(parsed.gameNumber || "").trim();
   const opponent = cleanOpponent_(parsed.opponent || "");
+  const tournament = String(parsed.tournament || "").trim();
+  if (!date) return null;
 
-  if (date && gameNumber) {
-    const byGame = rows.find(r =>
-      normalizeDate_(r.date) === date &&
-      String(r.gameNumber || "").trim() === gameNumber
-    );
-    if (byGame) return byGame;
-  }
-
-  if (date && opponent) {
-    const byOpp = rows.find(r =>
-      normalizeDate_(r.date) === date &&
+  let candidates = rows.filter(r => normalizeDate_(r.date) === date);
+  if (opponent) {
+    candidates = candidates.filter(r =>
       normalizeText_(cleanOpponent_(r.opponent || "")) === normalizeText_(opponent)
     );
-    if (byOpp) return byOpp;
+  }
+  if (gameNumber) {
+    candidates = candidates.filter(r => String(r.gameNumber || "").trim() === gameNumber);
+  }
+  if (tournament) {
+    candidates = candidates.filter(r =>
+      normalizeText_(r.scheduleTitle || "") === normalizeText_(tournament)
+    );
   }
 
-  if (date) {
-    const byDate = rows.filter(r => normalizeDate_(r.date) === date);
-    if (byDate.length === 1) return byDate[0];
-  }
-
-  return null;
+  // 同日・別大会で候補が複数残る場合は、誤った試合へ紐付けない。
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 function extractPlaylistId_(url) {

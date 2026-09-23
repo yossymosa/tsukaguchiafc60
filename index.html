@@ -12,16 +12,43 @@
 <link rel="manifest" href="/manifest.json"/>
 <link rel="icon" href="/icon-512.png" type="image/png"/>
 <link rel="apple-touch-icon" href="/icon-512.png"/>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Noto+Sans+JP:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/preact@10.19.3/dist/preact.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/preact@10.19.3/hooks/dist/hooks.umd.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-html,body{height:100%;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:auto;background:#0F172A;font-family:'Noto Sans JP',sans-serif;-webkit-tap-highlight-color:transparent;}
+:root{--ink:#0B1220;--navy:#102A43;--blue:#1D4E89;--line:#D8E0E8;--muted:#64748B;--paper:#FFFFFF;--ground:#F4F6F8;}
+html,body{height:100%;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:auto;background:var(--ink);font-family:'Noto Sans JP',sans-serif;-webkit-tap-highlight-color:transparent;}
 ::-webkit-scrollbar{display:none;}
 input,select,textarea,button{font-family:'Noto Sans JP',sans-serif;}
-#app{min-height:100vh;overflow:visible;overflow-x:hidden;background:#F0F4F8;}
-.page{max-width:480px;margin:0 auto;min-height:100vh;overflow:visible;overflow-x:hidden;padding-bottom:24px;}
+#app{min-height:100vh;overflow:visible;overflow-x:hidden;background:var(--ground);}
+.page{max-width:480px;margin:0 auto;min-height:100vh;overflow:visible;overflow-x:hidden;padding-bottom:24px;background:var(--ground);}
+button{transition:background .16s ease,color .16s ease,border-color .16s ease,transform .16s ease;}
+button:active{transform:translateY(1px);}
+.app-header{background:var(--ink);padding:16px 16px 14px;border-bottom:3px solid #2F80ED;color:#fff;}
+.header-top{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.header-brand{display:flex;align-items:center;gap:10px;min-width:0;}
+.brand-mark,.login-mark{width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:#2F80ED;color:#fff;border:1px solid rgba(255,255,255,.3);font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:16px;font-weight:700;letter-spacing:.8px;flex-shrink:0;}
+.brand-kicker{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:11px;letter-spacing:1.6px;color:#8FB8E8;line-height:1.1;}
+.brand-name{font-size:16px;font-weight:900;letter-spacing:.2px;line-height:1.3;white-space:nowrap;}
+.header-user{display:flex;align-items:center;gap:7px;flex-shrink:0;}
+.header-user-name{font-size:11px;color:#D8E8F8;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.header-action{appearance:none;background:transparent;border:1px solid rgba(216,232,248,.42);border-radius:4px;color:#fff;padding:5px 7px;font-size:10px;font-weight:700;cursor:pointer;}
+.header-utilities{display:flex;align-items:center;gap:12px;margin-top:14px;padding-top:10px;border-top:1px solid rgba(216,232,248,.18);flex-wrap:wrap;}
+.header-link,.header-utility-button{appearance:none;background:transparent;border:0;color:#B9CCE0;text-decoration:none;padding:0;font-size:10px;font-weight:800;letter-spacing:.4px;cursor:pointer;}
+.header-link:hover,.header-utility-button:hover{color:#fff;}
+.video-switch{display:inline-flex;align-items:center;gap:6px;margin-left:auto;}
+.video-switch-label{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:11px;letter-spacing:1px;color:#6E8CAA;}
+.video-link{color:#fff;text-decoration:none;border-left:1px solid rgba(216,232,248,.35);padding-left:6px;font-size:10px;font-weight:800;}
+.app-tabbar{display:flex;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 3px 10px rgba(15,23,42,.05);}
+.app-tab{flex:1;min-width:0;padding:12px 2px 10px;border:0;border-bottom:2px solid transparent;background:#fff;color:#7B8794;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.app-tab.is-active{color:var(--navy);border-bottom-color:#2F80ED;background:#F8FBFF;font-weight:900;}
+.login-shell{min-height:100vh;background:var(--ink);display:flex;align-items:center;justify-content:center;padding:24px;}
+.login-card{background:#fff;border:1px solid #D8E0E8;border-top:4px solid #2F80ED;padding:30px;width:100%;max-width:360px;box-shadow:0 18px 48px rgba(0,0,0,.26);}
+.login-brand{display:flex;align-items:center;gap:12px;margin-bottom:28px;}
+.login-brand-copy{min-width:0;text-align:left;}
+.login-title{font-size:20px;font-weight:900;color:var(--ink);line-height:1.2;}
+.login-subtitle{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:12px;letter-spacing:1.4px;color:var(--muted);margin-top:3px;}
 @media print{
   html,body,#app{background:#fff !important;}
   button{display:none !important;}
@@ -720,10 +747,10 @@ function calcStats(rs) {
 }
 
 const css={
-  inp:{width:"100%",border:"2px solid #eee",borderRadius:10,padding:"10px 14px",fontSize:15,outline:"none"},
-  bO: {background:"#1D4ED8",color:"#fff",border:"none",borderRadius:20,padding:"8px 18px",fontSize:13,fontWeight:700,cursor:"pointer"},
-  bG: {flex:1,padding:14,border:"2px solid #eee",borderRadius:12,background:"#fff",fontSize:14,cursor:"pointer"},
-  bS: {flex:1,padding:14,border:"none",borderRadius:12,background:"#1D4ED8",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"},
+  inp:{width:"100%",border:"1px solid #CBD5E1",borderRadius:6,padding:"10px 12px",fontSize:15,outline:"none",background:"#fff"},
+  bO: {background:"#102A43",color:"#fff",border:"none",borderRadius:6,padding:"9px 16px",fontSize:13,fontWeight:800,cursor:"pointer"},
+  bG: {flex:1,padding:13,border:"1px solid #CBD5E1",borderRadius:6,background:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"},
+  bS: {flex:1,padding:13,border:"none",borderRadius:6,background:"#102A43",color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer"},
 };
 
 async function showLocalNotification(title, options={}) {
@@ -799,19 +826,19 @@ async function enableNotifications() {
 // ── 共通コンポーネント ────────────────────────────────────────
 function Loader({msg="処理中..."}) {
   return h("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center"}},
-    h("div",{style:{background:"#fff",borderRadius:16,padding:"18px 28px",fontWeight:700,fontSize:14}},"⏳ "+msg));
+    h("div",{style:{background:"#fff",borderRadius:6,padding:"18px 28px",fontWeight:800,fontSize:14,color:"#0B1220",borderTop:"3px solid #2F80ED"}},msg));
 }
 function Modal({title,onClose,children,position="bottom"}) {
   const isCenter = position === "center";
   return h("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:4000,display:"flex",alignItems:isCenter?"center":"flex-end",padding:isCenter?"12px 0":"0"}},
-    h("div",{style:{background:"#fff",width:"100%",maxWidth:isCenter?460:480,margin:"0 auto",borderRadius:isCenter?16:"24px 24px 0 0",maxHeight:isCenter?"82vh":"92vh",overflowY:"auto"}},
+    h("div",{style:{background:"#fff",width:"100%",maxWidth:isCenter?460:480,margin:"0 auto",borderRadius:isCenter?8:"12px 12px 0 0",maxHeight:isCenter?"82vh":"92vh",overflowY:"auto"}},
       h("div",{style:{padding:"18px 22px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f5f5f5",position:"sticky",top:0,background:"#fff",zIndex:1}},
         h("div",{style:{fontSize:17,fontWeight:800,color:"#1a1a2e"}},title),
         h("button",{onClick:onClose,style:{background:"#f0f0f0",border:"none",borderRadius:"50%",width:32,height:32,fontSize:16,cursor:"pointer"}},"×")),
       h("div",{style:{padding:"16px 22px 32px"}},children)));
 }
 function Bdg({label,color,bg,small}) {
-  return h("span",{style:{background:bg||color+"22",color,borderRadius:6,padding:small?"2px 7px":"3px 10px",fontSize:small?10:11,fontWeight:700,display:"inline-block"}},label);
+  return h("span",{style:{background:bg||color+"22",color,borderRadius:4,padding:small?"2px 7px":"3px 10px",fontSize:small?10:11,fontWeight:800,display:"inline-block"}},label);
 }
 function RWdg({our,their,pk,status,date}) {
   const stRaw = normalizeMatchStatus(status);
@@ -847,93 +874,38 @@ function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy
     href:l.url,
     target:"_blank",
     rel:"noopener noreferrer",
-    style:{
-      textDecoration:"none",
-      fontSize:10,
-      fontWeight:700,
-      color:"#fff",
-      padding:"5px 9px",
-      borderRadius:999,
-      background:"rgba(255,255,255,0.12)",
-      border:"1px solid rgba(255,255,255,0.25)",
-      display:"inline-flex",
-      alignItems:"center",
-      justifyContent:"center",
-      gap:4,
-      lineHeight:1
-    }
-  },`${l.icon} ${l.label}`);
-  return h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",padding:"14px 16px 12px",overflow:"hidden",position:"relative"}},
-    h("div",{style:{position:"absolute",top:-20,right:-20,width:120,height:120,borderRadius:"50%",background:"rgba(29,78,216,0.16)"}}),
-    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"relative"}},
-      h("div",{},
-        h("div",{style:{fontSize:18,fontWeight:900,color:"#fff"}},"⚽ 塚口AFC Jr"),
-        h("div",{style:{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:3}},"60期生の記録")),
-      h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}},
-        h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.85)",fontWeight:600}},user.name),
-        h("div",{style:{display:"flex",gap:6}},
-          h("button",{onClick:onRefresh,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"🔄"),
-          h("button",{onClick:onLogout,style:{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer"}},"ログアウト")))),
-    h("div",{style:{display:"flex",gap:6,marginTop:8,position:"relative",flexWrap:"wrap"}},
+    className:"header-link"
+  },l.label);
+  return h("header",{className:"app-header"},
+    h("div",{className:"header-top"},
+      h("div",{className:"header-brand"},
+        h("div",{className:"brand-mark"},"TAFC"),
+        h("div",{},
+          h("div",{className:"brand-kicker"},"JUNIOR FOOTBALL CLUB / 60TH CLASS"),
+          h("div",{className:"brand-name"},"塚口AFC Jr"))),
+      h("div",{className:"header-user"},
+        h("div",{className:"header-user-name"},user.name),
+        h("button",{onClick:onRefresh,className:"header-action"},"更新"),
+        h("button",{onClick:onLogout,className:"header-action"},"ログアウト"))),
+    h("div",{className:"header-utilities"},
       topLinks.map(renderHeaderLink),
       h("button",{
         onClick:()=>onOpenTactics&&onOpenTactics(),
-        style:{
-          border:"1px solid rgba(255,255,255,0.25)",
-          borderRadius:999,
-          background:"rgba(255,255,255,0.12)",
-          color:"#fff",
-          fontSize:10,
-          fontWeight:800,
-          padding:"5px 10px",
-          cursor:"pointer",
-          display:"inline-flex",
-          alignItems:"center",
-          gap:4,
-          lineHeight:1
-        }
-      },"🧠 戦術ボード"),
-      (video26 || video25) && h("div",{
-        style:{
-          display:"inline-flex",
-          alignItems:"center",
-          gap:6,
-          padding:"4px 8px",
-          borderRadius:999,
-          background:"rgba(255,255,255,0.10)",
-          border:"1px solid rgba(255,255,255,0.22)"
-        }
-      },
-        h("span",{style:{fontSize:10,fontWeight:800,color:"rgba(255,255,255,0.9)"}},"試合動画"),
+        className:"header-utility-button"
+      },"戦術ボード"),
+      (video26 || video25) && h("div",{className:"video-switch"},
+        h("span",{className:"video-switch-label"},"MATCH VIDEO"),
         video26 && h("a",{
           href:video26.url,
           target:"_blank",
           rel:"noopener noreferrer",
-          style:{
-            textDecoration:"none",
-            fontSize:10,
-            fontWeight:800,
-            color:"#fff",
-            padding:"3px 8px",
-            borderRadius:999,
-            background:"rgba(255,255,255,0.16)",
-            border:"1px solid rgba(255,255,255,0.25)"
-          }
+          className:"video-link"
         },"26年度"),
         video25 && h("a",{
           href:video25.url,
           target:"_blank",
           rel:"noopener noreferrer",
-          style:{
-            textDecoration:"none",
-            fontSize:10,
-            fontWeight:800,
-            color:"#fff",
-            padding:"3px 8px",
-            borderRadius:999,
-            background:"rgba(255,255,255,0.16)",
-            border:"1px solid rgba(255,255,255,0.25)"
-          }
+          className:"video-link"
         },"25年度")
       )));
 }
@@ -1162,16 +1134,17 @@ function Login({onLogin}) {
     setLoading(false);
   };
   const setSignupField=(key,val)=>setSignup(s=>({...s,[key]:val}));
-  return h("div",{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a1a2e,#0f3460)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}},
+  return h("div",{className:"login-shell"},
     loading&&h(Loader,{msg:mode==="login"?"ログイン中...":"処理中..."}),
-    h("div",{style:{background:"#fff",borderRadius:24,padding:32,width:"100%",maxWidth:360,boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}},
-      h("div",{style:{textAlign:"center",marginBottom:28}},
-        h("div",{style:{fontSize:52}},"⚽"),
-        h("div",{style:{fontSize:22,fontWeight:900,color:"#1a1a2e"}},"塚口AFC Jr"),
-        h("div",{style:{fontSize:12,color:"#aaa",marginTop:4}},"60期生")),
-      h("div",{style:{display:"flex",gap:8,marginBottom:18,background:"#F3F4F8",padding:4,borderRadius:12}},
-        h("button",{onClick:()=>{setMode("login");setErr("");},style:{flex:1,padding:"10px 0",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,background:mode==="login"?"#fff":"transparent",color:mode==="login"?"#1a1a2e":"#666",boxShadow:mode==="login"?"0 4px 14px rgba(0,0,0,0.08)":"none"}},"ログイン"),
-        h("button",{onClick:()=>{setMode("signup");setErr("");},style:{flex:1,padding:"10px 0",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,background:mode==="signup"?"#fff":"transparent",color:mode==="signup"?"#1a1a2e":"#666",boxShadow:mode==="signup"?"0 4px 14px rgba(0,0,0,0.08)":"none"}},"新規登録")),
+    h("div",{className:"login-card"},
+      h("div",{className:"login-brand"},
+        h("div",{className:"login-mark"},"TAFC"),
+        h("div",{className:"login-brand-copy"},
+          h("div",{className:"login-title"},"塚口AFC Jr"),
+          h("div",{className:"login-subtitle"},"JUNIOR FOOTBALL CLUB / 60TH CLASS"))),
+      h("div",{style:{display:"flex",gap:0,marginBottom:18,borderBottom:"1px solid #D8E0E8"}},
+        h("button",{onClick:()=>{setMode("login");setErr("");},style:{flex:1,padding:"10px 0",border:"none",borderBottom:mode==="login"?"2px solid #2F80ED":"2px solid transparent",cursor:"pointer",fontWeight:800,background:"transparent",color:mode==="login"?"#102A43":"#64748B"}},"ログイン"),
+        h("button",{onClick:()=>{setMode("signup");setErr("");},style:{flex:1,padding:"10px 0",border:"none",borderBottom:mode==="signup"?"2px solid #2F80ED":"2px solid transparent",cursor:"pointer",fontWeight:800,background:"transparent",color:mode==="signup"?"#102A43":"#64748B"}},"新規登録")),
       mode==="login"
         ? h(Fragment,null,
             h("div",{style:{marginBottom:14}},
@@ -1190,22 +1163,22 @@ function Login({onLogin}) {
                   onKeyDown:e=>e.key==="Enter"&&login()}),
                 h("button",{onClick:()=>setShowPass(p=>!p),
                   style:{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",
-                    background:"none",border:"none",cursor:"pointer",fontSize:18,color:"#aaa",padding:4}},
-                  showPass?"🙈":"👁"))))
+                    background:"none",border:"none",cursor:"pointer",fontSize:11,fontWeight:800,color:"#64748B",padding:4}},
+                  showPass?"隠す":"表示"))))
         : h(Fragment,null,
             h("div",{style:{marginBottom:12}},
               h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"メールアドレス"),
               h("input",{value:signup.email,onChange:e=>{setSignupField("email",e.target.value);setApprovalStatus("none");setIssuedPasswordMsg("");},type:"email",placeholder:"parent@example.com",autoComplete:"email",style:css.inp})),
             approvalStatus==="none"&&h("div",{style:{marginBottom:14}},
-              h("button",{onClick:requestApproval,type:"button",style:{width:"100%",padding:"12px 14px",background:"#EEF2FF",color:"#334155",border:"1px solid #D8E1FF",borderRadius:12,fontWeight:700,cursor:"pointer"}},"承認を申請")),
+              h("button",{onClick:requestApproval,type:"button",style:{width:"100%",padding:"12px 14px",background:"#EAF2FB",color:"#102A43",border:"1px solid #B9CCE0",borderRadius:6,fontWeight:800,cursor:"pointer"}},"承認を申請")),
             approvalStatus==="checking"&&h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,background:"#F8FAFC",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},"承認状態を確認しています..."),
             approvalStatus==="pending"&&h("div",{style:{fontSize:12,color:"#9A6700",marginBottom:12,background:"#FFF7E8",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},"管理者へ承認メールを送信しました。承認後にパスワード発行メールが届きます。"),
             approvalStatus==="approved"&&h("div",{style:{fontSize:12,color:"#166534",marginBottom:12,background:"#ECFDF3",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},issuedPasswordMsg||"承認済みです。メールを確認してログインしてください。"),
             approvalStatus==="rejected"&&h("div",{style:{fontSize:12,color:"#B42318",marginBottom:12,background:"#FEF3F2",padding:"10px 12px",borderRadius:10,lineHeight:1.6}},"この申請は承認されていません。管理者へ連絡してください。"),
             approvalStatus==="none"&&h("div",{style:{fontSize:11,color:"#777",marginTop:-2,marginBottom:12,lineHeight:1.6}},"メールアドレス申請 → 管理者承認 → パスワード発行で登録完了です。"),
-            approvalStatus==="approved"&&h("button",{type:"button",onClick:()=>{setMode("login");setEmail(signup.email||"");setErr("");},style:{width:"100%",padding:"12px 14px",background:"#1D4ED8",color:"#fff",border:"none",borderRadius:12,fontWeight:700,cursor:"pointer",marginBottom:8}},"ログイン画面へ移動")),
+            approvalStatus==="approved"&&h("button",{type:"button",onClick:()=>{setMode("login");setEmail(signup.email||"");setErr("");},style:{width:"100%",padding:"12px 14px",background:"#102A43",color:"#fff",border:"none",borderRadius:6,fontWeight:800,cursor:"pointer",marginBottom:8}},"ログイン画面へ移動")),
       err&&h("div",{style:{color:"#F44336",fontSize:13,marginBottom:12,background:"#EFF6FF",padding:"8px 12px",borderRadius:8}},err),
-      mode==="login"&&h("button",{onClick:login,style:{width:"100%",padding:14,background:"#1D4ED8",color:"#fff",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:"pointer"}},"ログイン")));
+      mode==="login"&&h("button",{onClick:login,style:{width:"100%",padding:14,background:"#102A43",color:"#fff",border:"none",borderRadius:6,fontSize:16,fontWeight:800,cursor:"pointer"}},"ログイン")));
 }
 
 // ── YouTube テンプレ生成 ─────────────────────────────────────
@@ -2282,11 +2255,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const phaseScores = visibleHalfOptions.map(hf =>
     `${halfScoreMapOur[hf]||0}-${halfScoreMapTheir[hf]||0}`
   );
-  const headerBlock = h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"14px 16px 12px",position:"sticky",top:0,zIndex:1400}},
+  const headerBlock = h("div",{style:{background:"#0B1220",borderBottom:"3px solid #2F80ED",padding:"14px 16px 12px",position:"sticky",top:0,zIndex:1400}},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}},
       h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
         h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
-        h("button",{onClick:onHome,style:{background:"rgba(29,78,216,0.75)",border:"1px solid rgba(29,78,216,0.45)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"🏠 ホーム")
+        h("button",{onClick:onHome,style:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"ホーム")
       ),
       h("button",{
         onClick:onClickFavoriteButton,
@@ -2319,7 +2292,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     h("div",{style:{display:"flex",justifyContent:"flex-end",marginTop:12}},
       youtubeLinks.length
         ? h("div",{style:{display:"inline-flex",alignItems:"center",justifyContent:"flex-end",flexWrap:"wrap",gap:7}},
-            h("span",{style:{fontSize:12,fontWeight:800,color:"rgba(255,255,255,0.9)"}},"試合動画はこちら"),
+            h("span",{style:{fontSize:11,fontWeight:800,color:"rgba(255,255,255,0.7)",letterSpacing:.7}},"MATCH VIDEO"),
             ...youtubeLinks.map(x=>h("a",{key:x.key,href:x.url,target:"_blank",rel:"noopener noreferrer",
               style:{display:"inline-flex",alignItems:"center",background:"#FF0033",border:"1px solid #C7002A",borderRadius:999,padding:"6px 11px",color:"#fff",fontSize:11,fontWeight:800,textDecoration:"none",boxShadow:"0 4px 10px rgba(199,0,42,0.35)"}},
               youtubeKeyLabel(x.key)))
@@ -3124,20 +3097,33 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
   const next2Tc = nextSch2 ? getTC(nextSch2.type || "") : null;
   const next2TimeText = nextSch2 ? getScheduleTimeText(nextSch2) : "";
   const next2DaysUntil = nextSch2 ? Math.ceil((new Date(nd(nextSch2.date)+"T00:00:00")-new Date(today+"T00:00:00"))/(1000*60*60*24)) : null;
+  const nextDate = nextSch ? fmt(nextSch.date) : {y:"",m:"",d:"",dw:""};
+  const seasonFigures = [
+    {label:"試合数",value:fiscalStats.games,color:"#102A43"},
+    {label:"勝利",value:fiscalStats.wins,color:"#15803D"},
+    {label:"引分",value:fiscalStats.draws,color:"#A16207"},
+    {label:"敗戦",value:fiscalStats.losses,color:"#B91C1C"},
+    {label:"得点",value:fiscalStats.gf,color:"#1D4E89"},
+    {label:"失点",value:fiscalStats.ga,color:"#64748B"}
+  ];
   return h(Fragment,{},
     // ① 次の試合カード
-    nextSch&&h("div",{onClick:()=>onGoToDay&&onGoToDay(nextSch),style:{background:"#fff",borderRadius:16,padding:14,marginTop:8,marginBottom:16,boxShadow:"0 2px 10px rgba(0,0,0,0.06)",border:"1px solid #E2E8F0",cursor:"pointer"}},
+    nextSch&&h("div",{onClick:()=>onGoToDay&&onGoToDay(nextSch),style:{background:"#fff",borderRadius:8,padding:16,marginTop:8,marginBottom:16,boxShadow:"none",border:"1px solid #D8E0E8",borderLeft:"4px solid #2F80ED",cursor:"pointer"}},
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:10}},
-        h("div",{style:{fontSize:10,fontWeight:800,color:"#64748B",letterSpacing:1.3}},"NEXT EVENT"),
-        h(Bdg,{label:nextTc.lb,color:nextTc.bg,small:true})
+        h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"#102A43",letterSpacing:1.2}},"NEXT EVENT"),
+        h("div",{style:{fontSize:11,fontWeight:800,color:"#2F80ED"}},"日程を見る  ›")
       ),
-        h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}},
-          h("div",{style:{minWidth:0,flex:1}},
-            h("div",{style:{fontSize:16,fontWeight:900,color:"#0F172A",marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},nextSch.title||"（タイトルなし）"),
-            h("div",{style:{fontSize:11,color:"#64748B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},fmt(nextSch.date).full+(nextTimeText?" ／ ⏰"+nextTimeText:"")+(nextSch.location?" ／ 📍"+nextSch.location:""))),
-          h("div",{style:{textAlign:"center",background:"#EFF6FF",borderRadius:12,padding:"8px 12px",border:"1px solid #BFDBFE",flexShrink:0}},
-            h("div",{style:{fontSize:24,fontWeight:900,color:"#1D4ED8",lineHeight:1}},daysUntil===0?"今日":daysUntil),
-            h("div",{style:{fontSize:10,color:"#1D4ED8",fontWeight:700,marginTop:2}},daysUntil===0?"":"日後"))),
+        h("div",{style:{display:"flex",alignItems:"stretch",gap:14}},
+          h("div",{style:{width:90,flexShrink:0,paddingRight:14,borderRight:"1px solid #D8E0E8",textAlign:"center"}},
+            h("div",{style:{fontSize:10,fontWeight:800,color:"#64748B",letterSpacing:.6}},nextDate.y),
+            h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:42,fontWeight:700,color:"#0B1220",lineHeight:1,letterSpacing:.4}},nextDate.m+"/"+nextDate.d),
+            h("div",{style:{fontSize:11,fontWeight:800,color:"#475569",marginTop:5}},"("+nextDate.dw+")")),
+          h("div",{style:{minWidth:0,flex:1,padding:"3px 0"}},
+            h("div",{style:{marginBottom:8}},h(Bdg,{label:nextTc.lb,color:nextTc.bg,small:true})),
+            h("div",{style:{fontSize:17,fontWeight:900,color:"#0B1220",marginBottom:5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},nextSch.title||"（タイトルなし）"),
+            nextSch.location&&h("div",{style:{fontSize:12,color:"#475569",marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},nextSch.location),
+            nextTimeText&&h("div",{style:{fontSize:12,fontWeight:700,color:"#475569"}},nextTimeText))
+        ),
         nextSch2&&h("div",{style:{marginTop:10,paddingTop:10,borderTop:"1px dashed #E2E8F0"}},
           h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}},
             h("div",{style:{display:"flex",alignItems:"center",gap:6,minWidth:0,flex:1}},
@@ -3148,48 +3134,29 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
               (next2DaysUntil===0?"今日":`${next2DaysUntil}日後`))
           ),
           h("div",{style:{fontSize:10,color:"#94A3B8",marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
-            fmt(nextSch2.date).full + (next2TimeText?" ／ ⏰"+next2TimeText:"") + (nextSch2.location?" ／ 📍"+nextSch2.location:""))
+            fmt(nextSch2.date).full + (next2TimeText?" / "+next2TimeText:"") + (nextSch2.location?" / "+nextSch2.location:""))
         )
       ),
-    // ② 26年度戦績
+    // ② シーズン戦績
     h("div",{style:{marginBottom:20}},
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},`${fiscalLabel}戦績`),
-      h("div",{onClick:()=>onOpenDashTab&&onOpenDashTab("result"),style:{background:"#fff",borderRadius:14,padding:"14px 12px",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",border:"1px solid #E2E8F0",cursor:onOpenDashTab?"pointer":"default"}},
+      h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"SEASON SUMMARY"),
+      h("div",{onClick:()=>onOpenDashTab&&onOpenDashTab("result"),style:{background:"#fff",borderRadius:8,padding:"16px 14px",boxShadow:"none",border:"1px solid #D8E0E8",cursor:onOpenDashTab?"pointer":"default"}},
         h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}},
-          h("div",{style:{fontSize:13,fontWeight:900,color:"#0F172A"}},"シーズンサマリー"),
-          h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4ED8",background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:999,padding:"4px 10px"}},`勝率 ${fiscalStats.pct}`)
+          h("div",{style:{fontSize:13,fontWeight:900,color:"#0F172A"}},`${fiscalLabel}（4月〜3月）`),
+          h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4E89",background:"#F1F6FC",border:"1px solid #C5D8EC",borderRadius:4,padding:"4px 8px"}},`勝率 ${fiscalStats.pct}`)
         ),
-        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,marginBottom:8}},
-          h("div",{style:{textAlign:"center",background:"#EFF6FF",borderRadius:10,padding:"8px 6px"}},
-            h("div",{style:{fontSize:22,fontWeight:900,color:"#1D4ED8",lineHeight:1}},fiscalStats.games),
-            h("div",{style:{fontSize:10,fontWeight:700,color:"#1D4ED8",marginTop:2}},"試合数")
-          ),
-          h("div",{style:{textAlign:"center",background:"#ECFDF3",borderRadius:10,padding:"8px 6px"}},
-            h("div",{style:{fontSize:22,fontWeight:900,color:"#16A34A",lineHeight:1}},fiscalStats.wins),
-            h("div",{style:{fontSize:10,fontWeight:700,color:"#16A34A",marginTop:2}},"勝ち")
-          ),
-          h("div",{style:{textAlign:"center",background:"#FEF9C3",borderRadius:10,padding:"8px 6px"}},
-            h("div",{style:{fontSize:22,fontWeight:900,color:"#CA8A04",lineHeight:1}},fiscalStats.draws),
-            h("div",{style:{fontSize:10,fontWeight:700,color:"#CA8A04",marginTop:2}},"引き分け")
-          ),
-          h("div",{style:{textAlign:"center",background:"#FEE2E2",borderRadius:10,padding:"8px 6px"}},
-            h("div",{style:{fontSize:22,fontWeight:900,color:"#DC2626",lineHeight:1}},fiscalStats.losses),
-            h("div",{style:{fontSize:10,fontWeight:700,color:"#DC2626",marginTop:2}},"負け")
-          )
-        ),
-        h("div",{style:{display:"flex",justifyContent:"flex-end",gap:6,alignItems:"center",marginBottom:2}},
-          h("span",{style:{fontSize:11,fontWeight:700,color:"#3730A3",background:"#EEF2FF",border:"1px solid #C7D2FE",borderRadius:999,padding:"3px 8px"}},`得点 ${fiscalStats.gf}`),
-          h("span",{style:{fontSize:11,fontWeight:700,color:"#64748B",background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:999,padding:"3px 8px"}},`失点 ${fiscalStats.ga}`)
-        ),
-        h("div",{style:{display:"flex",justifyContent:"flex-end",alignItems:"center",marginTop:8,fontSize:11,color:"#94A3B8",fontWeight:700}},
-          h("span",{style:{color:"#94A3B8"}},"›")
+        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",borderTop:"1px solid #E2E8F0",borderLeft:"1px solid #E2E8F0"}},
+          seasonFigures.map(item=>h("div",{key:item.label,style:{textAlign:"center",padding:"11px 5px",borderRight:"1px solid #E2E8F0",borderBottom:"1px solid #E2E8F0"}},
+            h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:28,fontWeight:700,color:item.color,lineHeight:1}},item.value),
+            h("div",{style:{fontSize:10,fontWeight:800,color:"#64748B",marginTop:4}},item.label)
+          ))
         )
       )
     ),
     // ③ 未回答一覧
     h("div",{style:{marginBottom:20}},
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"未回答一覧"),
-      pendingList.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"未回答はありません"),
+      h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"ACTION REQUIRED"),
+      pendingList.length===0&&h("div",{style:{background:"#fff",borderRadius:8,padding:18,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},"未回答はありません"),
       pendingList.map(n=>{
         const tt = String(n.targetType||"").toLowerCase();
         const kind = tt==="pending_carpool" ? "配車" : "出欠";
@@ -3198,7 +3165,7 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
         const dRaw = String(n.deadline||n.targetDeadline||"").trim();
         const dFmt = dRaw ? (fmt(dRaw).short || dRaw) : "";
         const summary = `${scheduleDate?fmt(scheduleDate).short+" ":""}${scheduleTitle}${dFmt?" / 締切 "+dFmt:""}`.trim();
-        return h("div",{key:"pending_"+n.id,onClick:()=>openNotice(n),style:{background:"#fff",borderRadius:14,padding:"11px 12px",marginBottom:8,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",borderLeft:"3px solid #F59E0B",cursor:"pointer"}},
+        return h("div",{key:"pending_"+n.id,onClick:()=>openNotice(n),style:{background:"#fff",borderRadius:8,padding:"12px",marginBottom:8,boxShadow:"none",border:"1px solid #D8E0E8",borderLeft:"3px solid #D97706",cursor:"pointer"}},
           h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5,gap:8}},
             h("div",{style:{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,flexWrap:"wrap"}},
               h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e",paddingRight:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}},`${kind} 未回答`)),
@@ -3209,14 +3176,14 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
       })),
     // ④ 最近の試合結果
     h("div",{style:{marginBottom:20}},
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"最近の試合結果"),
-      recent.length===0&&h("div",{style:{background:"#fff",borderRadius:14,padding:20,textAlign:"center",color:"#ccc",fontSize:13}},"試合記録がありません"),
+      h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"LATEST RESULTS"),
+      recent.length===0&&h("div",{style:{background:"#fff",borderRadius:8,padding:18,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},"試合記録がありません"),
       recent.map(r=>{
         const tc=getTC(getResultType(r));
         const s=findLinkedScheduleForResult(r, schedules);
         const cardTitle = String((s && s.title) || "").trim();
         const dt=fmt(r.date);
-        return h("div",{key:r.id,onClick:()=>onGoToMatch(r,s),style:{background:"#fff",borderRadius:14,padding:"13px 16px",marginBottom:8,display:"flex",alignItems:"center",gap:12,boxShadow:"0 2px 8px rgba(0,0,0,0.05)",cursor:"pointer"}},
+        return h("div",{key:r.id,onClick:()=>onGoToMatch(r,s),style:{background:"#fff",borderRadius:8,padding:"13px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12,boxShadow:"none",border:"1px solid #D8E0E8",cursor:"pointer"}},
           h("div",{style:{textAlign:"center",flexShrink:0,width:36}},h("div",{style:{fontSize:11,color:"#aaa"}},dt.short),h("div",{style:{fontSize:10,color:"#ccc"}},dt.dw)),
           h("div",{style:{width:3,height:40,background:tc.bg,borderRadius:2,flexShrink:0}}),
           h("div",{style:{flex:1,minWidth:0}},
@@ -8991,20 +8958,20 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         style:{width:"100%",marginTop:12,padding:12,background:"#FFEBEE",color:"#F44336",border:"none",borderRadius:12,fontSize:13,fontWeight:700,cursor:"pointer"}},"🗑 日程を削除")),
     // ヘッダー + 内部タブ（固定）
     h("div",{style:{position:"sticky",top:0,zIndex:1200,background:"#F0F4F8"}},
-      h("div",{style:{background:"linear-gradient(135deg,#1a1a2e,#0f3460)",padding:"14px 16px 12px"}},
+      h("div",{style:{background:"#0B1220",borderBottom:"3px solid #2F80ED",padding:"14px 16px 12px"}},
       h("div",{style:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}},
         h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
-        h("button",{onClick:onHome,style:{background:"rgba(29,78,216,0.75)",border:"1px solid rgba(29,78,216,0.45)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"🏠 ホーム")),
+        h("button",{onClick:onHome,style:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"ホーム")),
       h("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}},
         h(Bdg,{label:tc.lb,color:tc.bg}),
-        isAdmin&&h("button",{onClick:()=>{setSchForm(buildEditScheduleForm(schedule));setEditSch(true);},style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"5px 12px",color:"#fff",fontSize:12,cursor:"pointer",flexShrink:0}},"✏️ 編集")),
+        isAdmin&&h("button",{onClick:()=>{setSchForm(buildEditScheduleForm(schedule));setEditSch(true);},style:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"5px 12px",color:"#fff",fontSize:12,cursor:"pointer",flexShrink:0}},"編集")),
       h("div",{style:{fontSize:20,fontWeight:900,color:"#fff",marginBottom:4}},schedule.title||"（タイトルなし）"),
       h("div",{style:{fontSize:13,color:"rgba(255,255,255,0.6)"}},dt.full+(schedule.location?" ／ 📍"+schedule.location:""))),
-      h("div",{style:{background:"#fff",margin:"0 0 10px",boxShadow:"0 2px 10px rgba(0,0,0,0.08)",overflow:"hidden"}},
+      h("div",{style:{background:"#fff",margin:"0 0 10px",boxShadow:"0 2px 10px rgba(0,0,0,0.06)",overflow:"hidden"}},
         h("div",{style:{display:"flex"}},
           (isSimpleDay
-            ? [{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"}]
-            : [{k:"matches",l:"⚽ 試合"},{k:"detail",l:"📋 詳細"},{k:"attend",l:"✅ 出欠"},{k:"carpool",l:"🚗 配車"},{k:"settlement",l:"💴 精算"},{k:"album",l:"🖼 アルバム"}]
+            ? [{k:"detail",l:"詳細"},{k:"attend",l:"出欠"}]
+            : [{k:"matches",l:"試合"},{k:"detail",l:"詳細"},{k:"attend",l:"出欠"},{k:"carpool",l:"配車"},{k:"settlement",l:"精算"},{k:"album",l:"アルバム"}]
           ).map(t=>
             h("button",{key:t.k,onClick:()=>setDayTab(t.k),
               style:{flex:1,padding:"10px 4px 8px",border:"none",
@@ -9019,11 +8986,11 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         h("button",{onClick:openHpModal,
           style:{flex:1,padding:"11px",border:"2px solid #0F172A",borderRadius:12,
             background:"#E2E8F0",color:"#0F172A",fontSize:13,fontWeight:700,cursor:"pointer"}},
-          "📋 HP用テンプレ"),
+            "HPテンプレ"),
         isAdmin&&h("button",{onClick:()=>setYtModal(true),
           style:{flex:1,padding:"11px",border:"2px solid #B91C1C",borderRadius:12,
             background:"#FEE2E2",color:"#B91C1C",fontSize:13,fontWeight:700,cursor:"pointer"}},
-          "🎬 YouTubeテンプレ")
+            "YouTubeテンプレ")
       ),
       // 試合一覧・成績（matches タブ）
       dayTab==="matches"&&dayR.length>0&&h("div",{style:{background:"#fff",borderRadius:18,padding:"16px 20px",marginBottom:14,boxShadow:"0 4px 20px rgba(0,0,0,0.12)"}},
@@ -9948,14 +9915,14 @@ function App() {
 
   // ── 通常タブ画面 ──────────────────────────────────────────────
   const TABS=[
-    {k:"home",   i:"🏠",l:"ホーム"},
-    {k:"cal",    i:"📅",l:"日程"},
-    {k:"match",  i:"⚽",l:"試合"},
-    {k:"dash",   i:"📊",l:"成績"},
-    ...(uiTabVisibility.member ? [{k:"member", i:"👥",l:"選手"}] : []),
-    ...(uiTabVisibility.memo ? [{k:"memo",   i:"📝",l:"メモ"}] : []),
-    {k:"docs",   i:"📚",l:"資料"},
-    ...(isAdmin?[{k:"settings",i:"⚙️",l:"設定"}]:[]),
+    {k:"home",   l:"ホーム"},
+    {k:"cal",    l:"日程"},
+    {k:"match",  l:"試合"},
+    {k:"dash",   l:"成績"},
+    ...(uiTabVisibility.member ? [{k:"member",l:"選手"}] : []),
+    ...(uiTabVisibility.memo ? [{k:"memo",  l:"メモ"}] : []),
+    {k:"docs",   l:"資料"},
+    ...(isAdmin?[{k:"settings",l:"設定"}]:[]),
   ];
   const currentTabContent =
     tab==="home" ? h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab})
@@ -9973,16 +9940,11 @@ function App() {
   return h(Fragment,{},
     loading && h(Loader,{msg:loadMsg}),
     showTactics && h(TacticalBoardModal,{members,onClose:()=>setShowTactics(false)}),
-    h("div",{className:"page"},
-      h("div",{style:{position:"sticky",top:0,zIndex:1500,background:"#F0F4F8"}},
+    h("div",{className:"page app-shell"},
+      h("div",{style:{position:"sticky",top:0,zIndex:1500,background:"#F4F6F8"}},
         h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationEnabled,notificationBusy,onEnableNotifications:handleEnableNotifications,onOpenTactics:()=>setShowTactics(true)}),
-        h("div",{style:{background:"#fff",margin:"0 0 10px",borderRadius:0,boxShadow:"0 2px 10px rgba(0,0,0,0.08)",overflow:"hidden"}},
-          h("div",{style:{display:"flex"}},
-            TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),style:{flex:1,padding:"10px 2px 8px",border:"none",background:tab===t.k?"#1D4ED8":"transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}},
-              h("span",{style:{fontSize:17}},t.i),
-              h("span",{style:{fontSize:9,fontWeight:tab===t.k?700:400,color:tab===t.k?"#fff":"#aaa"}},t.l)
-            ))
-          )
+        h("nav",{className:"app-tabbar","aria-label":"メインメニュー"},
+          TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),className:"app-tab"+(tab===t.k?" is-active":""),"aria-current":tab===t.k?"page":undefined},t.l))
         )
       ),
       h("div",{style:{padding:"12px 16px 0"}}, currentTabContent)
