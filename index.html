@@ -51,7 +51,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxlKTwJFPsrqzmtbqTQpSOp4uRZEBMTifbDBKooM3Kc0sXCp2SsJAgMjn-Tqp847qan/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxrIKRpGCNW0_i7LT8tv3ANvD1P1j27dDg73z8DChapU8gsWCHi2eAWC_tmWtNqEcIc/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -547,6 +547,24 @@ function findLinkedScheduleForResult(result, schedules=[]) {
   const withTitle = candidates.filter(s => String(s.title || "").trim());
   if (withTitle.length) return withTitle[0];
   return candidates[0] || sameDate[0];
+}
+// 日程ごとの試合結果を取得する。日程IDがある結果は必ずその日程だけに表示し、
+// ID未設定の旧データは同じ日に日程が1件だけの場合に限って補完する。
+function getScheduleResults(schedule, results=[], schedules=[]) {
+  const scheduleId = String(schedule?.id || "").trim();
+  if (!scheduleId) return [];
+  const byScheduleId = (results || []).filter(r =>
+    String(r?.scheduleId || "").trim() === scheduleId
+  );
+  if (byScheduleId.length > 0) return byScheduleId;
+
+  const date = nd(schedule?.date);
+  if (!date) return [];
+  const schedulesOnDate = (schedules || []).filter(s => nd(s?.date) === date);
+  if (schedulesOnDate.length !== 1) return [];
+  return (results || []).filter(r =>
+    !String(r?.scheduleId || "").trim() && nd(r?.date) === date
+  );
 }
 function todayLocal() {
   const d=new Date();
@@ -1198,7 +1216,9 @@ function makeYtTitle(match, schedule, half) {
   const tc = getTC(normalizeType(schedule?.type || match.type || "") || schedule?.type || match.type || "");
   const gameNo = match.gameNumber ? "第" + match.gameNumber + "試合" : "";
   const loc = schedule?.location ? "@" + schedule.location : "";
-  return [dateStr, "VS", opponent, tc.lb, gameNo, half, loc].filter(Boolean).join(" ");
+  const tournament = String(schedule?.title || "").trim();
+  const tournamentLabel = tournament ? "【" + tournament + "】" : "";
+  return [dateStr, tournamentLabel, "VS", opponent, tc.lb, gameNo, half, loc].filter(Boolean).join(" ");
 }
 
 // 秒→ m:ss 形式
@@ -1271,6 +1291,46 @@ function makeYtDesc(match, members, half) {
   events.forEach(e => lines.push(e.text));
 
   return scoreLine + "\n\n" + lines.join("\n");
+}
+
+function getPkResult(match) {
+  const parseList = value => {
+    if (Array.isArray(value)) return value;
+    try {
+      const parsed = JSON.parse(String(value || ""));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  };
+  const kickers = parseList(match?.pkKickers);
+  const theirSeq = parseList(match?.pkTheirSeq);
+  const ourFromSeq = kickers.filter(k => k && k.success).length;
+  const theirFromSeq = theirSeq.filter(Boolean).length;
+  const ourStored = Number(match?.pkOur);
+  const theirStored = Number(match?.pkTheir);
+  const our = kickers.length ? ourFromSeq : (Number.isFinite(ourStored) ? ourStored : 0);
+  const their = theirSeq.length ? theirFromSeq : (Number.isFinite(theirStored) ? theirStored : 0);
+  return {
+    hasPk: kickers.length > 0 || theirSeq.length > 0 || our > 0 || their > 0,
+    our,
+    their,
+    ourSequence: kickers.map(k => k && k.success ? "○" : "×").join(""),
+    theirSequence: theirSeq.map(v => v ? "○" : "×").join("")
+  };
+}
+
+function makeYtPkDesc(match) {
+  const pk = getPkResult(match);
+  const opponent = String(match?.opponent || "相手").trim();
+  const lines = [
+    `塚口AFC ${pk.our} - ${pk.their} ${opponent}`,
+    "",
+    "0:00 PK戦スタート",
+    pk.ourSequence ? `塚口AFC ${pk.ourSequence}` : "",
+    pk.theirSequence ? `${opponent} ${pk.theirSequence}` : ""
+  ].filter(Boolean);
+  return lines.join("\n");
 }
 
 
@@ -1371,7 +1431,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const [ytUrls,setYtUrls]=useState(()=>({
     full:String(goalDraftInit?.ytUrls?.full || match.youtubeUrl || ""),
     first:String(goalDraftInit?.ytUrls?.first || match.youtubeUrl1st || ""),
-    second:String(goalDraftInit?.ytUrls?.second || match.youtubeUrl2nd || "")
+    second:String(goalDraftInit?.ytUrls?.second || match.youtubeUrl2nd || ""),
+    pk:String(goalDraftInit?.ytUrls?.pk || match.youtubeUrlPk || "")
   }));
   const [ytCopied,setYtCopied]=useState("");
   const [matchMemo,setMatchMemo]=useState(()=>String(goalDraftInit?.memo ?? match.memo ?? ""));
@@ -1752,6 +1813,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       youtubeUrl:ytUrls.full,
       youtubeUrl1st:ytUrls.first,
       youtubeUrl2nd:ytUrls.second,
+      youtubeUrlPk:ytUrls.pk,
       ourShots:ourShotsTotal,
       theirShots:theirShotsTotal,
       ourCorners:getStatValue("ourCorners"),
@@ -1793,7 +1855,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       formationSlots: safeFormation ? normalizedSlots : {},
       substitutions,
       memo: matchMemo,
-      matchStatus
+      matchStatus,
+      youtubeUrl: ytUrls.full,
+      youtubeUrl1st: ytUrls.first,
+      youtubeUrl2nd: ytUrls.second,
+      youtubeUrlPk: ytUrls.pk
     };
     if (!shouldKeepLegacyShotTotals) {
       patchForUi.shotStats = JSON.stringify(shotStatsPayload);
@@ -1926,6 +1992,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       full:String(draft?.ytUrls?.full || match.youtubeUrl || ""),
       first:String(draft?.ytUrls?.first || match.youtubeUrl1st || ""),
       second:String(draft?.ytUrls?.second || match.youtubeUrl2nd || ""),
+      pk:String(draft?.ytUrls?.pk || match.youtubeUrlPk || ""),
     });
     setMatchStats(draft?.matchStats && typeof draft.matchStats === "object" ? {
       ourShots:Math.max(0, Number(draft.matchStats.ourShots||0)||0),
@@ -2010,7 +2077,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     return () => {
       if (goalAutoSaveTimerRef.current) clearTimeout(goalAutoSaveTimerRef.current);
     };
-  }, [match?.id, goals, theirG, JSON.stringify(shotByHalf), JSON.stringify(theirShotsByHalf), JSON.stringify(matchStats), shotCountMissing, ytUrls.full, ytUrls.first, ytUrls.second, matchMemo, matchStatus, JSON.stringify(substitutions), formation, JSON.stringify(formationSlots), hasPk, JSON.stringify(pkKickers), JSON.stringify(pkTheirSeq), matchClockSec, clockRunning, isAdmin, canWrite, loading]);
+  }, [match?.id, goals, theirG, JSON.stringify(shotByHalf), JSON.stringify(theirShotsByHalf), JSON.stringify(matchStats), shotCountMissing, ytUrls.full, ytUrls.first, ytUrls.second, ytUrls.pk, matchMemo, matchStatus, JSON.stringify(substitutions), formation, JSON.stringify(formationSlots), hasPk, JSON.stringify(pkKickers), JSON.stringify(pkTheirSeq), matchClockSec, clockRunning, isAdmin, canWrite, loading]);
   useEffect(() => {
     let active = true;
     if (!scheduleIdForAttend) {
@@ -2189,13 +2256,14 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const youtubeFullUrl = normalizeYoutubeLink(ytUrls.full || match.youtubeUrl);
   const youtubeFirstUrl = normalizeYoutubeLink(ytUrls.first || match.youtubeUrl1st);
   const youtubeSecondUrl = normalizeYoutubeLink(ytUrls.second || match.youtubeUrl2nd);
-  const youtubeCandidates = visibleHalfOptions.length===1
+  const youtubePkUrl = normalizeYoutubeLink(ytUrls.pk || match.youtubeUrlPk);
+  const youtubeCandidates = (visibleHalfOptions.length===1
     ? [{key:"first",label:"前半",url:youtubeFirstUrl || youtubeFullUrl || youtubeSecondUrl}]
     : [
         {key:"full",label:"通し",url:youtubeFullUrl},
         {key:"first",label:"前半",url:youtubeFirstUrl},
         {key:"second",label:"後半",url:youtubeSecondUrl},
-      ];
+      ]).concat(pkOn ? [{key:"pk",label:"PK",url:youtubePkUrl}] : []);
   const youtubeSeen = new Set();
   const youtubeLinks = youtubeCandidates.filter(x=>{
     if(!x || !x.url) return false;
@@ -2203,7 +2271,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     youtubeSeen.add(x.url);
     return true;
   });
-  const youtubeKeyLabel = key => key==="first" ? "1st" : key==="second" ? "2nd" : "FULL";
+  const youtubeKeyLabel = key => key==="first" ? "1st" : key==="second" ? "2nd" : key==="pk" ? "PK" : "FULL";
   const halfLabelMap = {"1st":"前半","2nd":"後半","3rd":"3rd"};
   const scoreboardCols = ["total", ...visibleHalfOptions];
   const scoreboardColLabel = col => col==="total" ? "合計" : (halfLabelMap[col] || col);
@@ -2764,7 +2832,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
               style:{width:"100%",border:"2px solid #1D4ED8",borderRadius:10,padding:"8px 12px",marginTop:8,fontSize:13,background:"#EFF6FF",color:"#1D4ED8",fontWeight:700,outline:"none"}},
               h("option",{value:""}, attendLoading ? "出席者読込中..." : (pkSelectableMembers.length ? "＋ キッカーを追加..." : "出席者がいません")),
               memberOptionsByPosition(pkSelectableMembers)),
-          h("div",{style:{borderTop:"2px solid #f5f5f5",paddingTop:14}},
+           h("div",{style:{borderTop:"2px solid #f5f5f5",paddingTop:14}},
             h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
               h("div",{style:{fontSize:13,fontWeight:800,color:"#666"}},match.opponent),
               h("div",{style:{fontSize:20,fontWeight:900,color:"#607D8B"}},pkTheirScore+"本")),
@@ -2781,8 +2849,20 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
             isAdmin&&h("div",{style:{display:"flex",gap:8,marginTop:8}},
               h("button",{onClick:()=>setPkTheirSeq(prev=>[...prev,true]),
                 style:{flex:1,padding:"9px",background:"#E8F5E9",color:"#4CAF50",border:"2px solid #4CAF50",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}},"＋ ○ 成功"),
-              h("button",{onClick:()=>setPkTheirSeq(prev=>[...prev,false]),
-                style:{flex:1,padding:"9px",background:"#FFEBEE",color:"#F44336",border:"2px solid #F44336",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}},"＋ × 失敗"))),
+               h("button",{onClick:()=>setPkTheirSeq(prev=>[...prev,false]),
+                 style:{flex:1,padding:"9px",background:"#FFEBEE",color:"#F44336",border:"2px solid #F44336",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}},"＋ × 失敗"))),
+          h("div",{style:{marginTop:14,paddingTop:14,borderTop:"1px solid #E2E8F0"}},
+            h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:7}},"🎬 PK戦動画"),
+            isAdmin
+              ? h(Fragment,{},
+                  h("input",{type:"url",value:ytUrls.pk,onChange:e=>setYtUrls(prev=>({...prev,pk:e.target.value})),
+                    placeholder:"PK戦の YouTube URL を貼り付け",style:{...css.inp,width:"100%",marginBottom:6}}),
+                  h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.5}},"入力後は自動保存され、試合詳細上部の「PK」ボタンから開けます")
+                )
+              : youtubePkUrl
+                ? h("a",{href:youtubePkUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",background:"#FF0033",border:"1px solid #C7002A",borderRadius:999,padding:"7px 11px",color:"#fff",fontSize:12,fontWeight:800,textDecoration:"none"}},"▶ PK戦動画を開く")
+                : h("div",{style:{fontSize:12,color:"#94A3B8"}},"PK戦動画は未登録です")
+          ),
           (pkKickers.length>0||pkTheirSeq.length>0)&&h("div",{style:{marginTop:14,padding:"12px 16px",
             background:pkWin?"#E8F5E9":pkLose?"#FFEBEE":"#F8F9FA",borderRadius:12}},
             h("div",{style:{fontSize:12,color:"#aaa",marginBottom:8,textAlign:"center"}},"PK戦結果"),
@@ -6899,14 +6979,7 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
   , [privateFavoriteMap]);
   const [matchView,setMatchView] = useState("all"); // "all" | "favorite"
 
-  const getResultsForSchedule = (schedule) => {
-    const sid = String(schedule?.id || "").trim();
-    const byId = (results || []).filter(r => String(r.scheduleId || "").trim() === sid);
-    if (byId.length > 0) return byId;
-    const d = nd(schedule?.date);
-    if (!d) return [];
-    return (results || []).filter(r => !String(r.scheduleId || "").trim() && nd(r.date) === d);
-  };
+  const getResultsForSchedule = schedule => getScheduleResults(schedule, results, schedules);
 
   const visibleMatchSchedules = useMemo(() => {
     if (matchView !== "favorite") return matchSchedules;
@@ -7059,9 +7132,9 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
 
 
 // ── 試合追加モーダル ───────────────────────────────────────────
-function AddMatchModal({schedule,results,onSave,onClose}) {
+function AddMatchModal({schedule,results,schedules=[],onSave,onClose}) {
   const pastOpp=[...new Set(results.map(r=>r.opponent))];
-  const initN=results.filter(r=>r.scheduleId===schedule?.id||nd(r.date)===nd(schedule?.date)).length+1;
+  const initN=getScheduleResults(schedule, results, schedules).length+1;
   const latestResult = useMemo(()=>{
     const rows=[...(results||[])].filter(r=>r&&r.id);
     rows.sort((a,b)=>{
@@ -7903,7 +7976,7 @@ h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:12,box
             h("div",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e",marginBottom:8}},dt.m+"/"+dt.d+"("+dt.dw+")"),
             evs.map(e=>{
               const tc=getTC(e.type);
-              const dayR=results.filter(r=>r.scheduleId===e.id||nd(r.date)===nd(e.date));
+              const dayR=getScheduleResults(e, results, schedules);
               // クリックでその日のまとめページへ
               const clickEv=()=>onGoToDay(e);
               return h("div",{key:e.id,onClick:clickEv,
@@ -8558,8 +8631,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
   const [dayTab,setDayTab]=useState(()=>resolveDayTab(initialTab)); // "matches"|"detail"|"attend"|"carpool"|"settlement"|"album"
   const tc=getTC(schedule.type);
   const dt=fmt(schedule.date);
-  const dayR=results
-    .filter(r=>r.scheduleId===schedule.id||nd(r.date)===nd(schedule.date))
+  const dayR=getScheduleResults(schedule, results, schedules)
     .sort((a,b)=>Number(a.gameNumber||1)-Number(b.gameNumber||1));
 
   // 合計スコア集計
@@ -8837,16 +8909,17 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         : h("div",{style:{display:"flex",flexDirection:"column",gap:12}},
             dayR.map((r,idx)=>{
               const halfs = getHalfOptionsByFormatLabel(r.formatLabel || "", r.goals || [], r.theirGoals || []);
-              const keys = halfs;
+              const pk = getPkResult(r);
+              const keys = [...halfs, ...(pk.hasPk ? ["PK"] : [])];
               return h("div",{key:r.id||(`${schedule.id}-${idx}`),style:{border:"1px solid #E2E8F0",borderRadius:12,padding:10,background:"#F8FAFC"}},
                 h("div",{style:{fontSize:12,fontWeight:800,color:"#0F172A",marginBottom:8}},
                   `第${r.gameNumber || (idx+1)}試合 vs ${r.opponent || "相手"}`),
                 h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
                   keys.map(k=>{
                     const halfKey = k;
-                    const halfLabel = k;
-                    const title = makeYtTitle(r, schedule, halfKey);
-                    const desc = makeYtDesc(r, members, halfKey);
+                    const halfLabel = halfKey === "PK" ? "PK戦" : halfKey;
+                    const title = makeYtTitle(r, schedule, halfKey === "PK" ? "PK戦" : halfKey);
+                    const desc = halfKey === "PK" ? makeYtPkDesc(r) : makeYtDesc(r, members, halfKey);
                     return h("div",{key:`${r.id||idx}-${k}`,style:{background:"#fff",border:"1px solid #E2E8F0",borderRadius:10,padding:"8px 10px"}},
                       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6}},
                         h("div",{style:{fontSize:11,fontWeight:900,color:"#334155"}},halfLabel),
@@ -9847,7 +9920,7 @@ function App() {
   if(page?.type==="addMatch") return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
     h(AddMatchModal,{
-      schedule:page.schedule,results,
+      schedule:page.schedule,results,schedules,
       onSave:handleAddResult,
       onClose:()=>setPage({type:"dayDetail",schedule:page.schedule})
     }));
