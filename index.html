@@ -2263,7 +2263,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         {key:"full",label:"通し",url:youtubeFullUrl},
         {key:"first",label:"前半",url:youtubeFirstUrl},
         {key:"second",label:"後半",url:youtubeSecondUrl},
-      ]).concat(pkOn ? [{key:"pk",label:"PK",url:youtubePkUrl}] : []);
+      ]).concat((pkOn || youtubePkUrl) ? [{key:"pk",label:"PK",url:youtubePkUrl}] : []);
   const youtubeSeen = new Set();
   const youtubeLinks = youtubeCandidates.filter(x=>{
     if(!x || !x.url) return false;
@@ -8910,14 +8910,15 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
             dayR.map((r,idx)=>{
               const halfs = getHalfOptionsByFormatLabel(r.formatLabel || "", r.goals || [], r.theirGoals || []);
               const pk = getPkResult(r);
-              const keys = [...halfs, ...(pk.hasPk ? ["PK"] : [])];
+              // PKの記録前でも、先に動画タイトルを作成できるよう常に表示する。
+              const keys = [...halfs, "PK"];
               return h("div",{key:r.id||(`${schedule.id}-${idx}`),style:{border:"1px solid #E2E8F0",borderRadius:12,padding:10,background:"#F8FAFC"}},
                 h("div",{style:{fontSize:12,fontWeight:800,color:"#0F172A",marginBottom:8}},
                   `第${r.gameNumber || (idx+1)}試合 vs ${r.opponent || "相手"}`),
                 h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
                   keys.map(k=>{
                     const halfKey = k;
-                    const halfLabel = halfKey === "PK" ? "PK戦" : halfKey;
+                    const halfLabel = halfKey === "PK" ? (pk.hasPk ? "PK戦" : "PK戦（必要時）") : halfKey;
                     const title = makeYtTitle(r, schedule, halfKey === "PK" ? "PK戦" : halfKey);
                     const desc = halfKey === "PK" ? makeYtPkDesc(r) : makeYtDesc(r, members, halfKey);
                     return h("div",{key:`${r.id||idx}-${k}`,style:{background:"#fff",border:"1px solid #E2E8F0",borderRadius:10,padding:"8px 10px"}},
