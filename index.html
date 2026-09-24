@@ -28,7 +28,8 @@ button:active{transform:translateY(1px);}
 .app-header{background:var(--ink);padding:16px 16px 14px;border-bottom:3px solid #2F80ED;color:#fff;}
 .header-top{display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .header-brand{display:flex;align-items:center;gap:10px;min-width:0;}
-.brand-mark,.login-mark{width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:#2F80ED;color:#fff;border:1px solid rgba(255,255,255,.3);font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:16px;font-weight:700;letter-spacing:.8px;flex-shrink:0;}
+.brand-mark,.login-mark{width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:#2F80ED;border:1px solid rgba(255,255,255,.3);}
+.brand-mark img,.login-mark img{display:block;width:100%;height:100%;object-fit:contain;}
 .brand-kicker{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:11px;letter-spacing:1.6px;color:#8FB8E8;line-height:1.1;}
 .brand-name{font-size:16px;font-weight:900;letter-spacing:.2px;line-height:1.3;white-space:nowrap;}
 .header-user{display:flex;align-items:center;gap:7px;flex-shrink:0;}
@@ -52,6 +53,7 @@ button:active{transform:translateY(1px);}
 .content-page input,.content-page select,.content-page textarea,.detail-page input,.detail-page select,.detail-page textarea{border-radius:6px !important;}
 .content-page [role="button"],.detail-page [role="button"]{border-radius:6px !important;}
 .content-page div[style*="box-shadow"],.detail-page div[style*="box-shadow"]{box-shadow:none !important;border-radius:8px !important;border-color:var(--line) !important;}
+.dashboard-tabs button{border-radius:0 !important;}
 .login-shell{min-height:100vh;background:var(--ink);display:flex;align-items:center;justify-content:center;padding:24px;}
 .login-card{background:#fff;border:1px solid #D8E0E8;border-top:4px solid #2F80ED;padding:30px;width:100%;max-width:360px;box-shadow:0 18px 48px rgba(0,0,0,.26);}
 .login-brand{display:flex;align-items:center;gap:12px;margin-bottom:28px;}
@@ -192,18 +194,18 @@ function normalizeFormationLabel(value){
 // スプシ「種類」列は英語・日本語どちらでも対応
 function getTC(type) {
   const m={
-    practice:{bg:"#4CAF50",lb:"練習"},
-    official:{bg:"#1D4ED8",lb:"公式戦"},
-    training:{bg:"#2563EB",lb:"トレマ"},
-    "練習試合":{bg:"#2563EB",lb:"トレマ"},
-    "トレーニングマッチ":{bg:"#2563EB",lb:"トレマ"},
+    practice:{bg:"#15803D",lb:"練習"},
+    official:{bg:"#1D4E89",lb:"公式戦"},
+    training:{bg:"#2F80ED",lb:"トレマ"},
+    "練習試合":{bg:"#2F80ED",lb:"トレマ"},
+    "トレーニングマッチ":{bg:"#2F80ED",lb:"トレマ"},
     cup:     {bg:"#0F172A",lb:"カップ戦"},
-    "練習":  {bg:"#4CAF50",lb:"練習"},
-    "公式戦":{bg:"#1D4ED8",lb:"公式戦"},
-    "トレマ":{bg:"#2563EB",lb:"トレマ"},
+    "練習":  {bg:"#15803D",lb:"練習"},
+    "公式戦":{bg:"#1D4E89",lb:"公式戦"},
+    "トレマ":{bg:"#2F80ED",lb:"トレマ"},
     "カップ戦":{bg:"#0F172A",lb:"カップ戦"},
-    "event":{bg:"#009688",lb:"イベント"},
-    "イベント":{bg:"#009688",lb:"イベント"},
+    "event":{bg:"#0F766E",lb:"イベント"},
+    "イベント":{bg:"#0F766E",lb:"イベント"},
   };
   return m[type]||{bg:"#999",lb:type||"その他"};
 }
@@ -217,11 +219,11 @@ function normalizeType(type) {
   return String(type || "");
 }
 const TC={
-  practice:{bg:"#4CAF50",lb:"練習"},
-  official:{bg:"#1D4ED8",lb:"公式戦"},
-  training:{bg:"#2563EB",lb:"トレマ"},
+  practice:{bg:"#15803D",lb:"練習"},
+  official:{bg:"#1D4E89",lb:"公式戦"},
+  training:{bg:"#2F80ED",lb:"トレマ"},
   cup:     {bg:"#0F172A",lb:"カップ戦"},
-  event:   {bg:"#009688",lb:"イベント"},
+  event:   {bg:"#0F766E",lb:"イベント"},
 };
 const PC={FW:{bg:"#64748B"},MF:{bg:"#64748B"},DF:{bg:"#64748B"},GK:{bg:"#64748B"}};
 const ATTEND_OPTS=["○","×","△","未"];
@@ -849,7 +851,7 @@ function Modal({title,onClose,children,position="bottom"}) {
       h("div",{style:{padding:"16px 22px 32px"}},children)));
 }
 function Bdg({label,color,bg,small}) {
-  return h("span",{style:{background:bg||color+"22",color,borderRadius:4,padding:small?"2px 7px":"3px 10px",fontSize:small?10:11,fontWeight:800,display:"inline-block"}},label);
+  return h("span",{style:{background:bg||"#F8FAFC",color,border:"1px solid "+color+"55",borderLeft:"3px solid "+color,borderRadius:2,padding:small?"2px 6px":"3px 8px",fontSize:small?10:11,fontWeight:800,letterSpacing:".02em",lineHeight:1.3,display:"inline-block"}},label);
 }
 function PageIntro({eyebrow,title,note}) {
   return h("div",{className:"page-intro"},
@@ -898,9 +900,9 @@ function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy
   return h("header",{className:"app-header"},
     h("div",{className:"header-top"},
       h("div",{className:"header-brand"},
-        h("div",{className:"brand-mark"},"TAFC"),
+        h("div",{className:"brand-mark"},h("img",{src:"/icon-512.png",alt:"塚口AFC"})),
         h("div",{},
-          h("div",{className:"brand-kicker"},"JUNIOR FOOTBALL CLUB / 60TH CLASS"),
+          h("div",{className:"brand-kicker"},"AMAGASAKI FOOTBALL CLUB"),
           h("div",{className:"brand-name"},"塚口AFC Jr"))),
       h("div",{className:"header-user"},
         h("div",{className:"header-user-name"},user.name),
@@ -1157,10 +1159,10 @@ function Login({onLogin}) {
     loading&&h(Loader,{msg:mode==="login"?"ログイン中...":"処理中..."}),
     h("div",{className:"login-card"},
       h("div",{className:"login-brand"},
-        h("div",{className:"login-mark"},"TAFC"),
+        h("div",{className:"login-mark"},h("img",{src:"/icon-512.png",alt:"塚口AFC"})),
         h("div",{className:"login-brand-copy"},
           h("div",{className:"login-title"},"塚口AFC Jr"),
-          h("div",{className:"login-subtitle"},"JUNIOR FOOTBALL CLUB / 60TH CLASS"))),
+          h("div",{className:"login-subtitle"},"AMAGASAKI FOOTBALL CLUB"))),
       h("div",{style:{display:"flex",gap:0,marginBottom:18,borderBottom:"1px solid #D8E0E8"}},
         h("button",{onClick:()=>{setMode("login");setErr("");},style:{flex:1,padding:"10px 0",border:"none",borderBottom:mode==="login"?"2px solid #2F80ED":"2px solid transparent",cursor:"pointer",fontWeight:800,background:"transparent",color:mode==="login"?"#102A43":"#64748B"}},"ログイン"),
         h("button",{onClick:()=>{setMode("signup");setErr("");},style:{flex:1,padding:"10px 0",border:"none",borderBottom:mode==="signup"?"2px solid #2F80ED":"2px solid transparent",cursor:"pointer",fontWeight:800,background:"transparent",color:mode==="signup"?"#102A43":"#64748B"}},"新規登録")),
@@ -3165,9 +3167,9 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
         h("div",{style:{fontSize:11,fontWeight:800,color:"#2F80ED"}},"日程を見る  ›")
       ),
         h("div",{style:{display:"flex",alignItems:"stretch",gap:14}},
-          h("div",{style:{width:90,flexShrink:0,paddingRight:14,borderRight:"1px solid #D8E0E8",textAlign:"center"}},
+          h("div",{style:{width:82,flexShrink:0,paddingRight:12,borderRight:"1px solid #D8E0E8",textAlign:"center"}},
             h("div",{style:{fontSize:10,fontWeight:800,color:"#64748B",letterSpacing:.6}},nextDate.y),
-            h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:42,fontWeight:700,color:"#0B1220",lineHeight:1,letterSpacing:.4}},nextDate.m+"/"+nextDate.d),
+            h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:34,fontWeight:700,color:"#0B1220",lineHeight:1,letterSpacing:0,whiteSpace:"nowrap"}},nextDate.m+"/"+nextDate.d),
             h("div",{style:{fontSize:11,fontWeight:800,color:"#475569",marginTop:5}},"("+nextDate.dw+")")),
           h("div",{style:{minWidth:0,flex:1,padding:"3px 0"}},
             h("div",{style:{marginBottom:8}},h(Bdg,{label:nextTc.lb,color:nextTc.bg,small:true})),
@@ -7434,20 +7436,20 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
 
   return h(Fragment,{},
     // サブタブ
-    h("div",{style:{display:"flex",background:"#fff",borderRadius:16,padding:4,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-      [{k:"result",l:"🆚 対戦成績"},{k:"tournament",l:"🏆 大会結果"},{k:"rank",l:"📊 ランキング"},{k:"personal",l:"👤 個人成績"}].map(t=>
+    h("div",{className:"dashboard-tabs",style:{display:"flex",background:"#fff",border:"1px solid #D8E0E8",borderRadius:8,padding:0,marginBottom:14,boxShadow:"none",overflow:"hidden"}},
+      [{k:"result",l:"対戦成績"},{k:"tournament",l:"大会結果"},{k:"rank",l:"ランキング"},{k:"personal",l:"個人成績"}].map((t,i)=>
         h("button",{key:t.k,onClick:()=>setDashTab(t.k),
-          style:{flex:1,padding:"10px 4px",border:"none",borderRadius:12,
-            background:dashTab===t.k?"#1D4ED8":"transparent",
-            color:dashTab===t.k?"#fff":"#aaa",fontSize:11,fontWeight:700,cursor:"pointer"}},t.l))),
+          style:{flex:1,minWidth:0,padding:"11px 3px 9px",border:"none",borderRight:i<3?"1px solid #E2E8F0":"none",borderBottom:dashTab===t.k?"2px solid #2F80ED":"2px solid transparent",
+            background:dashTab===t.k?"#F8FBFF":"#fff",
+            color:dashTab===t.k?"#102A43":"#64748B",fontSize:11,fontWeight:dashTab===t.k?800:700,cursor:"pointer",whiteSpace:"nowrap"}},t.l))),
     // フィルター（インライン）
-    h("div",{style:{background:"#fff",borderRadius:16,padding:16,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"試合分類"),
+    h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:14,border:"1px solid #D8E0E8",boxShadow:"none"}},
+      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:800,color:"#102A43",letterSpacing:1.1,marginBottom:8}},"MATCH FILTER"),
       h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:4,marginBottom:10}},
-        [{k:"all",l:"すべて"},{k:"official",l:"公式戦"},{k:"cup",l:"カップ戦"},{k:"training",l:"トレマ"}].map(t=>h("button",{key:t.k,onClick:()=>setTypeF(t.k),style:{padding:"6px 4px",border:`1.5px solid ${typeF===t.k?"#1D4ED8":"#E5E7EB"}`,borderRadius:16,background:typeF===t.k?"#1D4ED8":"#fff",color:typeF===t.k?"#fff":"#64748B",fontSize:11,fontWeight:typeF===t.k?700:500,cursor:"pointer",whiteSpace:"nowrap"}},t.l))),
-      h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8,marginTop:4}},"期間"),
+        [{k:"all",l:"すべて"},{k:"official",l:"公式戦"},{k:"cup",l:"カップ戦"},{k:"training",l:"トレマ"}].map(t=>h("button",{key:t.k,onClick:()=>setTypeF(t.k),style:{padding:"7px 4px",border:`1px solid ${typeF===t.k?"#102A43":"#D8E0E8"}`,borderRadius:4,background:typeF===t.k?"#102A43":"#fff",color:typeF===t.k?"#fff":"#64748B",fontSize:11,fontWeight:typeF===t.k?800:600,cursor:"pointer",whiteSpace:"nowrap"}},t.l))),
+      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:800,color:"#102A43",letterSpacing:1.1,marginBottom:8,marginTop:12}},"PERIOD"),
       h("div",{style:{display:"grid",gridTemplateColumns:"repeat(6,minmax(0,1fr))",gap:4,marginBottom:8}},
-        [{k:"alltime",l:"全期間"},{k:"grade4",l:periodGrade4ShortLabel},{k:"grade3",l:periodGrade3ShortLabel},{k:"month",l:"今月"},{k:"lastmonth",l:"先月"},{k:"custom",l:"期間指定"}].map(t=>h("button",{key:t.k,onClick:()=>setPeriodF(t.k),title:t.k==="grade4"?periodGrade4Label:(t.k==="grade3"?periodGrade3Label:t.l),style:{padding:"6px 2px",border:`1.5px solid ${periodF===t.k?"#2196F3":"#E5E7EB"}`,borderRadius:16,background:periodF===t.k?"#2196F3":"#fff",color:periodF===t.k?"#fff":"#64748B",fontSize:11,fontWeight:periodF===t.k?700:500,cursor:"pointer",whiteSpace:"nowrap"}},t.l))),
+        [{k:"alltime",l:"全期間"},{k:"grade4",l:periodGrade4ShortLabel},{k:"grade3",l:periodGrade3ShortLabel},{k:"month",l:"今月"},{k:"lastmonth",l:"先月"},{k:"custom",l:"期間指定"}].map(t=>h("button",{key:t.k,onClick:()=>setPeriodF(t.k),title:t.k==="grade4"?periodGrade4Label:(t.k==="grade3"?periodGrade3Label:t.l),style:{padding:"7px 2px",border:`1px solid ${periodF===t.k?"#1D4E89":"#D8E0E8"}`,borderRadius:4,background:periodF===t.k?"#1D4E89":"#fff",color:periodF===t.k?"#fff":"#64748B",fontSize:11,fontWeight:periodF===t.k?800:600,cursor:"pointer",whiteSpace:"nowrap"}},t.l))),
       h("div",{style:{fontSize:11,fontWeight:600,color:"#64748B",marginBottom:8}},
         "※ 試合記録は 2025年10月19日 以降が対象です"),
       periodF==="custom"&&h("div",{style:{display:"flex",gap:8,alignItems:"center",marginTop:4}},
