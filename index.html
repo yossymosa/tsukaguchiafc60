@@ -95,7 +95,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzBNecYN8_IwAHGhyBH5XYEiyDeqfcQSTaVnlnp8iBiE4XgjfpjcMIg1W63xY3vbyos/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw97Ztedl7aSCajfSSiYJppM2LegtdkczRobfEyUg0m0Fb68hOxsIWDa0T_Z8IjBI3g/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -8141,9 +8141,9 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
         h("button",{onClick:fetchImportPreview,disabled:importBusy,style:{...css.bG,opacity:importBusy?0.6:1}},
           importBusy?"取得中...":"取り込み候補を取得"),
         importMode==="practice"&&h("div",{style:{fontSize:11,color:"#64748B",background:"#F8FAFC",borderRadius:8,padding:"8px 10px",lineHeight:1.5}},
-          "対象: 4年生（U10を含む）。4年を含む学年表記だけを候補に表示します。"),
+          "対象: 指定月の4年生（U10を含む）の練習だけ。候補は未選択で表示されます。"),
         importMode==="match"&&h("div",{style:{fontSize:11,color:"#64748B",background:"#F8FAFC",borderRadius:8,padding:"8px 10px",lineHeight:1.5}},
-          "対象: 練習以外 / 4月=新4年 / 5月以降=4年。タイトルは1行目のみを取り込み、リンク付きは添付へ反映します。"),
+          "対象: 指定月の4年生（U10を含む）の試合だけ。公式戦・カップ戦・練習試合を表示します。"),
         importRows.length>0
           ? h("div",{},
               h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:6}},
@@ -8155,13 +8155,16 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
                 importRows.map((r,i)=>{
                   const uiKey=getImportRowUiKey(r,i);
                   const checked=!!importChecks[uiKey];
+                  const importTypeLabel=importMode==="match"
+                    ? ({official:"公式戦",cup:"カップ戦",training:"練習試合"}[r.type]||"試合")
+                    : "練習";
                   return h("label",{key:uiKey,style:{display:"flex",gap:8,alignItems:"flex-start",padding:"8px 6px",borderBottom:i===importRows.length-1?"none":"1px solid #E2E8F0",cursor:"pointer",background:checked?"#EEF6FF":"transparent",borderRadius:6}},
                     h("input",{type:"checkbox",checked:checked,onChange:e=>setImportChecks(p=>({...p,[uiKey]:!!e.target.checked})),style:{marginTop:2}}),
                     h("div",{style:{minWidth:0,flex:1}},
                       h("div",{style:{fontSize:12,fontWeight:800,color:"#1E293B"}},
                         `${fmt(r.dateOnly||r.date).m}/${fmt(r.dateOnly||r.date).d} ${r.title||"練習"}`),
                       h("div",{style:{fontSize:11,color:"#475569",marginTop:2}},
-                        `${importMode==="match"?"試合情報":(r.parsedTime||r.timeLabel||"時間なし")}${r.location?" / "+r.location:""}`)));
+                        `${importMode==="match"?importTypeLabel:(r.parsedTime||r.timeLabel||importTypeLabel)}${r.location?" / "+r.location:""}`)));
                 })),
               h("button",{onClick:runImportFromPreview,disabled:importBusy||selectedImportCount===0,style:{...css.bS,marginTop:10,opacity:importBusy||selectedImportCount===0?0.6:1}},
                 importBusy?"取り込み中...":`選択した ${selectedImportCount} 件を取り込む`))

@@ -1060,7 +1060,7 @@ function dispatch(req) {
     }
 
     case "previewFc2Schedule": {
-      const preview = previewFc2Schedule(req.url, req.year, req.month);
+      const preview = previewFc2Schedule(req.url, req.year, req.month, "practice");
       return {
         items: preview.items,
         sourceTitle: preview.sourceTitle || "",
@@ -1070,6 +1070,19 @@ function dispatch(req) {
 
     case "syncFc2PracticeSchedules": {
       return syncFc2PracticeSchedules(req);
+    }
+
+    case "previewOfficialHpMatchImport": {
+      const preview = previewFc2Schedule(req.url, req.year, req.month, "match");
+      return {
+        items: preview.items,
+        sourceTitle: preview.sourceTitle || "",
+        fetchedUrl: preview.fetchedUrl || "",
+      };
+    }
+
+    case "syncOfficialHpMatchImport": {
+      return syncOfficialHpMatchImport(req);
     }
 
     // ── 全データ取得 ──────────────────────────────────────────
@@ -1979,7 +1992,7 @@ function dispatch(req) {
   }
 }
 
-function previewFc2Schedule(url, year, month) {
+function previewFc2Schedule(url, year, month, mode) {
   const targetUrl = String(url || "http://afcjr.web.fc2.com/").trim();
   const response = UrlFetchApp.fetch(targetUrl, {
     muteHttpExceptions: true,
@@ -1997,13 +2010,20 @@ function previewFc2Schedule(url, year, month) {
   const targetYear = Number(year) || new Date().getFullYear();
   const targetMonth = Number(month) || (new Date().getMonth() + 1);
   const rows = extractFc2Rows(html, targetYear, targetMonth)
-    .filter(r => includesFourthGrade(r.grade, r.title, r.note))
-    .filter(r => isFc2RequestedMonth(r, targetYear, targetMonth));
+    .filter(r => isFc2RequestedMonth(r, targetYear, targetMonth))
+    .filter(r => includesFourthGrade(r.grade))
+    .filter(r => matchesFc2ImportMode(r, mode));
   return {
     items: addFc2ImportKeys(rows),
     sourceTitle: extractHtmlTitle(html),
     fetchedUrl: targetUrl,
   };
+}
+
+function matchesFc2ImportMode(row, mode) {
+  const type = String((row && row.type) || "").trim();
+  if (mode === "match") return ["official", "cup", "training"].includes(type);
+  return type === "practice";
 }
 
 function isFc2RequestedMonth(row, year, month) {
@@ -2030,7 +2050,15 @@ function fc2ImportKeyBase(row) {
 }
 
 function syncFc2PracticeSchedules(req) {
-  const preview = previewFc2Schedule(req.url, req.year, req.month);
+  return syncFc2Schedules(req, "practice");
+}
+
+function syncOfficialHpMatchImport(req) {
+  return syncFc2Schedules(req, "match");
+}
+
+function syncFc2Schedules(req, mode) {
+  const preview = previewFc2Schedule(req.url, req.year, req.month, mode);
   const selectedKeys = (Array.isArray(req.selectedKeys) ? req.selectedKeys : [])
     .map(value => String(value || "").trim())
     .filter(Boolean);
@@ -2039,10 +2067,12 @@ function syncFc2PracticeSchedules(req) {
   }
 
   const selectedSet = new Set(selectedKeys);
-  const selectedItems = (preview.items || []).filter(item => selectedSet.has(String(item.importKey || "")));
-  if (!selectedItems.length) {
+  const previewKeys = new Set((preview.items || []).map(item => String(item.importKey || "")));
+  const missingKeys = selectedKeys.filter(key => !previewKeys.has(key));
+  if (missingKeys.length) {
     throw new Error("選択した予定が見つかりません。候補を再取得してください");
   }
+  const selectedItems = (preview.items || []).filter(item => selectedSet.has(String(item.importKey || "")));
 
   ensureSheetColumnsByMap("スケジュール", MAPS.schedule);
   const existingByKey = {};
@@ -2201,11 +2231,13 @@ function extractFc2Rows(html, year, month) {
   return rows;
 }
 
-function includesFourthGrade(grade, title, note) {
-  const text = [grade, title, note].filter(Boolean).join(" ");
+function includesFourthGrade(grade) {
+  // 学年欄だけを判定対象にする。タイトルや備考には「2024年度」などの
+  // 年号が含まれ、単純な「4年」検索では4年生と誤認してしまうため。
+  const text = String(grade || "").trim();
   if (!text) return false;
   if (/U[\s-]?10/i.test(text)) return true;
-  if (/4\s*年|４\s*年|4年生|４年生/.test(text)) return true;
+  if (/(?:^|[^0-9０-９])[4４]\s*年(?:生)?(?!度)/.test(text)) return true;
 
   const rangeRe = /([0-9０-９]+)\s*[-〜~]\s*([0-9０-９]+)\s*年/g;
   let m;
@@ -2229,8 +2261,9 @@ function includesFourthGrade(grade, title, note) {
 
 function inferFc2Type(content) {
   const text = String(content || "");
-  if (/イベント|開会式|交流/.test(text)) return "event";
   if (/トレーニングマッチ|トレマ|練習試合/i.test(text)) return "training";
+  if (/交流(?:戦|試合)/.test(text)) return "training";
+  if (/イベント|開会式|閉会式|交流/.test(text)) return "event";
   if (/カップ|CUP|Cup/.test(text)) return "cup";
   if (/練習/.test(text)) return "practice";
   if (/リーグ|選手権|公式|大会/.test(text)) return "official";
