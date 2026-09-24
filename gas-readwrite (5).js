@@ -1997,7 +1997,7 @@ function previewFc2Schedule(url, year, month) {
   const targetYear = Number(year) || new Date().getFullYear();
   const targetMonth = Number(month) || (new Date().getMonth() + 1);
   const rows = extractFc2Rows(html, targetYear, targetMonth)
-    .filter(r => includesThirdGrade(r.grade, r.title, r.note))
+    .filter(r => includesFourthGrade(r.grade, r.title, r.note))
     .filter(r => isFc2RequestedMonth(r, targetYear, targetMonth));
   return {
     items: addFc2ImportKeys(rows),
@@ -2201,11 +2201,11 @@ function extractFc2Rows(html, year, month) {
   return rows;
 }
 
-function includesThirdGrade(grade, title, note) {
+function includesFourthGrade(grade, title, note) {
   const text = [grade, title, note].filter(Boolean).join(" ");
   if (!text) return false;
-  if (/U[\s-]?9/i.test(text)) return true;
-  if (/3\s*年|３\s*年|3年生|３年生/.test(text)) return true;
+  if (/U[\s-]?10/i.test(text)) return true;
+  if (/4\s*年|４\s*年|4年生|４年生/.test(text)) return true;
 
   const rangeRe = /([0-9０-９]+)\s*[-〜~]\s*([0-9０-９]+)\s*年/g;
   let m;
@@ -2215,14 +2215,14 @@ function includesThirdGrade(grade, title, note) {
     if (!isNaN(a) && !isNaN(b)) {
       const max = Math.max(a, b);
       const min = Math.min(a, b);
-      if (min <= 3 && 3 <= max) return true;
+      if (min <= 4 && 4 <= max) return true;
     }
   }
 
   const listRe = /([0-9０-９,\s、]+)年/g;
   while ((m = listRe.exec(text))) {
     const nums = String(m[1]).split(/[,、\s]+/).map(zenToHanInt).filter(n => !isNaN(n));
-    if (nums.includes(3)) return true;
+    if (nums.includes(4)) return true;
   }
   return false;
 }

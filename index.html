@@ -95,7 +95,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzRMqUbdG_hbd9EpiUEBsyrM6_Xx2YHOZogkTk4m2eko5un-Q5oKJJxFX99rE9gr1qQ/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzBNecYN8_IwAHGhyBH5XYEiyDeqfcQSTaVnlnp8iBiE4XgjfpjcMIg1W63xY3vbyos/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -8140,6 +8140,8 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
             h("input",{type:"number",min:1,max:12,value:importForm.month,onChange:e=>setImportForm(p=>({...p,month:e.target.value})),style:css.inp}))),
         h("button",{onClick:fetchImportPreview,disabled:importBusy,style:{...css.bG,opacity:importBusy?0.6:1}},
           importBusy?"取得中...":"取り込み候補を取得"),
+        importMode==="practice"&&h("div",{style:{fontSize:11,color:"#64748B",background:"#F8FAFC",borderRadius:8,padding:"8px 10px",lineHeight:1.5}},
+          "対象: 4年生（U10を含む）。4年を含む学年表記だけを候補に表示します。"),
         importMode==="match"&&h("div",{style:{fontSize:11,color:"#64748B",background:"#F8FAFC",borderRadius:8,padding:"8px 10px",lineHeight:1.5}},
           "対象: 練習以外 / 4月=新4年 / 5月以降=4年。タイトルは1行目のみを取り込み、リンク付きは添付へ反映します。"),
         importRows.length>0
