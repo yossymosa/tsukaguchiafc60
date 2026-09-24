@@ -1068,6 +1068,10 @@ function dispatch(req) {
       };
     }
 
+    case "syncFc2PracticeSchedules": {
+      return syncFc2PracticeSchedules(req);
+    }
+
     // ── 全データ取得 ──────────────────────────────────────────
     case "getAll": {
       // 新しい結果項目（PK戦動画URLを含む）を既存シートにも安全に追加
@@ -1990,12 +1994,98 @@ function previewFc2Schedule(url, year, month) {
   }
 
   const html = decodeFc2Html(response);
-  const rows = extractFc2Rows(html, Number(year), Number(month));
+  const targetYear = Number(year) || new Date().getFullYear();
+  const targetMonth = Number(month) || (new Date().getMonth() + 1);
+  const rows = extractFc2Rows(html, targetYear, targetMonth)
+    .filter(r => includesThirdGrade(r.grade, r.title, r.note))
+    .filter(r => isFc2RequestedMonth(r, targetYear, targetMonth));
   return {
-    items: rows.filter(r => includesThirdGrade(r.grade, r.title, r.note)),
+    items: addFc2ImportKeys(rows),
     sourceTitle: extractHtmlTitle(html),
     fetchedUrl: targetUrl,
   };
+}
+
+function isFc2RequestedMonth(row, year, month) {
+  const date = String((row && row.date) || "");
+  const matched = date.match(/^(\d{4})-(\d{2})-\d{2}$/);
+  if (!matched) return false;
+  return Number(matched[1]) === Number(year) && Number(matched[2]) === Number(month);
+}
+
+function addFc2ImportKeys(rows) {
+  const seen = {};
+  return (rows || []).map(row => {
+    const base = fc2ImportKeyBase(row);
+    const count = (seen[base] || 0) + 1;
+    seen[base] = count;
+    return { ...row, importKey: "fc2:" + base + "#" + count };
+  });
+}
+
+function fc2ImportKeyBase(row) {
+  return [row && row.date, row && row.title, row && row.location, row && row.content, row && row.note]
+    .map(value => String(value || "").replace(/\s+/g, " ").trim())
+    .join("\u001F");
+}
+
+function syncFc2PracticeSchedules(req) {
+  const preview = previewFc2Schedule(req.url, req.year, req.month);
+  const selectedKeys = (Array.isArray(req.selectedKeys) ? req.selectedKeys : [])
+    .map(value => String(value || "").trim())
+    .filter(Boolean);
+  if (!selectedKeys.length) {
+    throw new Error("取り込む予定を選択してください");
+  }
+
+  const selectedSet = new Set(selectedKeys);
+  const selectedItems = (preview.items || []).filter(item => selectedSet.has(String(item.importKey || "")));
+  if (!selectedItems.length) {
+    throw new Error("選択した予定が見つかりません。候補を再取得してください");
+  }
+
+  ensureSheetColumnsByMap("スケジュール", MAPS.schedule);
+  const existingByKey = {};
+  sheetToObjects("スケジュール", MAPS.schedule).forEach(schedule => {
+    existingByKey[fc2ScheduleIdentity(schedule)] = true;
+  });
+
+  let inserted = 0;
+  let unchanged = 0;
+  selectedItems.forEach(item => {
+    const identity = fc2ScheduleIdentity(item);
+    if (existingByKey[identity]) {
+      unchanged++;
+      return;
+    }
+    appendObject("スケジュール", MAPS.schedule, {
+      id: genId(),
+      date: item.date || "",
+      title: item.title || "練習",
+      location: item.location || "",
+      type: item.type || "practice",
+      timeLabel: item.parsedTime || item.timeLabel || "",
+      note: buildFc2ScheduleNote(item),
+    });
+    existingByKey[identity] = true;
+    inserted++;
+  });
+
+  return { inserted, updated: 0, unchanged, items: preview.items || [] };
+}
+
+function fc2ScheduleIdentity(item) {
+  return [item && item.date, item && item.title, item && item.location]
+    .map(value => String(value || "").replace(/\s+/g, " ").trim())
+    .join("\u001F");
+}
+
+function buildFc2ScheduleNote(item) {
+  return [item && item.content, item && item.note]
+    .map(value => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join("\n");
 }
 
 function decodeFc2Html(response) {

@@ -95,7 +95,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwxYKSSpDAAgRNlDJe6NnwmuwQiKMJuieRjHHiyLK0Va-hNR6_qUmX1oO8qKXqB8z97/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzRMqUbdG_hbd9EpiUEBsyrM6_Xx2YHOZogkTk4m2eko5un-Q5oKJJxFX99rE9gr1qQ/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -7851,7 +7851,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
       const r=await onImportFc2Practice({url:importForm.url,year:y,month:m,previewOnly:true,mode:importMode});
       const rows = Array.isArray(r.items)?r.items:[];
       setImportRows(rows);
-      setImportChecks(buildImportCheckMap(rows,true)); // デフォルト全チェック
+      setImportChecks(buildImportCheckMap(rows,false)); // 必要な予定だけを選択
       setImportResult(null);
     }catch(e){
       alert("取り込み候補の取得エラー: "+(e&&e.message?e.message:"不明なエラー"));
@@ -7884,7 +7884,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
       setImportResult(r||null);
       if(Array.isArray(r?.items)){
         setImportRows(r.items);
-        setImportChecks(buildImportCheckMap(r.items,true));
+        setImportChecks(buildImportCheckMap(r.items,false));
       }
     }catch(e){
       alert("取り込みエラー: "+(e&&e.message?e.message:"不明なエラー"));
@@ -7921,6 +7921,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
   if(row.length>0){while(row.length<7)row.push(null);weeks.push(row);}
   const prev=()=>{if(month===0){setYear(y=>y-1);setMonth(11);}else setMonth(m=>m-1);};
   const next=()=>{if(month===11){setYear(y=>y+1);setMonth(0);}else setMonth(m=>m+1);};
+  const selectedImportCount=importRows.filter((r,i)=>!!importChecks[getImportRowUiKey(r,i)]).length;
 
   return h(Fragment,{},
 // ── カレンダー本体
@@ -8160,8 +8161,8 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
                       h("div",{style:{fontSize:11,color:"#475569",marginTop:2}},
                         `${importMode==="match"?"試合情報":(r.parsedTime||r.timeLabel||"時間なし")}${r.location?" / "+r.location:""}`)));
                 })),
-              h("button",{onClick:runImportFromPreview,disabled:importBusy,style:{...css.bS,marginTop:10,opacity:importBusy?0.6:1}},
-                importBusy?"取り込み中...":"この内容で取り込む"))
+              h("button",{onClick:runImportFromPreview,disabled:importBusy||selectedImportCount===0,style:{...css.bS,marginTop:10,opacity:importBusy||selectedImportCount===0?0.6:1}},
+                importBusy?"取り込み中...":`選択した ${selectedImportCount} 件を取り込む`))
           : h("div",{style:{fontSize:12,color:"#94A3B8"}},"先に「取り込み候補を取得」を押してください"),
         importResult&&h("div",{style:{fontSize:12,fontWeight:700,color:"#16A34A",background:"#ECFDF3",padding:"8px 10px",borderRadius:8}},
           `取込完了: 追加 ${importResult.inserted||0} / 更新 ${importResult.updated||0} / 変更なし ${importResult.unchanged||0}`+
