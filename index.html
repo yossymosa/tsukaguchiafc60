@@ -25,24 +25,24 @@ input,select,textarea,button{font-family:'Noto Sans JP',sans-serif;}
 .page{max-width:480px;margin:0 auto;min-height:100vh;overflow:visible;padding-bottom:24px;background:var(--ground);}
 button{transition:background .16s ease,color .16s ease,border-color .16s ease,transform .16s ease;}
 button:active{transform:translateY(1px);}
-.app-header{background:var(--ink);padding:10px 14px 8px;border-bottom:2px solid #2F80ED;color:#fff;}
+.app-header{background:var(--ink);padding:12px 14px 10px;border-bottom:2px solid #2F80ED;color:#fff;}
 .header-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .header-brand{display:flex;align-items:center;gap:8px;min-width:0;}
-.brand-mark,.login-mark{width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:#2F80ED;border:1px solid rgba(255,255,255,.3);}
+.brand-mark,.login-mark{width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:#2F80ED;border:1px solid rgba(255,255,255,.3);}
 .brand-mark img,.login-mark img{display:block;width:100%;height:100%;object-fit:contain;}
 .brand-kicker{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:10px;letter-spacing:1.3px;color:#8FB8E8;line-height:1.05;}
-.brand-name{font-size:15px;font-weight:900;letter-spacing:.2px;line-height:1.2;white-space:nowrap;}
+.brand-name{font-size:16px;font-weight:900;letter-spacing:.2px;line-height:1.2;white-space:nowrap;}
 .header-user{display:flex;align-items:center;gap:7px;flex-shrink:0;}
 .header-user-name{font-size:11px;color:#D8E8F8;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .header-action{appearance:none;background:transparent;border:1px solid rgba(216,232,248,.42);border-radius:4px;color:#fff;padding:4px 6px;font-size:10px;font-weight:700;cursor:pointer;}
-.header-utilities{display:flex;align-items:center;gap:10px;margin-top:8px;padding-top:7px;border-top:1px solid rgba(216,232,248,.18);flex-wrap:wrap;}
+.header-utilities{display:flex;align-items:center;gap:10px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(216,232,248,.18);flex-wrap:wrap;}
 .header-link,.header-utility-button{appearance:none;background:transparent;border:0;color:#B9CCE0;text-decoration:none;padding:0;font-size:10px;font-weight:800;letter-spacing:.4px;cursor:pointer;}
 .header-link:hover,.header-utility-button:hover{color:#fff;}
 .video-switch{display:inline-flex;align-items:center;gap:6px;margin-left:auto;}
 .video-switch-label{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:11px;letter-spacing:1px;color:#6E8CAA;}
 .video-link{color:#fff;text-decoration:none;border-left:1px solid rgba(216,232,248,.35);padding-left:6px;font-size:10px;font-weight:800;}
 .app-tabbar{display:flex;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 3px 10px rgba(15,23,42,.05);}
-.app-tab{flex:1;min-width:0;padding:9px 2px 8px;border:0;border-bottom:2px solid transparent;background:#fff;color:#7B8794;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.app-tab{flex:1;min-width:0;padding:10px 2px 9px;border:0;border-bottom:2px solid transparent;background:#fff;color:#7B8794;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .app-tab.is-active{color:var(--navy);border-bottom-color:#2F80ED;background:#F8FBFF;font-weight:900;}
 .content-page{padding:14px 16px 0;}
 .page-intro{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:2px 0 14px;padding:0 0 10px;border-bottom:1px solid var(--line);}
@@ -95,7 +95,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxrIKRpGCNW0_i7LT8tv3ANvD1P1j27dDg73z8DChapU8gsWCHi2eAWC_tmWtNqEcIc/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwxYKSSpDAAgRNlDJe6NnwmuwQiKMJuieRjHHiyLK0Va-hNR6_qUmX1oO8qKXqB8z97/exec";
 // ================================================================
 
 const HOME_LINKS = [

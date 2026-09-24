@@ -2000,14 +2000,72 @@ function previewFc2Schedule(url, year, month) {
 
 function decodeFc2Html(response) {
   const bytes = response.getBlob().getBytes();
-  const charsets = ["Shift_JIS", "UTF-8", "EUC-JP"];
+  // HTMLに表が含まれるかだけでは文字コードを判定できない。
+  // 例えばUTF-8のページをShift_JISとして読んでも、タグ自体は残るため、
+  // 以前の実装では最初のShift_JISを誤って採用していた。
+  const transportText = response.getContentText() || "";
+  const declaredCharset = extractResponseCharset(response) || extractHtmlCharset(transportText);
+  const charsets = uniqueFc2Charsets([
+    declaredCharset,
+    extractHtmlCharset(transportText),
+    "UTF-8",
+    "Shift_JIS",
+    "EUC-JP"
+  ]);
+  let best = { text: "", score: -Infinity };
   for (var i = 0; i < charsets.length; i++) {
     try {
       const text = Utilities.newBlob(bytes).getDataAsString(charsets[i]);
-      if (text && /<table|<tr|<td/i.test(text)) return text;
+      const score = scoreFc2DecodedHtml(text);
+      if (score > best.score) best = { text, score };
     } catch (e) {}
   }
-  return response.getContentText();
+  return best.text || transportText;
+}
+
+function extractResponseCharset(response) {
+  try {
+    const headers = response.getHeaders() || {};
+    const key = Object.keys(headers).find(k => String(k).toLowerCase() === "content-type");
+    return key ? extractHtmlCharset(String(headers[key] || "")) : "";
+  } catch (e) {
+    return "";
+  }
+}
+
+function extractHtmlCharset(text) {
+  const source = String(text || "");
+  const match = source.match(/charset\s*=\s*["']?\s*([a-z0-9._-]+)/i);
+  return match ? normalizeFc2Charset(match[1]) : "";
+}
+
+function normalizeFc2Charset(value) {
+  const key = String(value || "").trim().toLowerCase().replace(/[_\s]/g, "-");
+  if (!key) return "";
+  if (key === "utf8" || key === "utf-8") return "UTF-8";
+  if (["shift-jis", "shiftjis", "sjis", "windows-31j", "ms932", "cp932"].includes(key)) return "Shift_JIS";
+  if (["euc-jp", "eucjp"].includes(key)) return "EUC-JP";
+  if (["iso-2022-jp", "jis"].includes(key)) return "ISO-2022-JP";
+  return "";
+}
+
+function uniqueFc2Charsets(charsets) {
+  const seen = {};
+  return (charsets || []).map(normalizeFc2Charset).filter(charset => {
+    if (!charset || seen[charset]) return false;
+    seen[charset] = true;
+    return true;
+  });
+}
+
+function scoreFc2DecodedHtml(text) {
+  const source = String(text || "");
+  if (!/<(?:table|tr|td)\b/i.test(source)) return -1000000;
+  const kana = (source.match(/[ぁ-んァ-ヶー]/g) || []).length;
+  const kanji = (source.match(/[一-龯々]/g) || []).length;
+  const replacement = (source.match(/\uFFFD/g) || []).length;
+  const mojibake = (source.match(/(?:縺|繧|譁|鬩|蜈|莨|莉|髱|逡|隕|荳|阨|纈)/g) || []).length;
+  return kana * 6 + kanji * 2 - replacement * 120 - mojibake * 45;
 }
 
 function extractHtmlTitle(html) {
