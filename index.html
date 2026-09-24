@@ -844,10 +844,10 @@ function Loader({msg="処理中..."}) {
 function Modal({title,onClose,children,position="bottom"}) {
   const isCenter = position === "center";
   return h("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:4000,display:"flex",alignItems:isCenter?"center":"flex-end",padding:isCenter?"12px 0":"0"}},
-    h("div",{style:{background:"#fff",width:"100%",maxWidth:isCenter?460:480,margin:"0 auto",borderRadius:isCenter?8:"12px 12px 0 0",maxHeight:isCenter?"82vh":"92vh",overflowY:"auto"}},
-      h("div",{style:{padding:"18px 22px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f5f5f5",position:"sticky",top:0,background:"#fff",zIndex:1}},
-        h("div",{style:{fontSize:17,fontWeight:800,color:"#1a1a2e"}},title),
-        h("button",{onClick:onClose,style:{background:"#f0f0f0",border:"none",borderRadius:"50%",width:32,height:32,fontSize:16,cursor:"pointer"}},"×")),
+    h("div",{style:{background:"#fff",width:"100%",maxWidth:isCenter?460:480,margin:"0 auto",borderRadius:isCenter?8:"8px 8px 0 0",maxHeight:isCenter?"82vh":"92vh",overflowY:"auto",border:isCenter?"1px solid #D8E0E8":"none"}},
+      h("div",{style:{padding:"18px 22px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #D8E0E8",position:"sticky",top:0,background:"#fff",zIndex:1}},
+        h("div",{style:{fontSize:17,fontWeight:800,color:"#102A43"}},title),
+        h("button",{onClick:onClose,style:{background:"#fff",border:"1px solid #B8C6D5",borderRadius:6,width:32,height:32,fontSize:16,color:"#475569",cursor:"pointer"}},"×")),
       h("div",{style:{padding:"16px 22px 32px"}},children)));
 }
 function Bdg({label,color,bg,small}) {
@@ -2304,7 +2304,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const headerBlock = h("div",{style:{background:"#0B1220",borderBottom:"3px solid #2F80ED",padding:"14px 16px 12px",position:"sticky",top:0,zIndex:1400}},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}},
       h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
-        h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:10,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
+        h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
         h("button",{onClick:onHome,style:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"ホーム")
       ),
       h("button",{
@@ -2312,7 +2312,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         disabled:favoriteSaving,
         style:{
           border:"1px solid "+(isFavorite?"#FDE68A":"rgba(255,255,255,0.35)"),
-          borderRadius:999,
+           borderRadius:6,
           padding:"6px 12px",
           background:isFavorite?"#FEF3C7":"rgba(255,255,255,0.12)",
           color:isFavorite?"#92400E":"#fff",
@@ -2340,21 +2340,21 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         ? h("div",{style:{display:"inline-flex",alignItems:"center",justifyContent:"flex-end",flexWrap:"wrap",gap:7}},
             h("span",{style:{fontSize:11,fontWeight:800,color:"rgba(255,255,255,0.7)",letterSpacing:.7}},"MATCH VIDEO"),
             ...youtubeLinks.map(x=>h("a",{key:x.key,href:x.url,target:"_blank",rel:"noopener noreferrer",
-              style:{display:"inline-flex",alignItems:"center",background:"#FF0033",border:"1px solid #C7002A",borderRadius:999,padding:"6px 11px",color:"#fff",fontSize:11,fontWeight:800,textDecoration:"none",boxShadow:"0 4px 10px rgba(199,0,42,0.35)"}},
+               style:{display:"inline-flex",alignItems:"center",background:"#B91C1C",border:"1px solid #B91C1C",borderRadius:4,padding:"6px 11px",color:"#fff",fontSize:11,fontWeight:800,textDecoration:"none",boxShadow:"none"}},
               youtubeKeyLabel(x.key)))
           )
         : h("span",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.45)"}},"試合動画未登録")
     ),
-    isFavorite && h("div",{style:{marginTop:10,padding:"8px 10px",background:"rgba(255,255,255,0.1)",borderRadius:10,border:"1px solid rgba(255,255,255,0.2)"}},
-      h("div",{style:{fontSize:11,fontWeight:800,color:"#FCD34D"}},"★ あなたのお気に入り")
+    isFavorite && h("div",{style:{marginTop:10,padding:"8px 10px",background:"rgba(255,255,255,0.08)",borderRadius:6,border:"1px solid rgba(255,255,255,0.2)"}},
+      h("div",{style:{fontSize:11,fontWeight:800,color:"#D8E8F8"}},"お気に入りに登録済み")
     )
   );
 
-  const scoreboardBlock = h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:8,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-    h("div",{style:{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"SCOREBOARD"),
+  const scoreboardBlock = h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"SCOREBOARD"),
     h("div",{style:{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:10,marginBottom:6}},
       h("div",{style:{textAlign:"left"}},
-        h("div",{style:{fontSize:14,fontWeight:900,color:"#1D4ED8",lineHeight:1.2}},"塚口AFC")
+        h("div",{style:{fontSize:14,fontWeight:900,color:"#1D4E89",lineHeight:1.2}},"塚口AFC")
       ),
       h("div",{style:{textAlign:"center"}},
         h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:10,lineHeight:1}},
@@ -2433,10 +2433,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       return h("div",{key:`goal-${g.team}-${g.sourceIdx}-${i}`,style:{display:"grid",gridTemplateColumns:isAdmin?"1fr 78px 1fr 76px":"1fr 78px 1fr",alignItems:"center",gap:6,marginBottom:6}},
         h("div",{style:{display:"flex",justifyContent:"flex-end",minHeight:34}},
           isUs&&h("div",{style:{maxWidth:"100%",textAlign:"right"}},
-            h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4ED8",lineHeight:1.3}},scorerName),
+            h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4E89",lineHeight:1.3}},scorerName),
             assistName&&h("div",{style:{fontSize:11,color:"#3B82F6",marginTop:2}},"🅰 "+assistName),
             g.goalType&&g.goalType!=="通常"&&h("div",{style:{marginTop:3}},
-              h("span",{style:{background:g.goalType==="PK"?"#FCD34D":"#0F172A",color:g.goalType==="PK"?"#78350F":"#fff",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:800}},g.goalType))
+              h("span",{style:{background:"#F8FAFC",color:g.goalType==="PK"?"#A16207":"#102A43",border:"1px solid "+(g.goalType==="PK"?"#E8D4A5":"#B8C6D5"),borderRadius:2,padding:"1px 6px",fontSize:9,fontWeight:800}},g.goalType))
           )
         ),
         h("div",{style:{textAlign:"center",fontSize:11,fontWeight:900,color:"#64748B",lineHeight:1.3}},minuteLabel),
@@ -2444,7 +2444,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           !isUs&&h("div",{style:{maxWidth:"100%"}},
             h("div",{style:{fontSize:12,fontWeight:800,color:"#475569",lineHeight:1.3}},scorerName),
             g.goalType&&g.goalType!=="通常"&&h("div",{style:{marginTop:3}},
-              h("span",{style:{background:g.goalType==="オウンゴール"?"#16A34A":"#64748B",color:"#fff",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:800}},g.goalType))
+              h("span",{style:{background:"#F8FAFC",color:g.goalType==="オウンゴール"?"#102A43":"#475569",border:"1px solid #D8E0E8",borderRadius:2,padding:"1px 6px",fontSize:9,fontWeight:800}},g.goalType))
           )
         ),
         isAdmin&&h("div",{style:{display:"flex",flexDirection:"column",gap:3,alignItems:"stretch"}},
@@ -2457,7 +2457,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           h("button",{onClick:()=>{
               if(isUs)setGoals(p=>p.filter((_,j)=>j!==g.sourceIdx));
               else setTheirG(p=>p.filter((_,j)=>j!==g.sourceIdx));
-            },style:{background:"none",border:"1px solid #ffcccc",borderRadius:6,color:"#F44336",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"削除")
+            },style:{background:"#fff",border:"1px solid #E8C7CB",borderRadius:6,color:"#B91C1C",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"削除")
         )
       );
     })
@@ -2465,10 +2465,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const substitutionTimeline = [...(substitutions || [])]
     .map((s, idx) => ({...s, _idx: idx}))
     .sort((a,b)=>halfSortOrder(a.half)-halfSortOrder(b.half)||Number(a.minute)-Number(b.minute)||Number(a.second)-Number(b.second)||a._idx-b._idx);
-  const substitutionsBlock = h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:8,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+  const substitutionsBlock = h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
-      h("div",{style:{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:2}},"SUBSTITUTIONS"),
-      isAdmin && h("button",{onClick:openAddSub,style:{border:"1px solid #1D4ED8",background:"#EFF6FF",color:"#1D4ED8",borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},"＋ 交代を追加")
+      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2}},"SUBSTITUTIONS"),
+      isAdmin && h("button",{onClick:openAddSub,style:{border:"1px solid #1D4E89",background:"#fff",color:"#1D4E89",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},"＋ 交代を追加")
     ),
     substitutionTimeline.length===0
       ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"交代履歴なし")
@@ -2480,16 +2480,16 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           return h("div",{key:`sub-${s._idx}-${i}`,style:{display:"grid",gridTemplateColumns:isAdmin?"86px 1fr auto":"86px 1fr",gap:8,alignItems:"center",padding:"8px 0",borderBottom:i===substitutionTimeline.length-1?"none":"1px solid #F1F5F9"}},
             h("div",{style:{fontSize:11,fontWeight:800,color:"#64748B"}},`${halfLabel} ${Number(s.minute||0)}:${sec}`),
             h("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
-              h("span",{style:{background:"#FEE2E2",color:"#B91C1C",borderRadius:999,padding:"2px 8px",fontSize:11,fontWeight:800}},"OUT"),
+              h("span",{style:{background:"#FBEFF0",color:"#B91C1C",border:"1px solid #F1B7B7",borderRadius:2,padding:"2px 6px",fontSize:11,fontWeight:800}},"OUT"),
               h("span",{style:{fontSize:12,fontWeight:700,color:"#334155"}},outName),
               h("span",{style:{color:"#94A3B8",fontSize:12,fontWeight:800}},"→"),
-              h("span",{style:{background:"#DCFCE7",color:"#166534",borderRadius:999,padding:"2px 8px",fontSize:11,fontWeight:800}},"IN"),
+              h("span",{style:{background:"#F1F7F2",color:"#15803D",border:"1px solid #B8DCC0",borderRadius:2,padding:"2px 6px",fontSize:11,fontWeight:800}},"IN"),
               h("span",{style:{fontSize:12,fontWeight:700,color:"#334155"}},inName),
               s.note && h("span",{style:{fontSize:11,color:"#64748B"}},"(" + s.note + ")")
             ),
             isAdmin && h("div",{style:{display:"flex",gap:6}},
-              h("button",{onClick:()=>openEditSub(s._idx),style:{border:"1px solid #CBD5E1",background:"#fff",color:"#64748B",borderRadius:8,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}},"編集"),
-              h("button",{onClick:()=>removeSubstitution(s._idx),style:{border:"1px solid #FECACA",background:"#FEF2F2",color:"#DC2626",borderRadius:8,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}},"削除")
+              h("button",{onClick:()=>openEditSub(s._idx),style:{border:"1px solid #B8C6D5",background:"#fff",color:"#1D4E89",borderRadius:6,padding:"4px 8px",fontSize:11,fontWeight:800,cursor:"pointer"}},"編集"),
+              h("button",{onClick:()=>removeSubstitution(s._idx),style:{border:"1px solid #F1B7B7",background:"#fff",color:"#B91C1C",borderRadius:6,padding:"4px 8px",fontSize:11,fontWeight:800,cursor:"pointer"}},"削除")
             )
           );
         })
@@ -2543,15 +2543,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     return nodes;
   };
   const formationNodes = getFormationNodes(formation, formationSlotsDef);
-  const formationBlock = (isAdmin || !!formationSlotsDef.length) && h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-    h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"STARTING MEMBER"),
+  const formationBlock = (isAdmin || !!formationSlotsDef.length) && h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:10}},"STARTING MEMBER"),
     isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
       Object.keys(MATCH_FORMATION_PRESETS).map(key=>
         h("button",{key,onClick:()=>applyFormationPreset(key),
-          style:{flex:1,padding:"10px 8px",border:`2px solid ${formation===key?"#1D4ED8":"#E2E8F0"}`,borderRadius:10,background:formation===key?"#1D4ED8":"#fff",color:formation===key?"#fff":"#334155",fontSize:13,fontWeight:700,cursor:"pointer"}},key))
+           style:{flex:1,padding:"10px 8px",border:`1px solid ${formation===key?"#102A43":"#D8E0E8"}`,borderRadius:6,background:formation===key?"#102A43":"#fff",color:formation===key?"#fff":"#475569",fontSize:13,fontWeight:800,cursor:"pointer"}},key))
     ),
     !formationSlotsDef.length && h("div",{style:{fontSize:12,color:"#94A3B8"}},"スターティングメンバー未設定"),
-    !!formationSlotsDef.length && h("div",{style:{background:"#F8FAFC",borderRadius:14,padding:10,border:"1px solid #DBEAFE"}},
+    !!formationSlotsDef.length && h("div",{style:{background:"#F8FAFC",borderRadius:6,padding:10,border:"1px solid #D8E0E8"}},
       h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:8,letterSpacing:1}},"配置テンプレ: " + formation),
       isAdmin&&scheduleIdForAttend&&attendMap!==null&&formationSelectableMembers.length===0
         && h("div",{style:{fontSize:12,fontWeight:700,color:"#B91C1C",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"8px 10px",marginBottom:8}},
@@ -2596,7 +2596,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
                     return h("option",{key:optKey,value:optKey},m.name);
                   })
                 )
-              : h("div",{style:{fontSize:12,fontWeight:900,color:"#0F172A",background:"rgba(255,255,255,0.92)",borderRadius:999,padding:"6px 10px",minWidth:86,textAlign:"center",border:"1px solid rgba(255,255,255,0.65)",boxShadow:"0 1px 4px rgba(0,0,0,0.2)"}},
+              : h("div",{style:{fontSize:12,fontWeight:900,color:"#0F172A",background:"rgba(255,255,255,0.96)",borderRadius:6,padding:"6px 10px",minWidth:86,textAlign:"center",border:"1px solid #D8E0E8",boxShadow:"none"}},
                   currentMember ? currentMember.name : "—")
           );
         })
@@ -2604,16 +2604,16 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     )
   );
 
-  const matchInputBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-    h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:12}},"INPUT"),
-    h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:12,border:"1px solid #E2E8F0"}},
+  const matchInputBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:12}},"INPUT"),
+    h("div",{style:{background:"#F8FAFC",borderRadius:6,padding:12,border:"1px solid #D8E0E8"}},
       h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:8}},"シュート入力"),
       h("div",{style:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}},
         visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setActiveShotHalf(hf),style:{
-          border:`2px solid ${safeActiveShotHalf===hf?"#1D4ED8":"#CBD5E1"}`,
-          background:safeActiveShotHalf===hf?"#1D4ED8":"#fff",
+          border:`1px solid ${safeActiveShotHalf===hf?"#102A43":"#CBD5E1"}`,
+          background:safeActiveShotHalf===hf?"#102A43":"#fff",
           color:safeActiveShotHalf===hf?"#fff":"#475569",
-          borderRadius:999,padding:"6px 12px",fontSize:11,fontWeight:800,cursor:"pointer"}},hf))
+          borderRadius:6,padding:"6px 12px",fontSize:11,fontWeight:800,cursor:"pointer"}},hf))
       ),
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
         h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B"}},"相手シュート"),
@@ -2648,9 +2648,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       )
     )
   );
-  const matchStatusBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:16,padding:14,marginBottom:8,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
-    h("div",{style:{fontSize:10,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"MATCH STATUS / TIMER"),
-    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8,padding:"8px 10px",borderRadius:10,background:"#F8FAFC",border:"1px solid #E2E8F0"}},
+  const matchStatusBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"MATCH STATUS / TIMER"),
+    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8,padding:"8px 10px",borderRadius:6,background:"#F8FAFC",border:"1px solid #D8E0E8"}},
       h("div",{},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:2}},"試合タイマー"),
         h("div",{style:{fontSize:22,fontWeight:900,color:"#0F172A",letterSpacing:1}},currentClockLabel)
@@ -2662,35 +2662,35 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         onClick:startMatchClock,
         disabled:clockRunning,
         style:{
-          flex:1,padding:"9px 12px",borderRadius:10,border:"2px solid #1D4ED8",
-          background:clockRunning?"#DBEAFE":"#1D4ED8",color:clockRunning?"#1E40AF":"#fff",
+          flex:1,padding:"9px 12px",borderRadius:6,border:"1px solid #102A43",
+          background:clockRunning?"#F8FBFF":"#102A43",color:clockRunning?"#102A43":"#fff",
           fontSize:12,fontWeight:800,cursor:clockRunning?"default":"pointer",opacity:clockRunning?0.85:1
         }
-      },"▶ 試合開始"),
+       },"開始"),
       h("button",{
         onClick:stopMatchClock,
         style:{
-          flex:1,padding:"9px 12px",borderRadius:10,border:"2px solid #16A34A",
-          background:clockRunning?"#16A34A":"#ECFDF5",color:clockRunning?"#fff":"#15803D",
+          flex:1,padding:"9px 12px",borderRadius:6,border:"1px solid #475569",
+          background:clockRunning?"#475569":"#fff",color:clockRunning?"#fff":"#475569",
           fontSize:12,fontWeight:800,cursor:"pointer"
         }
-      },"■ 試合終了"),
+       },"終了"),
       h("button",{
         onClick:resetMatchClock,
         style:{
-          flex:1,padding:"9px 12px",borderRadius:10,border:"2px solid #CBD5E1",
+          flex:1,padding:"9px 12px",borderRadius:6,border:"1px solid #CBD5E1",
           background:"#fff",color:"#475569",
           fontSize:12,fontWeight:800,cursor:"pointer"
         }
-      },"↺ リセット")
+       },"リセット")
     ),
     h("div",{style:{display:"flex",gap:8}},
       h("button",{
         onClick:()=>isAdmin&&setMatchStatus("pre"),
         disabled:!isAdmin,
         style:{
-          flex:1,padding:"9px 12px",borderRadius:10,
-          border:`2px solid ${matchStatus==="pre"?"#64748B":"#E2E8F0"}`,
+          flex:1,padding:"9px 12px",borderRadius:6,
+          border:`1px solid ${matchStatus==="pre"?"#475569":"#D8E0E8"}`,
           background:matchStatus==="pre"?"#F1F5F9":"#fff",
           color:matchStatus==="pre"?"#334155":"#64748B",
           fontSize:12,fontWeight:800,cursor:isAdmin?"pointer":"default",opacity:isAdmin?1:0.95
@@ -2700,9 +2700,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         onClick:()=>isAdmin&&setMatchStatus("finished"),
         disabled:!isAdmin,
         style:{
-          flex:1,padding:"9px 12px",borderRadius:10,
-          border:`2px solid ${matchStatus==="finished"?"#16A34A":"#E2E8F0"}`,
-          background:matchStatus==="finished"?"#ECFDF5":"#fff",
+          flex:1,padding:"9px 12px",borderRadius:6,
+          border:`1px solid ${matchStatus==="finished"?"#102A43":"#D8E0E8"}`,
+          background:matchStatus==="finished"?"#F8FBFF":"#fff",
           color:matchStatus==="finished"?"#15803D":"#64748B",
           fontSize:12,fontWeight:800,cursor:isAdmin?"pointer":"default",opacity:isAdmin?1:0.95
         }
@@ -2710,16 +2710,16 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     )
   );
   const substitutionModal = modal==="substitution"
-    ? h(Modal,{title:subEdit===null?"🔁 交代を追加":"🔁 交代を編集",onClose:()=>{setModal(null);setSubEdit(null);}},
+    ? h(Modal,{title:subEdit===null?"交代を追加":"交代を編集",onClose:()=>{setModal(null);setSubEdit(null);}},
         h("div",{style:{marginBottom:12}},
           h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:6}},"ハーフ"),
           h("div",{style:{display:"flex",gap:8}},
-            visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setSubForm(p=>({...p,half:hf})),style:{flex:1,padding:"9px 8px",border:`2px solid ${subForm.half===hf?"#1D4ED8":"#E2E8F0"}`,borderRadius:9,background:subForm.half===hf?"#1D4ED8":"#fff",color:subForm.half===hf?"#fff":"#475569",fontSize:12,fontWeight:800,cursor:"pointer"}},hf))
+            visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setSubForm(p=>({...p,half:hf})),style:{flex:1,padding:"9px 8px",border:`1px solid ${subForm.half===hf?"#102A43":"#D8E0E8"}`,borderRadius:6,background:subForm.half===hf?"#102A43":"#fff",color:subForm.half===hf?"#fff":"#475569",fontSize:12,fontWeight:800,cursor:"pointer"}},hf))
           )
         ),
         h("div",{style:{marginBottom:12,display:"flex",justifyContent:"flex-end"}},
-          h("button",{onClick:applyClockToSubDraft,style:{border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#1D4ED8",borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},
-            "🕒 現在時刻を反映")
+          h("button",{onClick:applyClockToSubDraft,style:{border:"1px solid #B8C6D5",background:"#F8FAFC",color:"#1D4E89",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},
+            "現在時刻を反映")
         ),
         h("div",{style:{fontSize:11,color:"#64748B",margin:"-4px 0 10px",textAlign:"right"}},"※ 反映後に分・秒は手入力で変更できます"),
         h("div",{style:{display:"flex",gap:10,marginBottom:12}},
@@ -2784,11 +2784,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
               .map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name)))),
         editGoal.type==="our"&&h("div",{style:{marginBottom:20}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"種別"),
-          h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#4CAF50"},{v:"PK",c:"#FFC107"},{v:"オウンゴール",c:"#0F172A"}].map(x=>
+          h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#1D4E89"},{v:"PK",c:"#64748B"},{v:"オウンゴール",c:"#102A43"}].map(x=>
             h("button",{key:x.v,onClick:()=>setEditNg(p=>chooseOurGoalType(p,x.v)),
               style:{flex:1,padding:10,border:`1px solid ${editNg.goalType===x.v?x.c:"#D8E0E8"}`,borderRadius:6,
                 background:editNg.goalType===x.v?x.c:"#fff",
-                color:editNg.goalType===x.v?(x.v==="PK"?"#333":"#fff"):"#666",
+                color:editNg.goalType===x.v?"#fff":"#64748B",
                 fontSize:12,fontWeight:700,cursor:"pointer"}},x.v)))),
         h("div",{style:{display:"flex",gap:10}},
           h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),
@@ -2819,12 +2819,12 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       formationBlock,
       matchInputBlock,
       // PK戦セクション（折りたたみ）
-      (isAdmin||pkOn)&&h("div",{style:{background:"#fff",borderRadius:18,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+      (isAdmin||pkOn)&&h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
         h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:pkOpen?12:0,cursor:"pointer"},
           onClick:()=>setPkOpen(p=>!p)},
           h("div",{style:{display:"flex",alignItems:"center",gap:8}},
-            h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"🥅 PK戦"),
-            pkOn&&h("div",{style:{fontSize:12,fontWeight:800,color:pkWin?"#4CAF50":"#F44336"}},
+            h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2}},"PK SHOOTOUT"),
+            pkOn&&h("div",{style:{fontSize:12,fontWeight:800,color:pkWin?"#15803D":"#B91C1C"}},
               pkOurScore+"-"+pkTheirScore+(pkWin?" 勝ち":pkLose?" 負け":""))),
           h("div",{style:{display:"flex",alignItems:"center",gap:8}},
             isAdmin&&h("button",{
@@ -2832,52 +2832,52 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
               if(hasPk){setPkKickers([]);setPkTheirSeq([]);setHasPk(false);}
               else{setHasPk(true);setPkOpen(true);}
             },
-            style:{background:hasPk?"#EFF6FF":"#f0f0f0",color:hasPk?"#1D4ED8":"#999",
-              border:"2px solid "+(hasPk?"#1D4ED8":"#eee"),borderRadius:20,
-              padding:"4px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}},
+             style:{background:hasPk?"#F8FBFF":"#fff",color:hasPk?"#102A43":"#64748B",
+               border:"1px solid "+(hasPk?"#102A43":"#D8E0E8"),borderRadius:6,
+               padding:"4px 12px",fontSize:12,fontWeight:800,cursor:"pointer"}},
             hasPk?"PK戦あり ✓":"PK戦を追加"),
             h("span",{style:{fontSize:12,color:"#bbb",marginLeft:4}},pkOpen?"▲":"▼"))),
         pkOpen&&hasPk&&h(Fragment,{},
           h("div",{style:{marginBottom:14}},
             h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
               h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e"}},"塚口AFC"),
-              h("div",{style:{fontSize:20,fontWeight:900,color:"#1D4ED8"}},pkOurScore+"本")),
+               h("div",{style:{fontSize:20,fontWeight:900,color:"#1D4E89"}},pkOurScore+"本")),
             pkKickers.map((k,i)=>{
               const m=membersSorted.find(x=>String(x.id||"")===String(k.memberId||""));
-              return h("div",{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:"#F8F9FA",borderRadius:10,padding:"8px 12px"}},
+               return h("div",{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:6,padding:"8px 12px"}},
                 h("div",{style:{fontSize:12,color:"#aaa",width:24,flexShrink:0}},(i+1)+"番"),
                 h("div",{style:{flex:1,fontSize:13,fontWeight:600,color:"#1a1a2e"}},m?m.name:"？"),
                 h("button",{onClick:()=>setPkKickers(prev=>prev.map((x,j)=>j===i?{...x,success:!x.success}:x)),
-                  style:{width:36,height:36,border:"none",borderRadius:8,cursor:"pointer",fontSize:15,fontWeight:900,background:k.success?"#4CAF50":"#F44336",color:"#fff"}},
+                   style:{width:36,height:36,border:"none",borderRadius:6,cursor:"pointer",fontSize:15,fontWeight:900,background:k.success?"#15803D":"#B91C1C",color:"#fff"}},
                   k.success?"○":"×"),
                 isAdmin&&h("button",{onClick:()=>setPkKickers(prev=>prev.filter((_,j)=>j!==i)),
                   style:{width:28,height:28,border:"none",borderRadius:6,background:"#eee",color:"#aaa",fontSize:13,cursor:"pointer"}},"✕"));}),
             isAdmin&&h("select",{value:pkSelectVal,
               onChange:e=>{const v=e.target.value;if(!v)return;setPkKickers(prev=>[...prev,{memberId:v,success:true}]);setPkSelectVal("");},
-              style:{width:"100%",border:"2px solid #1D4ED8",borderRadius:10,padding:"8px 12px",marginTop:8,fontSize:13,background:"#EFF6FF",color:"#1D4ED8",fontWeight:700,outline:"none"}},
+               style:{width:"100%",border:"1px solid #B8C6D5",borderRadius:6,padding:"8px 12px",marginTop:8,fontSize:13,background:"#fff",color:"#102A43",fontWeight:700,outline:"none"}},
               h("option",{value:""}, attendLoading ? "出席者読込中..." : (pkSelectableMembers.length ? "＋ キッカーを追加..." : "出席者がいません")),
               memberOptionsByPosition(pkSelectableMembers)),
            h("div",{style:{borderTop:"2px solid #f5f5f5",paddingTop:14}},
             h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
               h("div",{style:{fontSize:13,fontWeight:800,color:"#666"}},match.opponent),
-              h("div",{style:{fontSize:20,fontWeight:900,color:"#607D8B"}},pkTheirScore+"本")),
+               h("div",{style:{fontSize:20,fontWeight:900,color:"#475569"}},pkTheirScore+"本")),
             pkTheirSeq.map((s,i)=>
-              h("div",{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:"#F8F9FA",borderRadius:10,padding:"8px 12px"}},
+               h("div",{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:6,padding:"8px 12px"}},
                 h("div",{style:{fontSize:12,color:"#aaa",width:24,flexShrink:0}},(i+1)+"番"),
                 h("div",{style:{flex:1,fontSize:13,fontWeight:600,color:"#666"}},match.opponent),
                 h("div",{
                   onClick:isAdmin?()=>setPkTheirSeq(prev=>{const n=[...prev];n[i]=!n[i];return n;}):undefined,
-                  style:{width:36,height:36,border:"none",borderRadius:8,fontSize:15,fontWeight:900,cursor:isAdmin?"pointer":"default",
-                    background:s?"#607D8B":"#F44336",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center"}},s?"○":"×"),
+                   style:{width:36,height:36,border:"none",borderRadius:6,fontSize:15,fontWeight:900,cursor:isAdmin?"pointer":"default",
+                     background:s?"#475569":"#B91C1C",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center"}},s?"○":"×"),
                 isAdmin&&h("button",{onClick:()=>setPkTheirSeq(prev=>prev.filter((_,j)=>j!==i)),
                   style:{width:28,height:28,border:"none",borderRadius:6,background:"#eee",color:"#aaa",fontSize:13,cursor:"pointer"}},"✕"))),
             isAdmin&&h("div",{style:{display:"flex",gap:8,marginTop:8}},
               h("button",{onClick:()=>setPkTheirSeq(prev=>[...prev,true]),
-                style:{flex:1,padding:"9px",background:"#E8F5E9",color:"#4CAF50",border:"2px solid #4CAF50",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}},"＋ ○ 成功"),
+                 style:{flex:1,padding:"9px",background:"#fff",color:"#15803D",border:"1px solid #15803D",borderRadius:6,fontSize:13,fontWeight:800,cursor:"pointer"}},"＋ ○ 成功"),
                h("button",{onClick:()=>setPkTheirSeq(prev=>[...prev,false]),
-                 style:{flex:1,padding:"9px",background:"#FFEBEE",color:"#F44336",border:"2px solid #F44336",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}},"＋ × 失敗"))),
+                  style:{flex:1,padding:"9px",background:"#fff",color:"#B91C1C",border:"1px solid #B91C1C",borderRadius:6,fontSize:13,fontWeight:800,cursor:"pointer"}},"＋ × 失敗"))),
           h("div",{style:{marginTop:14,paddingTop:14,borderTop:"1px solid #E2E8F0"}},
-            h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:7}},"🎬 PK戦動画"),
+            h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:800,color:"#102A43",letterSpacing:1.1,marginBottom:7}},"PK VIDEO"),
             isAdmin
               ? h(Fragment,{},
                   h("input",{type:"url",value:ytUrls.pk,onChange:e=>setYtUrls(prev=>({...prev,pk:e.target.value})),
@@ -2885,11 +2885,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
                   h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.5}},"入力後は自動保存され、試合詳細上部の「PK」ボタンから開けます")
                 )
               : youtubePkUrl
-                ? h("a",{href:youtubePkUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",background:"#FF0033",border:"1px solid #C7002A",borderRadius:999,padding:"7px 11px",color:"#fff",fontSize:12,fontWeight:800,textDecoration:"none"}},"▶ PK戦動画を開く")
+                ? h("a",{href:youtubePkUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",background:"#B91C1C",border:"1px solid #B91C1C",borderRadius:4,padding:"7px 11px",color:"#fff",fontSize:12,fontWeight:800,textDecoration:"none"}},"PK戦動画を開く")
                 : h("div",{style:{fontSize:12,color:"#94A3B8"}},"PK戦動画は未登録です")
           ),
           (pkKickers.length>0||pkTheirSeq.length>0)&&h("div",{style:{marginTop:14,padding:"12px 16px",
-            background:pkWin?"#E8F5E9":pkLose?"#FFEBEE":"#F8F9FA",borderRadius:12}},
+             background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6}},
             h("div",{style:{fontSize:12,color:"#aaa",marginBottom:8,textAlign:"center"}},"PK戦結果"),
             h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:16}},
               h("div",{style:{textAlign:"center"}},
@@ -2901,8 +2901,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
                 h("div",{style:{fontSize:11,color:"#666",marginBottom:2}},match.opponent),
                 h("div",{style:{fontSize:18,fontWeight:900,color:"#607D8B",letterSpacing:3}},pkTheirStr||"—"),
                 h("div",{style:{fontSize:22,fontWeight:900,color:"#607D8B"}},pkTheirScore))),
-            pkWin&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#4CAF50"}},"🎉 PK勝ち！"),
-            pkLose&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#F44336"}},"😔 PK負け")))),
+             pkWin&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#15803D"}},"PK勝ち"),
+             pkLose&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#B91C1C"}},"PK負け")))),
 
       isAdmin&&h("button",{
         onClick:save,
@@ -2949,7 +2949,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
             .filter(m=>String(m.id)!==String(ng.scorerId||""))
             .map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name)))),
       h("div",{style:{marginBottom:20}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"種別"),
-        h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#4CAF50"},{v:"PK",c:"#FFC107"},{v:"オウンゴール",c:"#0F172A"}].map(x=>h("button",{key:x.v,onClick:()=>setNg(p=>chooseOurGoalType(p,x.v)),style:{flex:1,padding:10,border:`1px solid ${ng.goalType===x.v?x.c:"#D8E0E8"}`,borderRadius:6,background:ng.goalType===x.v?x.c:"#fff",color:ng.goalType===x.v?(x.v==="PK"?"#333":"#fff"):"#64748B",fontSize:12,fontWeight:800,cursor:"pointer"}},x.v)))),
+        h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#1D4E89"},{v:"PK",c:"#64748B"},{v:"オウンゴール",c:"#102A43"}].map(x=>h("button",{key:x.v,onClick:()=>setNg(p=>chooseOurGoalType(p,x.v)),style:{flex:1,padding:10,border:`1px solid ${ng.goalType===x.v?x.c:"#D8E0E8"}`,borderRadius:6,background:ng.goalType===x.v?x.c:"#fff",color:ng.goalType===x.v?"#fff":"#64748B",fontSize:12,fontWeight:800,cursor:"pointer"}},x.v)))),
       h("div",{style:{display:"flex",gap:10}},h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),h("button",{onClick:addOur,style:css.bS},"追加"))),
 
     // 失点モーダル
@@ -2965,7 +2965,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),h("input",{value:ntg.minute,onChange:e=>setNtg(p=>({...p,minute:e.target.value})),type:"number",placeholder:"8",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒"),h("input",{value:ntg.second,onChange:e=>setNtg(p=>({...p,second:e.target.value})),onBlur:e=>setNtg(p=>({...p,second:(String(e.target.value||"").trim()===""?"00":String(Math.max(0,Math.min(59,Number(e.target.value)||0))).padStart(2,"0"))})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
       h("div",{style:{marginBottom:20}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"種別"),
-        h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#607D8B"},{v:"オウンゴール",c:"#4CAF50"}].map(x=>h("button",{key:x.v,onClick:()=>setNtg(p=>({...p,goalType:x.v})),style:{flex:1,padding:10,border:`1px solid ${ntg.goalType===x.v?x.c:"#D8E0E8"}`,borderRadius:6,background:ntg.goalType===x.v?x.c:"#fff",color:ntg.goalType===x.v?"#fff":"#64748B",fontSize:12,fontWeight:800,cursor:"pointer"}},x.v)))),
+        h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#475569"},{v:"オウンゴール",c:"#102A43"}].map(x=>h("button",{key:x.v,onClick:()=>setNtg(p=>({...p,goalType:x.v})),style:{flex:1,padding:10,border:`1px solid ${ntg.goalType===x.v?x.c:"#D8E0E8"}`,borderRadius:6,background:ntg.goalType===x.v?x.c:"#fff",color:ntg.goalType===x.v?"#fff":"#64748B",fontSize:12,fontWeight:800,cursor:"pointer"}},x.v)))),
       h("div",{style:{display:"flex",gap:10}},h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),h("button",{onClick:addTheir,style:{...css.bS,background:"#607D8B"}},"追加"))),
 
     substitutionModal,
