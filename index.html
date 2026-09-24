@@ -54,6 +54,12 @@ button:active{transform:translateY(1px);}
 .content-page [role="button"],.detail-page [role="button"]{border-radius:6px !important;}
 .content-page div[style*="box-shadow"],.detail-page div[style*="box-shadow"]{box-shadow:none !important;border-radius:8px !important;border-color:var(--line) !important;}
 .dashboard-tabs button{border-radius:0 !important;}
+.schedule-detail-panel{background:#fff !important;border:1px solid var(--line) !important;border-radius:8px !important;box-shadow:none !important;}
+.schedule-detail-panel [style*="border-radius"]{border-radius:6px !important;}
+.schedule-detail-panel > [style*="background"]{background:#F8FAFC !important;border:1px solid var(--line) !important;}
+.schedule-detail-panel button{border-radius:6px !important;box-shadow:none !important;}
+.schedule-detail-panel summary{list-style:none;}
+.schedule-detail-panel summary::-webkit-details-marker{display:none;}
 .login-shell{min-height:100vh;background:var(--ink);display:flex;align-items:center;justify-content:center;padding:24px;}
 .login-card{background:#fff;border:1px solid #D8E0E8;border-top:4px solid #2F80ED;padding:30px;width:100%;max-width:360px;box-shadow:0 18px 48px rgba(0,0,0,.26);}
 .login-brand{display:flex;align-items:center;gap:12px;margin-bottom:28px;}
@@ -1509,7 +1515,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const [pkKickers,setPkKickers]    = useState(initKickers);   // [{memberId,success}]
   const [pkTheirSeq,setPkTheirSeq]  = useState(initTheirSeq);  // [true,false,...]
   const [pkSelectVal,setPkSelectVal]= useState("");             // selectの制御値
-  const [pkOpen,setPkOpen]          = useState(false);            // PK折りたたみ
   const copyYt=(text,key)=>{copyToClipboard(text);setYtCopied(key);setTimeout(()=>setYtCopied(""),2000);};
   const normalizeYoutubeLink = raw => {
     const s = String(raw || "").trim();
@@ -2373,6 +2378,12 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     !pkOn&&h("div",{style:{marginTop:4,display:"flex",justifyContent:"center"}},h(RWdg,{our:ourT,their:thT,status:matchStatus,date:match?.date}))
   );
 
+  const pkSummaryBlock = pkOn && h("div",{style:{background:"#F8FAFC",border:"1px solid #D8E0E8",borderLeft:"3px solid #102A43",borderRadius:6,padding:"9px 12px",marginBottom:8,display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:10}},
+    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,fontWeight:800,letterSpacing:1,color:"#102A43"}},"PK SHOOTOUT"),
+    h("div",{style:{fontSize:18,fontWeight:900,color:pkWin?"#15803D":pkLose?"#B91C1C":"#102A43",lineHeight:1}},pkOurScore+" - "+pkTheirScore),
+    h("div",{style:{textAlign:"right",fontSize:11,fontWeight:800,color:pkWin?"#15803D":pkLose?"#B91C1C":"#64748B"}},pkWin?"PK WIN":pkLose?"PK LOSS":"PK RESULT")
+  );
+
   const matchStatsBlock = h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
     h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"STATS"),
     h("div",{style:{display:"grid",gridTemplateColumns:"76px 1fr 92px 1fr 76px",alignItems:"center",gap:6,marginBottom:6}},
@@ -2543,8 +2554,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     return nodes;
   };
   const formationNodes = getFormationNodes(formation, formationSlotsDef);
-  const formationBlock = (isAdmin || !!formationSlotsDef.length) && h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
-    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:10}},"STARTING MEMBER"),
+  const formationBlock = (isAdmin || !!formationSlotsDef.length) && h("details",{style:{background:"#fff",borderRadius:8,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("summary",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2}},"STARTING MEMBER",h("span",{style:{fontFamily:"'Noto Sans JP',sans-serif",fontSize:11,color:"#64748B",letterSpacing:0}},"表示する")),
+    h("div",{style:{padding:"0 14px 14px",borderTop:"1px solid #D8E0E8"}},
     isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
       Object.keys(MATCH_FORMATION_PRESETS).map(key=>
         h("button",{key,onClick:()=>applyFormationPreset(key),
@@ -2601,7 +2613,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           );
         })
       )
-    )
+    ))
   );
 
   const matchInputBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
@@ -2812,32 +2824,18 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     headerBlock,
     h("div",{style:{padding:"8px 16px 0"}},
       scoreboardBlock,
+      pkSummaryBlock,
       matchStatusBlock,
       matchStatsBlock,
       goalsTimelineBlock,
-      substitutionsBlock,
-      formationBlock,
       matchInputBlock,
-      // PK戦セクション（折りたたみ）
-      (isAdmin||pkOn)&&h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
-        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:pkOpen?12:0,cursor:"pointer"},
-          onClick:()=>setPkOpen(p=>!p)},
-          h("div",{style:{display:"flex",alignItems:"center",gap:8}},
-            h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2}},"PK SHOOTOUT"),
-            pkOn&&h("div",{style:{fontSize:12,fontWeight:800,color:pkWin?"#15803D":"#B91C1C"}},
-              pkOurScore+"-"+pkTheirScore+(pkWin?" 勝ち":pkLose?" 負け":""))),
-          h("div",{style:{display:"flex",alignItems:"center",gap:8}},
-            isAdmin&&h("button",{
-            onClick:()=>{
-              if(hasPk){setPkKickers([]);setPkTheirSeq([]);setHasPk(false);}
-              else{setHasPk(true);setPkOpen(true);}
-            },
-             style:{background:hasPk?"#F8FBFF":"#fff",color:hasPk?"#102A43":"#64748B",
-               border:"1px solid "+(hasPk?"#102A43":"#D8E0E8"),borderRadius:6,
-               padding:"4px 12px",fontSize:12,fontWeight:800,cursor:"pointer"}},
-            hasPk?"PK戦あり ✓":"PK戦を追加"),
-            h("span",{style:{fontSize:12,color:"#bbb",marginLeft:4}},pkOpen?"▲":"▼"))),
-        pkOpen&&hasPk&&h(Fragment,{},
+      // PK戦の入力は管理者向けに折りたたみ、結果自体は上部に常時表示する
+      isAdmin&&h("details",{style:{background:"#fff",borderRadius:8,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
+        h("summary",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",cursor:"pointer"}},
+          h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2}},"PK SHOOTOUT"),
+          h("button",{onClick:e=>{e.preventDefault();e.stopPropagation();if(hasPk){setPkKickers([]);setPkTheirSeq([]);setHasPk(false);}else{setHasPk(true);}},style:{background:hasPk?"#F8FBFF":"#fff",color:hasPk?"#102A43":"#64748B",border:"1px solid "+(hasPk?"#102A43":"#D8E0E8"),borderRadius:6,padding:"4px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},hasPk?"PK戦あり":"PK戦を追加")
+        ),
+        hasPk&&h("div",{style:{padding:"0 14px 14px",borderTop:"1px solid #D8E0E8"}},
           h("div",{style:{marginBottom:14}},
             h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
               h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e"}},"塚口AFC"),
@@ -2888,21 +2886,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
                 ? h("a",{href:youtubePkUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",background:"#B91C1C",border:"1px solid #B91C1C",borderRadius:4,padding:"7px 11px",color:"#fff",fontSize:12,fontWeight:800,textDecoration:"none"}},"PK戦動画を開く")
                 : h("div",{style:{fontSize:12,color:"#94A3B8"}},"PK戦動画は未登録です")
           ),
-          (pkKickers.length>0||pkTheirSeq.length>0)&&h("div",{style:{marginTop:14,padding:"12px 16px",
-             background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6}},
-            h("div",{style:{fontSize:12,color:"#aaa",marginBottom:8,textAlign:"center"}},"PK戦結果"),
-            h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:16}},
-              h("div",{style:{textAlign:"center"}},
-                h("div",{style:{fontSize:11,color:"#666",marginBottom:2}},"塚口"),
-                h("div",{style:{fontSize:18,fontWeight:900,color:"#1D4ED8",letterSpacing:3}},pkOurStr||"—"),
-                h("div",{style:{fontSize:22,fontWeight:900,color:"#1D4ED8"}},pkOurScore)),
-              h("div",{style:{fontSize:20,color:"#ddd",fontWeight:900}},"vs"),
-              h("div",{style:{textAlign:"center"}},
-                h("div",{style:{fontSize:11,color:"#666",marginBottom:2}},match.opponent),
-                h("div",{style:{fontSize:18,fontWeight:900,color:"#607D8B",letterSpacing:3}},pkTheirStr||"—"),
-                h("div",{style:{fontSize:22,fontWeight:900,color:"#607D8B"}},pkTheirScore))),
-             pkWin&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#15803D"}},"PK勝ち"),
-             pkLose&&h("div",{style:{textAlign:"center",marginTop:8,fontSize:15,fontWeight:900,color:"#B91C1C"}},"PK負け")))),
+        ),
+      ),
 
       isAdmin&&h("button",{
         onClick:save,
@@ -2924,7 +2909,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           }catch(e){}
         },
         style:{width:"100%",padding:"10px 12px",fontSize:12,fontWeight:800,marginBottom:10,borderRadius:6,border:"1px solid #B8C6D5",background:"#fff",color:"#102A43",cursor:"pointer"}
-      },"↑ 試合上部へ戻る"),
+       },"↑ 試合上部へ戻る"),
+      formationBlock,
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"得点を追加",onClose:()=>setModal(null)},
@@ -3790,7 +3776,7 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
     }, saving ? "保存中..." : "保存する")
   );
 
-  const participantBlock = h("div", { style: { padding: "12px 14px", background: "#F8F9FA", borderRadius: 10, marginBottom: 8 } },
+  const participantBlock = h("div", { style: { padding: "12px 14px", background: "#F8FAFC", border: "1px solid #D8E0E8", borderRadius: 6, marginBottom: 8 } },
     isEventSchedule
       ? h(Fragment,{},
           h("div", { style: { fontSize: 11, fontWeight: 700, color: "#aaa", marginBottom: 8 } }, "参加人数"),
@@ -3844,8 +3830,8 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
   );
 
   const readContent = h(Fragment, {},
-    schedule.location && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E8F5E9", borderRadius: 10 } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4CAF50", marginBottom: 4 } }, "📍 場所"),
+    schedule.location && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8FAFC", border: "1px solid #D8E0E8", borderLeft: "3px solid #1D4E89", borderRadius: 6 } },
+      h("div", { style: { fontFamily:"'Barlow Condensed',sans-serif", fontSize: 12, fontWeight: 800, letterSpacing:1, color: "#102A43", marginBottom: 4 } }, "LOCATION"),
       h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 } },
         h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, flex: 1 } }, schedule.location),
         h("a", {
@@ -3858,14 +3844,15 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
             fontSize: 12,
             fontWeight: 700,
             color: "#fff",
-            background: "#4CAF50",
-            borderRadius: 999,
+            background: "#1D4E89",
+            border: "1px solid #1D4E89",
+            borderRadius: 4,
             padding: "6px 10px"
           }
         }, "地図")
       )
     ),
-    !isEventSchedule && !isPracticeSchedule && ([cleanTime(form.gatherTime), cleanTime(form.upTime), cleanTime(form.matchTime)].some(Boolean)) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
+    !isEventSchedule && !isPracticeSchedule && ([cleanTime(form.gatherTime), cleanTime(form.upTime), cleanTime(form.matchTime)].some(Boolean)) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8FAFC", borderRadius: 6, border: "1px solid #D8E0E8" } },
       [["集合", cleanTime(form.gatherTime)], ["アップ", cleanTime(form.upTime)], ["試合開始", cleanTime(form.matchTime)]].filter(([, v]) => v).map(([l, v]) =>
         h("div", { key: l, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4 } },
           h("div", { style: { fontSize: 11, color: "#64748B", width: 60 } }, l),
@@ -3874,16 +3861,16 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
       )
     ),
     participantBlock,
-    isPracticeSchedule && (form.duty || form.dutyNote) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4A5568", marginBottom: 8 } }, "👨‍🏫 当番"),
+    isPracticeSchedule && (form.duty || form.dutyNote) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8FAFC", borderRadius: 6, border: "1px solid #D8E0E8" } },
+      h("div", { style: { fontFamily:"'Barlow Condensed',sans-serif", fontSize: 12, fontWeight: 800, letterSpacing:1, color: "#102A43", marginBottom: 8 } }, "DUTY"),
       form.duty && h("div", { style: { marginBottom: 4 } },
         h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "当番"),
         h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, toSurname(form.duty))
       ),
       form.dutyNote && h("div", { style: { fontSize: 12, color: "#666", whiteSpace: "pre-wrap" } }, form.dutyNote)
     ),
-    !isEventSchedule && !isPracticeSchedule && (form.duty || form.coach || form.luggagePerson) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F0F4F8", borderRadius: 10, border: "1px solid #E2E8F0" } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#4A5568", marginBottom: 8 } }, "👨‍🏫 担当・コーチ"),
+    !isEventSchedule && !isPracticeSchedule && (form.duty || form.coach || form.luggagePerson) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8FAFC", borderRadius: 6, border: "1px solid #D8E0E8" } },
+      h("div", { style: { fontFamily:"'Barlow Condensed',sans-serif", fontSize: 12, fontWeight: 800, letterSpacing:1, color: "#102A43", marginBottom: 8 } }, "STAFF"),
       form.duty && h("div", { style: { marginBottom: 4 } },
         h("span", { style: { fontSize: 11, color: "#aaa", marginRight: 8 } }, "当番"),
         h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, toSurname(form.duty)),
@@ -3902,28 +3889,28 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
         h("span", { style: { fontSize: 13, fontWeight: 700, color: "#1a1a2e" } }, parseCoachList(form.coach).join("、"))
       )
     ),
-    !isEventSchedule && !isPracticeSchedule && form.clothes && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E3F2FD", borderRadius: 10 } },
+    !isEventSchedule && !isPracticeSchedule && form.clothes && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8FAFC", border: "1px solid #D8E0E8", borderRadius: 6 } },
       h("button", {
         onClick: () => setShowClothes(v => !v),
         style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "transparent", border: "none", padding: 0, cursor: "pointer" }
       },
-        h("div", { style: { fontSize: 11, fontWeight: 700, color: "#2196F3" } }, "👕 服装"),
-        h("div", { style: { fontSize: 20, fontWeight: 900, color: "#2196F3", lineHeight: 1 } }, showClothes ? "△" : "▽")
+        h("div", { style: { fontFamily:"'Barlow Condensed',sans-serif", fontSize: 12, fontWeight: 800, letterSpacing:1, color: "#102A43" } }, "CLOTHING"),
+        h("div", { style: { fontSize: 16, fontWeight: 900, color: "#64748B", lineHeight: 1 } }, showClothes ? "−" : "＋")
       ),
       showClothes && h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap", marginTop: 8 } }, form.clothes)
     ),
-    !isEventSchedule && !isPracticeSchedule && form.belongings && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#E2E8F0", borderRadius: 10 } },
+    !isEventSchedule && !isPracticeSchedule && form.belongings && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8FAFC", border: "1px solid #D8E0E8", borderRadius: 6 } },
       h("button", {
         onClick: () => setShowBelongings(v => !v),
         style: { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "transparent", border: "none", padding: 0, cursor: "pointer" }
       },
-        h("div", { style: { fontSize: 11, fontWeight: 700, color: "#0F172A" } }, "🎒 持ち物"),
-        h("div", { style: { fontSize: 20, fontWeight: 900, color: "#0F172A", lineHeight: 1 } }, showBelongings ? "△" : "▽")
+        h("div", { style: { fontFamily:"'Barlow Condensed',sans-serif", fontSize: 12, fontWeight: 800, letterSpacing:1, color: "#102A43" } }, "EQUIPMENT"),
+        h("div", { style: { fontSize: 16, fontWeight: 900, color: "#64748B", lineHeight: 1 } }, showBelongings ? "−" : "＋")
       ),
       showBelongings && h("div", { style: { fontSize: 13, color: "#1a1a2e", lineHeight: 1.7, whiteSpace: "pre-wrap", marginTop: 8 } }, form.belongings)
     ),
-    (pdfItems.length > 0 || isAdmin) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#DBEAFE", borderRadius: 10 } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", marginBottom: 6 } }, "📎 添付ファイル"),
+    (pdfItems.length > 0 || isAdmin) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8FAFC", border: "1px solid #D8E0E8", borderRadius: 6 } },
+      h("div", { style: { fontFamily:"'Barlow Condensed',sans-serif", fontSize: 12, fontWeight: 800, letterSpacing:1, color: "#102A43", marginBottom: 6 } }, "ATTACHMENTS"),
       pdfItems.length === 0 && h("div", { style: { fontSize: 12, color: "#64748B", marginBottom: isAdmin ? 10 : 0 } }, "添付ファイルはまだありません"),
       pdfItems.map((item, idx) => h("div", { key: item.url + "-preview-" + idx, style: { marginBottom: idx < pdfItems.length - 1 ? 16 : 0 } },
         h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } },
@@ -3996,17 +3983,17 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
         })
       )
     ),
-    (form.memo || isAdmin) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#EEF2FF", borderRadius: 10 } },
+    (form.memo || isAdmin) && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8FAFC", border: "1px solid #D8E0E8", borderRadius: 6 } },
       h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 } },
-        h("div", { style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8" } }, "📝 日程メモ"),
+        h("div", { style: { fontFamily:"'Barlow Condensed',sans-serif", fontSize: 12, fontWeight: 800, letterSpacing:1, color: "#102A43" } }, "SCHEDULE NOTE"),
         isAdmin && h("button", {
           type: "button",
           onClick: () => setEditing(true),
           style: {
-            border: "1px solid #BFDBFE",
+            border: "1px solid #B8C6D5",
             background: "#fff",
-            color: "#1D4ED8",
-            borderRadius: 999,
+            color: "#1D4E89",
+            borderRadius: 4,
             padding: "2px 10px",
             fontSize: 11,
             fontWeight: 700,
@@ -4020,13 +4007,13 @@ function DetailSection({schedule, members, users=[], schedules=[], isAdmin, onSa
     form.note && h("div", { style: { marginBottom: 8, padding: "10px 14px", background: "#F8F9FA", borderRadius: 10, fontSize: 13, color: "#666", lineHeight: 1.7, whiteSpace: "pre-wrap" } }, form.note)
   );
 
-  return h("div", { style: { background: "#fff", borderRadius: 16, padding: 18, marginTop: 14, boxShadow: "0 2px 10px rgba(0,0,0,0.07)" } },
-    h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 } },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: "#bbb", letterSpacing: 2 } }, "📋 詳細"),
+  return h("div", { className:"schedule-detail-panel", style: { background: "#fff", border: "1px solid #D8E0E8", borderRadius: 8, padding: 14, marginTop: 14, boxShadow: "none" } },
+    h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingBottom:10, borderBottom:"1px solid #D8E0E8" } },
+      h("div", { style: { fontFamily:"'Barlow Condensed',sans-serif", fontSize: 14, fontWeight: 800, color: "#102A43", letterSpacing: 1.2 } }, "DETAILS"),
       isAdmin && h("button", {
         onClick: () => setEditing(e => !e),
-        style: { fontSize: 11, fontWeight: 700, color: "#1D4ED8", background: "none", border: "1px solid #1D4ED8", borderRadius: 8, padding: "4px 10px", cursor: "pointer" }
-      }, editing ? "キャンセル" : "✏️ 編集")
+        style: { fontSize: 11, fontWeight: 800, color: "#1D4E89", background: "#fff", border: "1px solid #1D4E89", borderRadius: 4, padding: "4px 10px", cursor: "pointer" }
+      }, editing ? "キャンセル" : "編集")
     ),
     editing ? editContent : readContent
   );
@@ -7913,30 +7900,33 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
 
   return h(Fragment,{},
 // ── カレンダー本体
-h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:12,boxShadow:"none",border:"1px solid #D8E0E8"}},
+ h("div",{style:{background:"#fff",borderRadius:8,marginBottom:12,boxShadow:"none",border:"1px solid #D8E0E8",overflow:"hidden"}},
 
-  h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}},
-    h("button",{onClick:prev,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"‹"),
-    h("div",{style:{fontSize:17,fontWeight:800,color:"#1a1a2e"}},year+"年 "+(month+1)+"月"),
-    h("button",{onClick:next,style:{background:"#F0F4F8",border:"none",borderRadius:8,width:36,height:36,fontSize:20,cursor:"pointer"}},"›")
+  h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#102A43",padding:"10px 12px"}},
+    h("button",{onClick:prev,style:{background:"transparent",border:"1px solid rgba(255,255,255,.35)",borderRadius:4,width:32,height:30,fontSize:19,color:"#fff",cursor:"pointer"}},"‹"),
+    h("div",{style:{textAlign:"center"}},
+      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:10,fontWeight:800,letterSpacing:1.4,color:"#9DB8D2",marginBottom:1}},"SCHEDULE"),
+      h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:21,fontWeight:800,letterSpacing:.5,color:"#fff",lineHeight:1.1}},year+". "+String(month+1).padStart(2,"0"))),
+    h("button",{onClick:next,style:{background:"transparent",border:"1px solid rgba(255,255,255,.35)",borderRadius:4,width:32,height:30,fontSize:19,color:"#fff",cursor:"pointer"}},"›")
   ),
 
-  h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:4,marginBottom:6}},
+  h("div",{style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",borderBottom:"1px solid #D8E0E8"}},
     ["日","月","火","水","木","金","土"].map((d,i)=>h("div",{key:d,style:{
       textAlign:"center",
-      fontSize:11,
+      fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",
+      fontSize:12,
       fontWeight:800,
-      color:i===0?"#DC2626":i===6?"#2563EB":"#64748B",
-      padding:"6px 0",
+      letterSpacing:.3,
+      color:i===0?"#B91C1C":i===6?"#1D4E89":"#64748B",
+      padding:"7px 0 6px",
       background:"#F8FAFC",
-      border:"1px solid #E2E8F0",
-      borderRadius:8
+      borderRight:i<6?"1px solid #D8E0E8":"none"
     }},d))
   ),
 
-  weeks.map((wk,wi)=>h("div",{key:wi,style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:1}},
+  weeks.map((wk,wi)=>h("div",{key:wi,style:{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))"}},
     wk.map((d,di)=>{
-      if(!d) return h("div",{key:di});
+      if(!d) return h("div",{key:di,style:{minHeight:68,borderRight:di<6?"1px solid #E2E8F0":"none",borderBottom:"1px solid #E2E8F0",background:"#fff"}});
       const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
       const evs=dayData[d]||[];
       const holidayName = String(holidayMap[dStr] || "");
@@ -7946,19 +7936,17 @@ h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:12,boxS
       const primaryType = primaryEvent ? getTC(primaryEvent.type) : null;
       const typeLabel = primaryType ? primaryType.lb : "予定";
       const typeColor = primaryType ? primaryType.bg : "#1D4ED8";
-      const softBgMap = {"練習":"#E8F5E9","公式戦":"#DBEAFE","トレマ":"#E8F1FF","カップ戦":"#F3E8FF","イベント":"#E0F2F1"};
-      const typeSoftBg = softBgMap[typeLabel] || "#EFF6FF";
       const moreCount = evs.length > 1 ? evs.length - 1 : 0;
       const clickDay=()=>{
         setDayModal({date:dStr,events:evs});
       };
-      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"4px 2px",borderRadius:6,background:isToday?"#102A43":evs.length>0?typeSoftBg:"transparent",minHeight:60,minWidth:0,width:"100%",overflow:"hidden",cursor:"pointer"}},
-        h("div",{style:{fontSize:13,fontWeight:isToday?900:400,color:isToday?"#fff":isHoliday?"#F44336":di===0?"#F44336":di===6?"#2196F3":"#1a1a2e"}},d),
-        isHoliday&&h("div",{style:{fontSize:8,fontWeight:700,lineHeight:1.2,color:isToday?"rgba(255,255,255,0.95)":"#EF4444",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginTop:2}},holidayName),
-        evs.length>0&&h("div",{style:{marginTop:3,padding:"3px 4px",borderRadius:7,background:isToday?"rgba(255,255,255,0.22)":"#fff",border:isToday?"1px solid rgba(255,255,255,0.35)":`1px solid ${typeColor}44`,textAlign:"left",width:"100%",boxSizing:"border-box",overflow:"hidden"}},
-          h("div",{style:{fontSize:8,fontWeight:800,color:isToday?"#fff":typeColor,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden"}},
+      return h("div",{key:di,onClick:clickDay,style:{textAlign:"center",padding:"5px 3px",borderRight:di<6?"1px solid #E2E8F0":"none",borderBottom:"1px solid #E2E8F0",borderTop:evs.length>0?"2px solid "+typeColor:"2px solid transparent",background:isToday?"#102A43":evs.length>0?"#F8FAFC":"#fff",minHeight:68,minWidth:0,width:"100%",overflow:"hidden",cursor:"pointer"}},
+        h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:15,fontWeight:isToday?900:700,color:isToday?"#fff":isHoliday?"#B91C1C":di===0?"#B91C1C":di===6?"#1D4E89":"#102A43"}},d),
+        isHoliday&&h("div",{style:{fontSize:8,fontWeight:700,lineHeight:1.2,color:isToday?"rgba(255,255,255,0.8)":"#B91C1C",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginTop:1}},holidayName),
+        evs.length>0&&h("div",{style:{marginTop:3,padding:"2px 3px",borderLeft:"2px solid "+(isToday?"#fff":typeColor),background:isToday?"rgba(255,255,255,0.12)":"transparent",textAlign:"left",width:"100%",boxSizing:"border-box",overflow:"hidden"}},
+          h("div",{style:{fontSize:8,fontWeight:800,color:isToday?"#fff":typeColor,lineHeight:1.15,whiteSpace:"nowrap",overflow:"hidden"}},
             typeLabel+(moreCount>0?` +${moreCount}`:"")),
-          h("div",{style:{fontSize:9,fontWeight:700,color:isToday?"#fff":"#1E293B",lineHeight:1.25,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",maxWidth:"100%"}},
+          h("div",{style:{fontSize:9,fontWeight:700,color:isToday?"#fff":"#334155",lineHeight:1.2,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",maxWidth:"100%"}},
             primaryEvent?.title||"予定")
         )
       );
@@ -7966,13 +7954,10 @@ h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:12,boxS
   )),
 
   // 凡例＋追加ボタン
-    h("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:10,flexWrap:"wrap"}},
-      h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",flex:1,minWidth:220}},
-        [{c:"#4CAF50",l:"練習"},{c:"#1D4ED8",l:"公式戦"},{c:"#2563EB",l:"トレマ"},{c:"#0F172A",l:"カップ戦"},{c:"#009688",l:"イベント"}].map(x=>
-          h("div",{key:x.l,style:{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",borderRadius:4,border:"1px solid #D8E0E8",background:"#fff"}},
-            h("div",{style:{width:9,height:9,borderRadius:"50%",background:x.c,flexShrink:0}}),
-            h("span",{style:{fontSize:11,fontWeight:700,color:"#475569",lineHeight:1}},x.l)
-          )
+    h("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,padding:"10px 12px",background:"#F8FAFC",borderTop:"1px solid #D8E0E8",flexWrap:"wrap"}},
+      h("div",{style:{display:"flex",gap:5,flexWrap:"wrap",flex:1,minWidth:220}},
+        [{c:"#15803D",l:"練習"},{c:"#1D4E89",l:"公式戦"},{c:"#2F80ED",l:"トレマ"},{c:"#102A43",l:"カップ戦"},{c:"#0F766E",l:"イベント"}].map(x=>
+          h(Bdg,{key:x.l,label:x.l,color:x.c,bg:"#fff",small:true})
         )
       ),
       isAdmin&&h("div",{style:{display:"grid",gap:8,minWidth:180}},
@@ -7993,7 +7978,7 @@ h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:12,boxS
           const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
           const dt=fmt(dStr);
           return h("div",{key:d,id:"cal-day-"+dStr,style:{background:"#fff",borderRadius:8,padding:"12px 14px",marginBottom:8,boxShadow:"none",border:"1px solid #D8E0E8"}},
-            h("div",{style:{fontSize:13,fontWeight:700,color:"#1a1a2e",marginBottom:8}},dt.m+"/"+dt.d+"("+dt.dw+")"),
+            h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:800,letterSpacing:.6,color:"#102A43",marginBottom:8}},dt.m+" / "+dt.d+"  "+dt.dw),
             evs.map(e=>{
               const tc=getTC(e.type);
               const dayR=getScheduleResults(e, results, schedules);
@@ -8002,14 +7987,14 @@ h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:12,boxS
               return h("div",{key:e.id,onClick:clickEv,
                 style:{display:"flex",gap:10,alignItems:"center",marginBottom:6,
                   cursor:"pointer",
-                  padding:"8px 10px",borderRadius:6,
+                  padding:"8px 10px",borderRadius:6,border:"1px solid #E2E8F0",borderLeft:"3px solid "+tc.bg,
                   background:"#F8FAFC",
                   transition:"background 0.15s"}},
                 h("div",{style:{width:4,height:42,background:tc.bg,borderRadius:2,flexShrink:0}}),
                 h("div",{style:{flex:1}},
                   h(Bdg,{label:tc.lb,color:tc.bg,small:true}),
-                  h("div",{style:{fontSize:13,fontWeight:600,color:"#333",marginTop:2}},e.title),
-                  e.timeLabel&&h("div",{style:{fontSize:11,color:"#B45309",fontWeight:700}},"開始 "+e.timeLabel),
+                  h("div",{style:{fontSize:13,fontWeight:700,color:"#102A43",marginTop:2}},e.title),
+                  e.timeLabel&&h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700}},"開始 "+e.timeLabel),
                   e.location&&h("div",{style:{fontSize:11,color:"#64748B"}},"会場 "+e.location)),
                 h("div",{style:{textAlign:"right",flexShrink:0}},
                   dayR.length>0&&h("div",{style:{fontSize:11,color:"#15803D",fontWeight:800}},dayR.length+"試合"),
@@ -8026,7 +8011,7 @@ h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:12,boxS
             dayModal.events.map(e=>{
               const tc=getTC(e.type);
               return h("div",{key:e.id,onClick:()=>{setDayModal(null);onGoToDay(e);},
-                style:{display:"flex",gap:10,alignItems:"center",padding:"10px 12px",borderRadius:10,background:"#F8FAFC",cursor:"pointer"}},
+                style:{display:"flex",gap:10,alignItems:"center",padding:"10px 12px",borderRadius:6,border:"1px solid #D8E0E8",borderLeft:"3px solid "+tc.bg,background:"#F8FAFC",cursor:"pointer"}},
                 h("div",{style:{width:4,height:40,borderRadius:3,background:tc.bg,flexShrink:0}}),
                 h("div",{style:{flex:1,minWidth:0}},
                   h(Bdg,{label:tc.lb,color:tc.bg,small:true}),
@@ -9879,8 +9864,7 @@ function App() {
     const t=String(nextTab||"").trim();
     if(!t) return setTab("home");
     if(t==="settings" && !isAdmin) return setTab("home");
-    if(t==="member" && !uiTabVisibility.member) return setTab("home");
-    if(t==="memo" && !uiTabVisibility.memo) return setTab("home");
+    if(t==="member" || t==="memo") return setTab("home");
     setTab(t);
   },[isAdmin,uiTabVisibility?.member,uiTabVisibility?.memo]);
   useEffect(()=>{
@@ -9898,9 +9882,8 @@ function App() {
     if(!isAdmin && tab==="settings") setTab("home");
   },[isAdmin,tab]);
   useEffect(()=>{
-    if(tab==="member" && !uiTabVisibility.member) setTab("home");
-    if(tab==="memo" && !uiTabVisibility.memo) setTab("home");
-  },[tab,uiTabVisibility?.member,uiTabVisibility?.memo]);
+    if(tab==="member" || tab==="memo") setTab("home");
+  },[tab]);
 
   // ── ページルーティング ────────────────────────────────────────
   if(!user) return h(Login,{onLogin:saveUser});
@@ -9971,8 +9954,6 @@ function App() {
     {k:"cal",    l:"日程"},
     {k:"match",  l:"試合"},
     {k:"dash",   l:"成績"},
-    ...(uiTabVisibility.member ? [{k:"member",l:"選手"}] : []),
-    ...(uiTabVisibility.memo ? [{k:"memo",  l:"メモ"}] : []),
     {k:"docs",   l:"資料"},
     ...(isAdmin?[{k:"settings",l:"設定"}]:[]),
   ];
