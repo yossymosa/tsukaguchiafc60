@@ -1812,12 +1812,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const shouldKeepLegacyShotTotals = !shotDirty && ourShotsTotalRaw === 0 && theirShotsTotalRaw === 0 && legacyShotTotal > 0;
   const ourShotsTotal = shouldKeepLegacyShotTotals ? Math.max(0, Number(match?.ourShots || 0) || 0) : ourShotsTotalRaw;
   const theirShotsTotal = shouldKeepLegacyShotTotals ? Math.max(0, Number(match?.theirShots || 0) || 0) : theirShotsTotalRaw;
-  const formatShotRate = (goalsCount, shotsCount) => {
-    if (shotCountMissing || Number(shotsCount || 0) <= 0) return "—";
-    return (Math.round((Number(goalsCount || 0) / Number(shotsCount || 0)) * 1000) / 10) + "%";
-  };
-  const ourShotRate = formatShotRate(ourT, ourShotsTotal);
-  const theirShotRate = formatShotRate(thT, theirShotsTotal);
   const halfScoreMapOur = { "1st": our1, "2nd": our2, "3rd": our3 };
   const halfScoreMapTheir = { "1st": th1, "2nd": th2, "3rd": th3 };
   const scoreHeaders = [...visibleHalfOptions, "計"];
@@ -2387,10 +2381,37 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     !pkOn&&h("div",{style:{marginTop:4,display:"flex",justifyContent:"center"}},h(RWdg,{our:ourT,their:thT,status:matchStatus,date:match?.date}))
   );
 
-  const pkSummaryBlock = pkOn && h("div",{style:{background:"#F8FAFC",border:"1px solid #D8E0E8",borderLeft:"3px solid #102A43",borderRadius:6,padding:"9px 12px",marginBottom:8,display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:10}},
-    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,fontWeight:800,letterSpacing:1,color:"#102A43"}},"PK SHOOTOUT"),
-    h("div",{style:{fontSize:18,fontWeight:900,color:pkWin?"#15803D":pkLose?"#B91C1C":"#102A43",lineHeight:1}},pkOurScore+" - "+pkTheirScore),
-    h("div",{style:{textAlign:"right",fontSize:11,fontWeight:800,color:pkWin?"#15803D":pkLose?"#B91C1C":"#64748B"}},pkWin?"PK WIN":pkLose?"PK LOSS":"PK RESULT")
+  const pkSummaryBlock = pkOn && h("div",{style:{background:"#F8FAFC",border:"1px solid #D8E0E8",borderLeft:"3px solid #102A43",borderRadius:6,padding:"10px 12px",marginBottom:8}},
+    h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:(pkKickers.length||pkTheirSeq.length)?9:0}},
+      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,fontWeight:800,letterSpacing:1,color:"#102A43"}},"PK SHOOTOUT"),
+      h("div",{style:{display:"flex",alignItems:"center",gap:8}},
+        h("div",{style:{fontSize:18,fontWeight:900,color:pkWin?"#15803D":pkLose?"#B91C1C":"#102A43",lineHeight:1}},pkOurScore+" - "+pkTheirScore),
+        h("div",{style:{fontSize:10,fontWeight:800,color:pkWin?"#15803D":pkLose?"#B91C1C":"#64748B"}},pkWin?"PK WIN":pkLose?"PK LOSS":"PK RESULT")
+      )
+    ),
+    (pkKickers.length||pkTheirSeq.length)
+      ? h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,borderTop:"1px solid #D8E0E8",paddingTop:8}},
+          h("div",{},
+            h("div",{style:{fontSize:10,fontWeight:800,color:"#1D4E89",marginBottom:4}},"塚口AFC キッカー"),
+            h("div",{style:{display:"flex",flexWrap:"wrap",gap:4}},pkKickers.map((k,i)=>{
+              const kicker=membersSorted.find(m=>String(m.id||"")===String(k.memberId||""));
+              return h("span",{key:`our-pk-${i}`,style:{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 5px",background:"#fff",border:"1px solid #D8E0E8",borderRadius:2,fontSize:10,fontWeight:700,color:"#334155"}},
+                h("span",{},kicker?.name||("キッカー"+(i+1))),
+                h("span",{style:{fontSize:13,fontWeight:900,color:k.success?"#15803D":"#B91C1C",lineHeight:1}},k.success?"○":"×")
+              );
+            }))
+          ),
+          h("div",{},
+            h("div",{style:{fontSize:10,fontWeight:800,color:"#64748B",marginBottom:4}},(match.opponent||"相手")+" キッカー"),
+            h("div",{style:{display:"flex",flexWrap:"wrap",gap:4}},pkTheirSeq.map((success,i)=>
+              h("span",{key:`their-pk-${i}`,style:{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 5px",background:"#fff",border:"1px solid #D8E0E8",borderRadius:2,fontSize:10,fontWeight:700,color:"#475569"}},
+                h("span",{},(i+1)+"人目"),
+                h("span",{style:{fontSize:13,fontWeight:900,color:success?"#15803D":"#B91C1C",lineHeight:1}},success?"○":"×")
+              )
+            ))
+          )
+        )
+      : h("div",{style:{borderTop:"1px solid #D8E0E8",paddingTop:7,fontSize:11,color:"#64748B"}},"キッカー詳細は未登録です")
   );
 
   const matchStatsBlock = h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
@@ -2424,14 +2445,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           isAdmin&&!isShotsRow&&h("button",{onClick:()=>bumpStat(theirField,1),style:{width:24,height:24,border:"1px solid #D1D5DB",borderRadius:6,background:"#fff",fontWeight:900,cursor:"pointer"}},"＋")
         )
       );
-    }),
-    h("div",{style:{display:"grid",gridTemplateColumns:"76px 1fr 92px 1fr 76px",alignItems:"center",gap:6,marginTop:8,paddingTop:8,borderTop:"1px solid #E2E8F0"}},
-      h("div",{style:{textAlign:"center",fontSize:15,fontWeight:900,color:"#1D4E89"}},ourShotRate),
-      h("div",{style:{height:1,background:"#F1F5F9"}}),
-      h("div",{style:{fontSize:11,fontWeight:800,color:"#334155",textAlign:"center"}},"シュート成功率"),
-      h("div",{style:{height:1,background:"#F1F5F9"}}),
-      h("div",{style:{textAlign:"center",fontSize:15,fontWeight:900,color:"#475569"}},theirShotRate)
-    )
+    })
   );
 
   const goalsTimelineBlock = h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
@@ -7265,7 +7279,6 @@ function RankList({title,icon,data,unit}) {
 }
 
 function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDashTab="result",onGoToMatch,onGoToDay}) {
-  const SHOT_RATE_START_DATE = "2026-04-12";
   const [dashTab,setDashTab]=useState(initialDashTab); // "result" | "tournament" | "rank" | "personal"
   const [typeF,setTypeF]=useState("all");
   const [periodF,setPeriodF]=useState("grade4"); // "alltime"|"grade4"|"grade3"|"month"|"lastmonth"|"custom"
@@ -7400,8 +7413,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     let goals=0,assists=0,shots=0,pkMade=0,pkTotal=0,mvpCount=0;
     let shotRateGoals=0, shotRateShots=0;
     filtered.forEach(r=>{
-      const resultDate = nd(r.date);
-      const isShotRateTarget = !!resultDate && resultDate >= SHOT_RATE_START_DATE && !isTrueFlag(r.shotCountMissing);
+      const isShotRateTarget = !isTrueFlag(r.shotCountMissing);
       const shotMap = parseResultShotStats(r);
       const myShotsInResult = Math.max(0, Number(shotMap[m.id] || 0) || 0);
       shots += myShotsInResult;
@@ -7435,7 +7447,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     });
     return {...m,goals,assists,shots,pkMade,pkTotal,mvpCount,shotRateGoals,shotRateShots};
   }).filter(m=>m.goals>0||m.assists>0||m.shots>0||m.mvpCount>0).sort((a,b)=>b.goals-a.goals||b.shots-a.shots||b.assists-a.assists)
-  ,[filtered,members,schedules,periodRange,SHOT_RATE_START_DATE]);
+  ,[filtered,members,schedules,periodRange]);
 
   return h(Fragment,{},
     // サブタブ
@@ -7692,7 +7704,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
               [{l:"⚽ ゴール",v:m.goals,c:"#1D4ED8"},
                {l:"🅰 アシスト",v:m.assists,c:"#2196F3"},
                {l:"🎯 シュート",v:m.shots,c:"#0EA5E9"},
-               {l:"✅ シュート成功率(4/12〜)",v:shotRate,c:"#0F766E"},
+               {l:"シュート成功率",v:shotRate,c:"#0F766E"},
                {l:"🥅 PK成功率",v:pkRate,c:"#FFC107"},
                {l:"🏅 MVP",v:m.mvpCount,c:"#0F172A"},
                {l:"🏃 リフティング",v:lf?lf.count+"":" - ",c:"#4CAF50"},
