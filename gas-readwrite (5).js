@@ -47,7 +47,14 @@ const MAPS = {
     "スケジュールID":"scheduleId", "種類":"type",
     "YouTubeURL":"youtubeUrl", "前半URL":"youtubeUrl1st", "後半URL":"youtubeUrl2nd", "PK戦URL":"youtubeUrlPk",
     "PK塚口":"pkOur", "PK相手":"pkTheir",
-    "PKキッカー":"pkKickers", "PK相手シーケンス":"pkTheirSeq"
+    "PKキッカー":"pkKickers", "PK相手シーケンス":"pkTheirSeq",
+    "塚口シュート":"ourShots", "相手シュート":"theirShots", "選手別シュート":"shotStats",
+    "塚口CK":"ourCorners", "相手CK":"theirCorners",
+    "塚口FK":"ourFreeKicks", "相手FK":"theirFreeKicks",
+    "塚口PK数":"ourPkCount", "相手PK数":"theirPkCount",
+    "塚口オフサイド":"ourOffsides", "相手オフサイド":"theirOffsides",
+    "フォーメーション":"formation", "フォーメーション配置":"formationSlots",
+    "交代履歴":"substitutions", "試合状態":"matchStatus", "シュート数未記録":"shotCountMissing"
   },
   goal: {
     // 既存列 + 追加列（アシストID・チーム区分・得点種別）
@@ -1438,11 +1445,22 @@ function dispatch(req) {
       const sh = getSheet("得点記録");
       const members = sheetToObjects("メンバー", MAPS.member);
 
-      // YouTube URL・PKスコアを試合結果シートに保存
+      // 試合詳細（動画・PK・シュート・スタッツなど）を試合結果シートに保存
       ensureSheetColumnsByMap("試合結果", MAPS.result);
-      const needsResultUpdate = req.youtubeUrl !== undefined || req.youtubeUrl1st !== undefined
-        || req.youtubeUrl2nd !== undefined || req.youtubeUrlPk !== undefined
-        || req.pkOur !== undefined || req.pkTheir !== undefined;
+      const resultWrites = [
+        ["YouTubeURL", "youtubeUrl"], ["前半URL", "youtubeUrl1st"], ["後半URL", "youtubeUrl2nd"], ["PK戦URL", "youtubeUrlPk"],
+        ["PK塚口", "pkOur"], ["PK相手", "pkTheir"],
+        ["PKキッカー", "pkKickers", true], ["PK相手シーケンス", "pkTheirSeq", true],
+        ["塚口シュート", "ourShots"], ["相手シュート", "theirShots"], ["選手別シュート", "shotStats", true],
+        ["塚口CK", "ourCorners"], ["相手CK", "theirCorners"],
+        ["塚口FK", "ourFreeKicks"], ["相手FK", "theirFreeKicks"],
+        ["塚口PK数", "ourPkCount"], ["相手PK数", "theirPkCount"],
+        ["塚口オフサイド", "ourOffsides"], ["相手オフサイド", "theirOffsides"],
+        ["フォーメーション", "formation"], ["フォーメーション配置", "formationSlots", true],
+        ["交代履歴", "substitutions", true], ["メモ", "memo"], ["試合状態", "matchStatus"],
+        ["シュート数未記録", "shotCountMissing"]
+      ];
+      const needsResultUpdate = resultWrites.some(item => req[item[1]] !== undefined);
       if (needsResultUpdate) {
         const rsh = getSheet("試合結果");
         if (rsh && rsh.getLastRow() > 1) {
@@ -1455,14 +1473,13 @@ function dispatch(req) {
                 const ci = rHeaders.indexOf(name);
                 if (ci >= 0 && val !== undefined) rsh.getRange(row, ci+1).setValue(val);
               };
-              set("YouTubeURL", req.youtubeUrl   || "");
-              set("前半URL",    req.youtubeUrl1st || "");
-              set("後半URL",    req.youtubeUrl2nd || "");
-              set("PK戦URL",    req.youtubeUrlPk || "");
-              if (req.pkOur   !== undefined) set("PK塚口",  req.pkOur  != null ? req.pkOur  : "");
-              if (req.pkTheir !== undefined) set("PK相手",  req.pkTheir != null ? req.pkTheir : "");
-              if (req.pkKickers  !== undefined) set("PKキッカー",      req.pkKickers  ? JSON.stringify(req.pkKickers)  : "");
-              if (req.pkTheirSeq !== undefined) set("PK相手シーケンス", req.pkTheirSeq ? JSON.stringify(req.pkTheirSeq) : "");
+              resultWrites.forEach(item => {
+                const column = item[0], key = item[1], asJson = !!item[2];
+                if (req[key] === undefined) return;
+                const raw = req[key];
+                const value = raw === null ? "" : (asJson ? JSON.stringify(raw) : raw);
+                set(column, value);
+              });
               break;
             }
           }
