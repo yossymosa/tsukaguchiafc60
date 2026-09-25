@@ -4,7 +4,7 @@
 //
 // 【スプレッドシートの列構成】
 //
-// メンバー: ID / 名前 / 学年 / ポジション / 背番号
+// メンバー: ID / 名前 / 学年 / ポジション / 背番号 / 顔写真URL
 //
 // スケジュール: ID / 日付 / 試合分類 / 場所 / 種類 / MVP
 //   ※「試合分類」がタイトル扱い（公式戦・トレマ名など）
@@ -27,7 +27,8 @@ const SPREADSHEET_ID = "1EV_qm4ie3DuzDVVklSnVvxJalN7M8zyzk9D7nGhOMbI";
 // ── シート列マッピング（実際のシートの列名そのまま）────────────
 const MAPS = {
   member: {
-    "ID":"id", "名前":"name", "期生":"generation", "学年":"grade", "ポジション":"position", "背番号":"number"
+    "ID":"id", "名前":"name", "期生":"generation", "学年":"grade", "ポジション":"position", "背番号":"number",
+    "顔写真URL":"photoUrl"
   },
   schedule: {
     // 「試合分類」列 = タイトル兼用
@@ -1095,6 +1096,7 @@ function dispatch(req) {
     // ── 全データ取得 ──────────────────────────────────────────
     case "getAll": {
       // 新しい結果項目（PK戦動画URLを含む）を既存シートにも安全に追加
+      ensureSheetColumnsByMap("メンバー", MAPS.member);
       ensureSheetColumnsByMap("試合結果", MAPS.result);
       const members   = sheetToObjects("メンバー",     MAPS.member);
       const schedules = sheetToObjects("スケジュール", MAPS.schedule);
@@ -1319,6 +1321,68 @@ function dispatch(req) {
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       const url = "https://drive.google.com/file/d/" + file.getId() + "/view?usp=sharing";
       return { url: url, name: file.getName(), fileId: file.getId() };
+    }
+
+    // ── メンバー顔写真アップロード ──────────────────────────────
+    case "uploadMemberPhoto": {
+      const userId = String(req.userId || "").trim();
+      const memberId = String(req.memberId || "").trim();
+      const fileName = String(req.fileName || "member-photo").trim();
+      const mimeType = String(req.mimeType || "").trim().toLowerCase();
+      const base64 = String(req.base64 || "").trim();
+      if (!userId) throw new Error("ユーザーIDがありません");
+      const uploader = getUserById(userId);
+      if (!uploader || !["admin", "super_admin"].includes(String(uploader.role || "").trim())) {
+        throw new Error("管理者のみ顔写真を更新できます");
+      }
+      if (!memberId || !base64) throw new Error("顔写真の情報が不足しています");
+      if (["image/jpeg", "image/png", "image/webp"].indexOf(mimeType) === -1) {
+        throw new Error("JPG、PNG、WebP形式の画像を選択してください");
+      }
+
+      ensureSheetColumnsByMap("メンバー", MAPS.member);
+      const sh = getSheet("メンバー");
+      if (!sh || sh.getLastRow() < 2) throw new Error("メンバーシートが見つかりません");
+      const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+      const idCol = headers.indexOf("ID") + 1;
+      const photoUrlCol = headers.indexOf("顔写真URL") + 1;
+      if (!idCol || !photoUrlCol) throw new Error("顔写真の保存列が見つかりません");
+
+      let targetRow = 0;
+      const ids = sh.getRange(2, idCol, sh.getLastRow() - 1, 1).getValues();
+      for (let i = 0; i < ids.length; i++) {
+        if (String(ids[i][0] || "").trim() === memberId) {
+          targetRow = i + 2;
+          break;
+        }
+      }
+      if (!targetRow) throw new Error("対象の選手が見つかりません");
+
+      const folderId = String(
+        PropertiesService.getScriptProperties().getProperty("MEMBER_PHOTO_FOLDER_ID")
+          || PropertiesService.getScriptProperties().getProperty("NEWS_DOC_FOLDER_ID")
+          || PropertiesService.getScriptProperties().getProperty("SCHEDULE_PDF_FOLDER_ID")
+          || ""
+      ).trim();
+      let folder = DriveApp.getRootFolder();
+      if (folderId) {
+        try {
+          folder = DriveApp.getFolderById(folderId);
+        } catch (e) {
+          folder = DriveApp.getRootFolder();
+        }
+      }
+
+      const memberName = String(sh.getRange(targetRow, headers.indexOf("名前") + 1).getValue() || "member");
+      const safeName = fileName.replace(/[\\/:*?\"<>|]+/g, "_");
+      const stamp = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyyMMdd_HHmmss");
+      const bytes = Utilities.base64Decode(base64);
+      const blob = Utilities.newBlob(bytes, mimeType, ["member", memberName, stamp, safeName].filter(Boolean).join("_"));
+      const file = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const photoUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
+      sh.getRange(targetRow, photoUrlCol).setValue(photoUrl);
+      return { memberId: memberId, photoUrl: photoUrl, fileId: file.getId() };
     }
 
     // ── 日程削除 ──────────────────────────────────────────────

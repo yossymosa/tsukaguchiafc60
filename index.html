@@ -95,7 +95,7 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 1. GAS を更新して Web アプリを再デプロイ
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
-const GAS_URL = "https://script.google.com/macros/s/AKfycbw97Ztedl7aSCajfSSiYJppM2LegtdkczRobfEyUg0m0Fb68hOxsIWDa0T_Z8IjBI3g/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycby25DtusE5ZOQhk9gyXibcZVSAElwWhGfsjFDbP-DxBJXwsd4jRQclCUiDKI3m8zQxf/exec";
 // ================================================================
 
 const HOME_LINKS = [
@@ -264,7 +264,7 @@ async function api(action,body={}) {
     "saveReflection","getReflection","saveGoals","saveFormation","saveShotStats","saveAttend","saveEventAttend","saveCarpool","saveCarpoolPlan","updateUserBySuperAdmin"
   ]);
   const longActions = new Set([
-    "syncFc2PracticeSchedules","syncOfficialHpMatchImport","syncYoutubeLinksToResults","syncYoutubePlaylist"
+    "syncFc2PracticeSchedules","syncOfficialHpMatchImport","syncYoutubeLinksToResults","syncYoutubePlaylist","uploadMemberPhoto"
   ]);
   const timeoutMs = longActions.has(action) ? 120000 : (shortActions.has(action) ? 25000 : 45000);
   const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
@@ -672,6 +672,17 @@ function resolveGrade(member) {
 function normalizeMember(member) {
   const grade = resolveGrade(member);
   return {...member, grade, gradeDisplay: formatGenerationGrade(grade, member?.generation)};
+}
+function MemberFace({member,size=32,alt=""}) {
+  const photoUrl = String(member?.photoUrl || "").trim();
+  if (!photoUrl) return null;
+  return h("img",{
+    src:photoUrl,
+    alt:alt || member?.name || "",
+    referrerPolicy:"no-referrer",
+    onError:e=>{e.currentTarget.style.display="none";},
+    style:{width:size,height:size,borderRadius:"50%",objectFit:"cover",objectPosition:"center",display:"block",flexShrink:0,background:"#E2E8F0"}
+  });
 }
 function hasPkDecisionData(r){
   try{
@@ -2461,8 +2472,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     all.length===0&&h("div",{style:{textAlign:"center",padding:"14px",color:"#ccc",fontSize:12}},"ゴール記録なし"),
     all.map((g,i)=>{
       const isUs=g.team==="us";
-      const sc=members.find(m=>m.id===g.scorerId);
-      const as=members.find(m=>m.id===g.assistId);
+      const sc=members.find(m=>String(m.id)===String(g.scorerId||"")) || members.find(m=>m.name===g.scorerName);
+      const as=members.find(m=>String(m.id)===String(g.assistId||"")) || members.find(m=>m.name===g.assistName);
       const scorerName = isUs ? (sc?.name||g.scorerName||"不明") : (match.opponent||"相手");
       const assistName = isUs ? (as?.name||g.assistName||"") : "";
       const halfLabel = halfLabelMap[normHalf(g.half)] || normHalf(g.half) || "";
@@ -2470,8 +2481,12 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       return h("div",{key:`goal-${g.team}-${g.sourceIdx}-${i}`,style:{display:"grid",gridTemplateColumns:isAdmin?"1fr 78px 1fr 76px":"1fr 78px 1fr",alignItems:"center",gap:6,marginBottom:6}},
         h("div",{style:{display:"flex",justifyContent:"flex-end",minHeight:34}},
           isUs&&h("div",{style:{maxWidth:"100%",textAlign:"right"}},
-            h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4E89",lineHeight:1.3}},scorerName),
-            assistName&&h("div",{style:{fontSize:11,color:"#3B82F6",marginTop:2}},"🅰 "+assistName),
+            h("div",{style:{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:6}},
+              h("span",{style:{fontSize:12,fontWeight:800,color:"#1D4E89",lineHeight:1.3}},scorerName),
+              h(MemberFace,{member:sc,size:30,alt:scorerName})),
+            assistName&&h("div",{style:{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:5,fontSize:11,color:"#3B82F6",marginTop:3}},
+              h("span",{},"🅰 "+assistName),
+              h(MemberFace,{member:as,size:18,alt:assistName})),
             g.goalType&&g.goalType!=="通常"&&h("div",{style:{marginTop:3}},
               h("span",{style:{background:"#F8FAFC",color:g.goalType==="PK"?"#A16207":"#102A43",border:"1px solid "+(g.goalType==="PK"?"#E8D4A5":"#B8C6D5"),borderRadius:2,padding:"1px 6px",fontSize:9,fontWeight:800}},g.goalType))
           )
@@ -9241,7 +9256,7 @@ function MemberTab({members,liftings=[]}) {
     ));
 }
 
-function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile,onAdminUpdateUser,onAddMember,uiTabVisibility,onSaveUiTabVisibility}) {
+function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile,onUploadMemberPhoto,onAdminUpdateUser,onAddMember,uiTabVisibility,onSaveUiTabVisibility}) {
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
   const child = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
   const familyListView = parseFamilyMembers(currentUserProfile.familyMembers || []);
@@ -9254,6 +9269,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
   const [memberId,setMemberId] = useState(currentUserProfile.memberId || "");
   const [familyText,setFamilyText] = useState(familyListView.join("\n"));
   const [saving,setSaving] = useState(false);
+  const [photoUploading,setPhotoUploading] = useState(false);
   const [tabVisibility,setTabVisibility] = useState(()=>normalizeUiTabVisibility(uiTabVisibility));
   const [tabVisibilitySaving,setTabVisibilitySaving] = useState(false);
   const [userDrafts,setUserDrafts] = useState({});
@@ -9331,6 +9347,35 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
       alert("タブ表示設定エラー: " + e.message);
     }
     setTabVisibilitySaving(false);
+  };
+  const uploadPhoto = async(e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file || photoUploading) return;
+    const targetMember = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
+    if (!targetMember) {
+      alert("先に子どもの情報を設定してください");
+      return;
+    }
+    if (!["image/jpeg","image/png","image/webp"].includes(String(file.type || "").toLowerCase())) {
+      alert("JPG、PNG、WebP形式の写真を選択してください");
+      return;
+    }
+    if (Number(file.size || 0) > 8 * 1024 * 1024) {
+      alert("写真は8MB以下にしてください");
+      return;
+    }
+    setPhotoUploading(true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const base64 = String(dataUrl || "").split(",")[1] || "";
+      if (!base64) throw new Error("写真の読み込みに失敗しました");
+      await onUploadMemberPhoto({memberId:targetMember.id,fileName:file.name || "member-photo",mimeType:file.type,base64});
+      alert("顔写真を更新しました");
+    } catch(e) {
+      alert("顔写真の更新エラー: " + e.message);
+    }
+    setPhotoUploading(false);
   };
   const updateUserDraftField = (targetUserId, field, value) => {
     const uid = String(targetUserId || "").trim();
@@ -9447,7 +9492,17 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
           h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?formatMemberGenerationGrade(child):"-")),
         h("div",{style:{background:"#F8FAFC",borderRadius:12,padding:"12px 14px"}},
           h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:4}},"背番号"),
-          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.number||"-")))),
+          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},child?.number||"-"))),
+      h("div",{style:{display:"flex",alignItems:"center",gap:12,marginTop:14,paddingTop:14,borderTop:"1px solid #E2E8F0"}},
+        child?.photoUrl
+          ? h(MemberFace,{member:child,size:54,alt:child?.name||"顔写真"})
+          : h("div",{style:{width:54,height:54,borderRadius:"50%",background:"#E2E8F0",color:"#94A3B8",fontSize:10,fontWeight:700,display:"grid",placeItems:"center",flexShrink:0}},"写真"),
+        h("div",{style:{minWidth:0,flex:1}},
+          h("div",{style:{fontSize:13,fontWeight:800,color:"#1A1A2E"}},"顔写真"),
+          h("div",{style:{fontSize:11,color:"#64748B",marginTop:3,lineHeight:1.5}},"ゴールは大きく、アシストは小さく丸く表示されます")),
+        h("label",{style:{display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#102A43",color:"#fff",borderRadius:7,padding:"9px 11px",fontSize:12,fontWeight:800,cursor:photoUploading||!child?"wait":"pointer",opacity:photoUploading||!child?0.55:1}},
+          h("input",{type:"file",accept:"image/jpeg,image/png,image/webp",onChange:uploadPhoto,disabled:photoUploading||!child,style:{display:"none"}}),
+          photoUploading?"更新中...":"写真を選ぶ"))),
     ["admin","super_admin"].includes(String(user?.role||"").trim()) && h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:10}},"🧩 タブ表示設定"),
       h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12}},"管理者で「選手」「メモ」タブの表示を切り替えできます（全員共通）"),
@@ -9839,6 +9894,12 @@ function App() {
     saveUser({...user,...r.user});
     await load("更新中...");
   };
+  const handleUploadMemberPhoto=async(payload={})=>{
+    if(!payload.memberId) throw new Error("選手を選択してください");
+    const r=await api("uploadMemberPhoto",{userId:String(user?.id||"").trim(),...payload});
+    await load("更新中...");
+    return r;
+  };
   const handleAdminUpdateUser=async({targetUserId,name,memberId,familyMembers=[],role})=>{
     const r=await api("updateUserBySuperAdmin",{
       userId:String(user?.id||"").trim(),
@@ -10004,7 +10065,7 @@ function App() {
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews,onReorder:handleReorderNewsDocs})
     : tab==="settings" ? (isAdmin
-        ? h(SettingsTab,{user,users,members,isSuperAdmin:canManageUsers,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile,onAdminUpdateUser:handleAdminUpdateUser,onAddMember:handleAddMember,uiTabVisibility,onSaveUiTabVisibility:handleSaveUiTabVisibility})
+        ? h(SettingsTab,{user,users,members,isSuperAdmin:canManageUsers,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile,onUploadMemberPhoto:handleUploadMemberPhoto,onAdminUpdateUser:handleAdminUpdateUser,onAddMember:handleAddMember,uiTabVisibility,onSaveUiTabVisibility:handleSaveUiTabVisibility})
         : null)
     : h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab});
 
