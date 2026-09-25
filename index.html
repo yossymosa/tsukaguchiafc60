@@ -3199,7 +3199,13 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
     const timer=setInterval(updateToday,60*1000);
     return ()=>clearInterval(timer);
   },[]);
-  const recent=results.slice(0,5);
+  const recent=[...(results||[])]
+    .sort((a,b)=>{
+      const dateCompare=nd(b.date).localeCompare(nd(a.date));
+      if(dateCompare!==0) return dateCompare;
+      return Number(b.gameNumber||0)-Number(a.gameNumber||0);
+    })
+    .slice(0,5);
   const recentNews=news
     .filter(n=>n.category!=="コーチメモ")
     .sort((a,b)=>parseNewsTs(b.date)-parseNewsTs(a.date))
