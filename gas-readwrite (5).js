@@ -926,6 +926,15 @@ function dispatch(req) {
       if (!name) throw new Error("名前を入力してください");
       if (!memberId) throw new Error("子どもを選択してください");
 
+      const profileUser = getUserById(userId);
+      if (!profileUser) throw new Error("ユーザーが見つかりません");
+      const profileUserRole = String(profileUser.role || "").trim();
+      const canChangeLinkedMember = ["admin", "super_admin"].includes(profileUserRole);
+      const currentLinkedMemberId = String(profileUser.memberId || "").trim();
+      if (!canChangeLinkedMember && currentLinkedMemberId !== memberId) {
+        throw new Error("子どもの紐づけ変更は管理者に依頼してください");
+      }
+
       const members = sheetToObjects("メンバー", MAPS.member);
       const member = members.find(m => String(m.id || "") === memberId);
       if (!member) throw new Error("選択した子どもが見つかりません");
@@ -1331,11 +1340,15 @@ function dispatch(req) {
       const mimeType = String(req.mimeType || "").trim().toLowerCase();
       const base64 = String(req.base64 || "").trim();
       if (!userId) throw new Error("ユーザーIDがありません");
-      const uploader = getUserById(userId);
-      if (!uploader || !["admin", "super_admin"].includes(String(uploader.role || "").trim())) {
-        throw new Error("管理者のみ顔写真を更新できます");
-      }
       if (!memberId || !base64) throw new Error("顔写真の情報が不足しています");
+      const uploader = getUserById(userId);
+      if (!uploader) throw new Error("ユーザー情報が見つかりません");
+      const uploaderRole = String(uploader.role || "").trim();
+      const canManageAllMemberPhotos = ["admin", "super_admin"].includes(uploaderRole);
+      const linkedMemberId = String(uploader.memberId || "").trim();
+      if (!canManageAllMemberPhotos && linkedMemberId !== memberId) {
+        throw new Error("自分に紐づく選手の顔写真のみ更新できます");
+      }
       if (["image/jpeg", "image/png", "image/webp"].indexOf(mimeType) === -1) {
         throw new Error("JPG、PNG、WebP形式の画像を選択してください");
       }

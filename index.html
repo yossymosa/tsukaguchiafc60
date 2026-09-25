@@ -7368,8 +7368,12 @@ function RankList({title,icon,data,unit}) {
       const pc=PC[x.m.position]||{bg:"#999"};
       return h("div",{key:`${x.m.id}-${x.cnt}-${i}`,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<sortedData.length-1?10:0}},
         h("div",{style:{width:24,fontSize:i===0?18:14,fontWeight:900,color:i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":"#ccc",textAlign:"center"}},i+1),
-        h("div",{style:{width:34,height:34,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},x.m.number),
-        h("div",{style:{flex:1}},h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},x.m.name),h("div",{style:{fontSize:11,color:"#aaa"}},formatMemberGenerationGrade(x.m)+" · "+x.m.position)),
+        x.m.photoUrl
+          ? h(MemberFace,{member:x.m,size:36,alt:x.m.name})
+          : h("div",{style:{width:36,height:36,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},x.m.number),
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},x.m.name),
+          h("div",{style:{fontSize:11,color:"#aaa",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},formatMemberGenerationGrade(x.m)+" · "+x.m.position)),
         h("div",{style:{fontSize:22,fontWeight:900,color:i===0?"#1D4ED8":"#1a1a2e"}},x.cnt,h("span",{style:{fontSize:12,color:"#aaa",fontWeight:400}},unit)));
     }));
 }
@@ -7754,8 +7758,12 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
             const pc=PC[x.m.position]||{bg:"#999"};
             return h("div",{key:x.m.id,style:{display:"flex",alignItems:"center",gap:12,marginBottom:i<9?10:0}},
               h("div",{style:{width:24,fontSize:i===0?18:14,fontWeight:900,color:i===0?"#FFD700":i===1?"#C0C0C0":i===2?"#CD7F32":"#ccc",textAlign:"center"}},i+1),
-              h("div",{style:{width:34,height:34,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},x.m.number),
-              h("div",{style:{flex:1}},h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},x.m.name),h("div",{style:{fontSize:11,color:"#aaa"}},formatMemberGenerationGrade(x.m)+" · "+x.m.position)),
+              x.m.photoUrl
+                ? h(MemberFace,{member:x.m,size:36,alt:x.m.name})
+                : h("div",{style:{width:36,height:36,borderRadius:8,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:700,flexShrink:0}},x.m.number),
+              h("div",{style:{flex:1,minWidth:0}},
+                h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},x.m.name),
+                h("div",{style:{fontSize:11,color:"#aaa",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},formatMemberGenerationGrade(x.m)+" · "+x.m.position)),
               h("div",{style:{fontSize:22,fontWeight:900,color:i===0?"#1D4ED8":"#1a1a2e"}},x.cnt,h("span",{style:{fontSize:12,color:"#aaa",fontWeight:400}},"本")));
           })),
 
@@ -7792,10 +7800,12 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
           const lf=(liftings||[]).find(x=>x.memberId===m.id);
           return h("div",{key:m.id,style:{background:"#fff",borderRadius:16,padding:18,marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
             h("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:12}},
-              h("div",{style:{width:40,height:40,borderRadius:10,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700}},m.number),
-              h("div",{style:{flex:1}},
-                h("div",{style:{fontSize:15,fontWeight:800,color:"#1a1a2e"}},m.name),
-                h("div",{style:{fontSize:11,color:"#aaa"}},formatMemberGenerationGrade(m)+" · "+m.position))),
+              m.photoUrl
+                ? h(MemberFace,{member:m,size:42,alt:m.name})
+                : h("div",{style:{width:42,height:42,borderRadius:10,background:pc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700,flexShrink:0}},m.number),
+              h("div",{style:{flex:1,minWidth:0}},
+                h("div",{style:{fontSize:15,fontWeight:800,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},m.name),
+                h("div",{style:{fontSize:11,color:"#aaa",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},formatMemberGenerationGrade(m)+" · "+m.position))),
             h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6,textAlign:"center"}},
               [{l:"⚽ ゴール",v:m.goals,c:"#1D4ED8"},
                {l:"🅰 アシスト",v:m.assists,c:"#2196F3"},
@@ -9370,6 +9380,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
     if (r === "viewer") return "viewer";
     return "member";
   };
+  const canChangeLinkedMember = ["admin","super_admin"].includes(String(currentUserProfile?.role || user?.role || "").trim());
 
   useEffect(()=>{
     const latest = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
@@ -9547,9 +9558,10 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
           h("input",{value:name,onChange:e=>setName(e.target.value),style:css.inp,placeholder:"保護者名"})),
         h("div",{style:{marginBottom:16}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"子ども"),
-          h("select",{value:memberId,onChange:e=>setMemberId(e.target.value),style:css.inp},
+          h("select",{value:memberId,onChange:e=>setMemberId(e.target.value),disabled:!canChangeLinkedMember,style:{...css.inp,opacity:canChangeLinkedMember?1:0.7,cursor:canChangeLinkedMember?"pointer":"not-allowed"}},
             h("option",{value:""},"選んでください"),
-            memberOptions)),
+            memberOptions),
+          !canChangeLinkedMember&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:5}},"子どもの紐づけ変更は管理者にお知らせください")),
         h("div",{style:{marginBottom:16}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"家族構成（1行1名）"),
           h("textarea",{value:familyText,onChange:e=>setFamilyText(e.target.value),rows:4,placeholder:"例:\n父\n母\n妹",style:{...css.inp,resize:"none"}})),
@@ -9595,7 +9607,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
           : h("div",{style:{width:54,height:54,borderRadius:"50%",background:"#E2E8F0",color:"#94A3B8",fontSize:10,fontWeight:700,display:"grid",placeItems:"center",flexShrink:0}},"写真"),
         h("div",{style:{minWidth:0,flex:1}},
           h("div",{style:{fontSize:13,fontWeight:800,color:"#1A1A2E"}},"顔写真"),
-          h("div",{style:{fontSize:11,color:"#64748B",marginTop:3,lineHeight:1.5}},"ゴールは大きく、アシストは小さく丸く表示されます")),
+          h("div",{style:{fontSize:11,color:"#64748B",marginTop:3,lineHeight:1.5}},"ゴール・個人成績・ランキングに丸く表示されます")),
         h("label",{style:{display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#102A43",color:"#fff",borderRadius:7,padding:"9px 11px",fontSize:12,fontWeight:800,cursor:photoUploading||!child||photoCrop?"wait":"pointer",opacity:photoUploading||!child||photoCrop?0.55:1}},
           h("input",{type:"file",accept:"image/jpeg,image/png,image/webp",onChange:uploadPhoto,disabled:photoUploading||!child||!!photoCrop,style:{display:"none"}}),
           photoUploading?"更新中...":"写真を選ぶ"))),
@@ -10049,10 +10061,9 @@ function App() {
   const safeSetTab=useCallback((nextTab)=>{
     const t=String(nextTab||"").trim();
     if(!t) return setTab("home");
-    if(t==="settings" && !isAdmin) return setTab("home");
     if(t==="member" || t==="memo") return setTab("home");
     setTab(t);
-  },[isAdmin,uiTabVisibility?.member,uiTabVisibility?.memo]);
+  },[uiTabVisibility?.member,uiTabVisibility?.memo]);
   useEffect(()=>{
     if(!user || !deepLink.scheduleId || schedules.length===0) return;
     const target = schedules.find(s => String(s.id || "").trim() === String(deepLink.scheduleId).trim());
@@ -10064,9 +10075,6 @@ function App() {
       window.history.replaceState(null, "", location.pathname);
     } catch (e) {}
   },[user,deepLink,schedules,safeSetTab]);
-  useEffect(()=>{
-    if(!isAdmin && tab==="settings") setTab("home");
-  },[isAdmin,tab]);
   useEffect(()=>{
     if(tab==="member" || tab==="memo") setTab("home");
   },[tab]);
@@ -10141,7 +10149,7 @@ function App() {
     {k:"match",  l:"試合"},
     {k:"dash",   l:"成績"},
     {k:"docs",   l:"資料"},
-    ...(isAdmin?[{k:"settings",l:"設定"}]:[]),
+    {k:"settings",l:"設定"},
   ];
   const tabMeta = {
     cal:{eyebrow:"SCHEDULE",title:"日程",note:"予定・出欠・配車を管理"},
@@ -10160,9 +10168,7 @@ function App() {
     : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews,onReorder:handleReorderNewsDocs})
-    : tab==="settings" ? (isAdmin
-        ? h(SettingsTab,{user,users,members,isSuperAdmin:canManageUsers,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile,onUploadMemberPhoto:handleUploadMemberPhoto,onAdminUpdateUser:handleAdminUpdateUser,onAddMember:handleAddMember,uiTabVisibility,onSaveUiTabVisibility:handleSaveUiTabVisibility})
-        : null)
+    : tab==="settings" ? h(SettingsTab,{user,users,members,isSuperAdmin:canManageUsers,notificationEnabled,notificationBusy,onToggleNotifications:handleEnableNotifications,onUpdateProfile:handleUpdateProfile,onUploadMemberPhoto:handleUploadMemberPhoto,onAdminUpdateUser:handleAdminUpdateUser,onAddMember:handleAddMember,uiTabVisibility,onSaveUiTabVisibility:handleSaveUiTabVisibility})
     : h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab});
 
   return h(Fragment,{},
