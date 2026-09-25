@@ -208,6 +208,39 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function youtubeRecordingDateKey_(value, timeZone) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, timeZone || "Asia/Tokyo", "yyyy-MM-dd");
+  }
+  const raw = String(value || "").trim();
+  const match = raw.match(/(20\d{2})[^0-9]?(\d{1,2})[^0-9]?(\d{1,2})/);
+  if (!match) return "";
+  return match[1] + "-" + String(match[2]).padStart(2, "0") + "-" + String(match[3]).padStart(2, "0");
+}
+
+function parseYoutubeRecordingFiles_(value) {
+  let parsed = {};
+  try { parsed = typeof value === "string" ? JSON.parse(value || "{}") : (value || {}); } catch (e) { parsed = {}; }
+  if (!parsed || typeof parsed !== "object") return {};
+  const result = {};
+  ["full", "first", "second", "pk"].forEach(key => {
+    const entry = parsed[key];
+    const fileName = String(entry && entry.fileName || "").trim();
+    if (!fileName) return;
+    result[key] = {fileName: fileName, preparedAt: String(entry.preparedAt || "")};
+  });
+  return result;
+}
+
+function makeYoutubeRecordingFileName_(dateKey, resultId, gameNumber, part) {
+  const datePart = String(dateKey || "").replace(/[^0-9]/g, "").slice(0, 8) || Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyyMMdd");
+  const resultPart = String(resultId || "MATCH").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(-10) || "MATCH";
+  const gameDigits = String(gameNumber || "").replace(/\D/g, "");
+  const gamePart = String(gameDigits || "0").padStart(2, "0").slice(-2);
+  const suffix = {full: "FULL", first: "1ST", second: "2ND", pk: "PK"}[part] || "VIDEO";
+  return "AFC_" + datePart + "_" + resultPart + "_G" + gamePart + "_" + suffix + ".MOV";
+}
+
 function addHoursIso(hours) {
   return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
 }
@@ -1571,6 +1604,85 @@ function dispatch(req) {
       if (rowIndex < 0) throw new Error("対象の試合が見つかりません");
       sh.getRange(rowIndex + 2, recordingCol).setValue(JSON.stringify(recordingFiles));
       return {recordingFiles: recordingFiles};
+    }
+
+    // ── 同日分のYouTube動画を一括命名するためのリストを準備（管理者のみ） ──
+    case "prepareYoutubeRecordingBatch": {
+      const userId = String(req.userId || "").trim();
+      const resultId = String(req.resultId || "").trim();
+      const operator = getUserById(userId);
+      const operatorRole = String(operator && operator.role || "").trim();
+      if (!operator || !["admin", "super_admin"].includes(operatorRole)) {
+        throw new Error("動画の一括命名準備は管理者のみ実行できます");
+      }
+      if (!resultId) throw new Error("試合IDがありません");
+
+      ensureSheetColumnsByMap("試合結果", MAPS.result);
+      const sh = getSheet("試合結果");
+      if (!sh || sh.getLastRow() < 2) throw new Error("試合結果シートが見つかりません");
+      const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+      const values = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+      const indexOf = name => headers.indexOf(name);
+      const idx = {
+        id: indexOf("ID"), date: indexOf("日付"), opponent: indexOf("相手チーム"), gameNumber: indexOf("第○試合"),
+        recordings: indexOf("YouTube撮影ファイル"), full: indexOf("YouTubeURL"), first: indexOf("前半URL"), second: indexOf("後半URL"), pk: indexOf("PK戦URL")
+      };
+      if (idx.id < 0 || idx.date < 0 || idx.recordings < 0) throw new Error("動画命名に必要な列が見つかりません");
+      const selectedIndex = values.findIndex(row => String(row[idx.id] || "").trim() === resultId);
+      if (selectedIndex < 0) throw new Error("対象の試合が見つかりません");
+      const tz = getSpreadsheetTimeZone();
+      const dateKey = youtubeRecordingDateKey_(values[selectedIndex][idx.date], tz);
+      if (!dateKey) throw new Error("試合日が正しくありません");
+
+      const partOrder = {full: 0, first: 1, second: 2, pk: 3};
+      const partLabel = {full: "通し動画", first: "1st", second: "2nd", pk: "PK戦"};
+      const partColumn = {full: idx.full, first: idx.first, second: idx.second, pk: idx.pk};
+      const batchItems = [];
+      let currentRecordingFiles = {};
+
+      values.forEach((row, rowIndex) => {
+        if (youtubeRecordingDateKey_(row[idx.date], tz) !== dateKey) return;
+        const rowResultId = String(row[idx.id] || "").trim();
+        if (!rowResultId) return;
+        const recordingFiles = parseYoutubeRecordingFiles_(row[idx.recordings]);
+        const hasPlan = Object.keys(recordingFiles).length > 0;
+        const hasLinkedVideo = [idx.full, idx.first, idx.second, idx.pk].some(col => col >= 0 && String(row[col] || "").trim());
+
+        // 通常は試合ごとに通し動画1本として準備する。前半・後半・PKは画面から必要な分だけ追加する。
+        if (!hasPlan && !hasLinkedVideo) {
+          recordingFiles.full = {
+            fileName: makeYoutubeRecordingFileName_(dateKey, rowResultId, row[idx.gameNumber], "full"),
+            preparedAt: nowIso(),
+          };
+          sh.getRange(rowIndex + 2, idx.recordings + 1).setValue(JSON.stringify(recordingFiles));
+        }
+
+        ["full", "first", "second", "pk"].forEach(part => {
+          const entry = recordingFiles[part];
+          const fileName = String(entry && entry.fileName || "").trim();
+          const videoCol = partColumn[part];
+          const alreadyLinked = videoCol >= 0 && String(row[videoCol] || "").trim();
+          if (!fileName || alreadyLinked) return;
+          batchItems.push({
+            fileName: fileName,
+            resultId: rowResultId,
+            part: part,
+            label: [String(row[idx.opponent] || "").trim() || "相手未入力", partLabel[part]].join(" / "),
+            gameNumber: String(row[idx.gameNumber] || "").trim(),
+            row: rowIndex + 2,
+            partOrder: partOrder[part],
+          });
+        });
+        if (rowResultId === resultId) currentRecordingFiles = recordingFiles;
+      });
+
+      batchItems.sort((a, b) => {
+        const an = Number(String(a.gameNumber || "").replace(/[^0-9]/g, "")) || 999;
+        const bn = Number(String(b.gameNumber || "").replace(/[^0-9]/g, "")) || 999;
+        return an - bn || a.row - b.row || a.partOrder - b.partOrder;
+      });
+      const items = batchItems.map(item => ({fileName: item.fileName, resultId: item.resultId, part: item.part, label: item.label}));
+      return {batch: {version: 1, date: dateKey, generatedAt: nowIso(), items: items}, recordingFiles: currentRecordingFiles};
     }
 
     // ── 撮影ファイル名からYouTube動画を同期（管理者のみ） ──────

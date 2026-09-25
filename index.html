@@ -1557,6 +1557,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const [youtubeRecordingFiles,setYoutubeRecordingFiles]=useState(()=>parseYoutubeRecordingFiles(match.youtubeRecordingFiles));
   const [youtubeRecordingBusy,setYoutubeRecordingBusy]=useState("");
   const [youtubeRecordingSyncing,setYoutubeRecordingSyncing]=useState(false);
+  const [youtubeBatchPreparing,setYoutubeBatchPreparing]=useState(false);
+  const [youtubeBatchReady,setYoutubeBatchReady]=useState(null);
   const [ytCopied,setYtCopied]=useState("");
   const [matchMemo,setMatchMemo]=useState(()=>String(goalDraftInit?.memo ?? match.memo ?? ""));
   const [matchStatus,setMatchStatus]=useState(()=>{
@@ -1663,8 +1665,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         recordingFiles:next
       });
       setYoutubeRecordingFiles(parseYoutubeRecordingFiles(result?.recordingFiles||next));
-      await copyToClipboard(fileName);
-      alert("撮影ファイル名を保存してコピーしました。iPadで撮影後、「ファイル」に保存して同じ名前へ変更してください。\n\n"+fileName);
+      setYoutubeBatchReady(null);
+      alert("一括命名の対象へ追加しました。撮影後に、この日の「動画をまとめて命名」から一括で名前を付けられます。\n\n"+fileName);
     }catch(e){
       alert("撮影準備エラー: "+(e?.message||e));
     }
@@ -1685,6 +1687,28 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       alert("YouTube同期エラー: "+(e?.message||e));
     }
     setYoutubeRecordingSyncing(false);
+  };
+  const youtubeRenameShortcutUrl="shortcuts://run-shortcut?name="+encodeURIComponent("AFC動画一括命名");
+  const prepareYoutubeRenameBatch=async()=>{
+    if(!isAdmin||youtubeBatchPreparing) return;
+    setYoutubeBatchPreparing(true);
+    try{
+      const result=await api("prepareYoutubeRecordingBatch",{userId:String(user?.id||"").trim(),resultId:String(match?.id||"").trim()});
+      const batch=result?.batch&&typeof result.batch==="object"?result.batch:null;
+      const items=Array.isArray(batch?.items)?batch.items:[];
+      if(!items.length){
+        alert("この日に一括命名する未リンク動画はありません。");
+        return;
+      }
+      copyToClipboard(JSON.stringify(batch));
+      setYoutubeBatchReady({date:String(batch.date||""),count:items.length});
+      setYoutubeRecordingFiles(parseYoutubeRecordingFiles(result?.recordingFiles||youtubeRecordingFiles));
+      alert("動画"+items.length+"本ぶんの名前リストをコピーしました。\n\n次に「ショートカットを開く」を押して、撮影した動画を時系列順に選んでください。");
+    }catch(e){
+      alert("一括命名の準備エラー: "+(e?.message||e));
+    }finally{
+      setYoutubeBatchPreparing(false);
+    }
   };
   // editGoal: {type:"our"|"their", idx:number}
   const [editGoal,setEditGoal]=useState(null);
@@ -2167,6 +2191,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       pk:String(draft?.ytUrls?.pk || match.youtubeUrlPk || ""),
     });
     setYoutubeRecordingFiles(parseYoutubeRecordingFiles(match?.youtubeRecordingFiles));
+    setYoutubeBatchReady(null);
     setMatchStats(draft?.matchStats && typeof draft.matchStats === "object" ? {
       ourShots:Math.max(0, Number(draft.matchStats.ourShots||0)||0),
       theirShots:Math.max(0, Number(draft.matchStats.theirShots||0)||0),
@@ -2851,14 +2876,27 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     )
   );
   const youtubeRecordingDefinitions=[
-    {key:"full",label:"通し動画",suffix:"FULL",url:youtubeFullUrl},
     ...(visibleHalfOptions.includes("1st")?[{key:"first",label:"1st",suffix:"1ST",url:youtubeFirstUrl}]:[]),
     ...(visibleHalfOptions.includes("2nd")?[{key:"second",label:"2nd",suffix:"2ND",url:youtubeSecondUrl}]:[]),
     {key:"pk",label:"PK戦",suffix:"PK",url:youtubePkUrl}
   ];
   const youtubeInputBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
     h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:6}},"VIDEO RECORDING"),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"撮影前にファイル名を作成します。iPadで撮影後は「ファイル」へ保存し、コピーした名前に変更してからYouTubeへアップしてください。"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"撮影中は操作不要です。試合後にこの日の動画をまとめて選ぶと、YouTube用の名前を一括で付けられます。"),
+    h("button",{onClick:prepareYoutubeRenameBatch,disabled:youtubeBatchPreparing||loading,style:{...css.bS,width:"100%",padding:"12px",marginBottom:youtubeBatchReady?8:12,opacity:youtubeBatchPreparing||loading?0.65:1,cursor:youtubeBatchPreparing||loading?"wait":"pointer"}},
+      youtubeBatchPreparing?"一括命名を準備中...":"この日の動画をまとめて命名"),
+    youtubeBatchReady&&h("div",{style:{background:"#EFF6FF",border:"1px solid #B9CCE0",borderRadius:6,padding:"10px 11px",marginBottom:12}},
+      h("div",{style:{fontSize:12,fontWeight:900,color:"#102A43",marginBottom:4}},youtubeBatchReady.count+"本の名前リストをコピー済み"),
+      h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.55,marginBottom:9}},"下のショートカットで動画を時系列順に選ぶと、名前付きコピーが「ファイル」に作られます。"),
+      h("a",{href:youtubeRenameShortcutUrl,style:{display:"block",textAlign:"center",background:"#102A43",border:"1px solid #102A43",borderRadius:6,padding:"9px 10px",color:"#fff",fontSize:12,fontWeight:900,textDecoration:"none"}},"ショートカットを開く")
+    ),
+    h("details",{style:{marginBottom:12,background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,padding:"0 10px"}},
+      h("summary",{style:{padding:"9px 0",cursor:"pointer",fontSize:11,fontWeight:800,color:"#475569"}},"初回だけ：ショートカットの設定"),
+      h("div",{style:{padding:"0 0 10px",fontSize:11,color:"#64748B",lineHeight:1.65}},
+        "ショートカット名は「AFC動画一括命名」。クリップボードの命名リストを読み込み、複数の動画を選択 → 順番に名前を設定 → 「ファイル」へ保存、の流れで一度だけ作成します。"
+      )
+    ),
+    h("div",{style:{fontSize:11,fontWeight:900,color:"#475569",marginBottom:7}},"追加動画（必要なときだけ）"),
     h("div",{style:{display:"grid",gap:8,marginBottom:12}},
       youtubeRecordingDefinitions.map(item=>{
         const plan=youtubeRecordingFiles[item.key];
@@ -2869,7 +2907,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
             h("div",{style:{fontSize:10,fontWeight:800,color:linked?"#15803D":"#64748B"}},linked?"リンク済み":"未リンク")),
           plan?.fileName&&h("div",{style:{fontFamily:"monospace",fontSize:10,color:"#334155",wordBreak:"break-all",lineHeight:1.45,marginBottom:8}},plan.fileName),
           h("button",{onClick:()=>prepareYoutubeRecording(item.key),disabled:!!youtubeRecordingBusy||linked,style:{...css.bS,width:"100%",padding:"8px 10px",fontSize:12,opacity:youtubeRecordingBusy||linked?0.6:1,cursor:youtubeRecordingBusy||linked?"default":"pointer"}},
-            youtubeRecordingBusy===item.key?"保存中...":linked?"YouTubeにリンク済み":plan?.fileName?"ファイル名をコピー":"撮影名を作成・コピー")
+            youtubeRecordingBusy===item.key?"保存中...":linked?"YouTubeにリンク済み":plan?.fileName?"一括命名へ追加済み":"一括命名へ追加")
         );
       })
     ),
