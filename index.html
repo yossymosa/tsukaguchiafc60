@@ -44,7 +44,13 @@ button:active{transform:translateY(1px);}
 .app-tabbar{display:flex;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 3px 10px rgba(15,23,42,.05);}
 .app-tab{flex:1;min-width:0;padding:12px 2px 11px;border:0;border-bottom:2px solid transparent;background:#fff;color:#7B8794;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .app-tab.is-active{color:var(--navy);border-bottom-color:#2F80ED;background:#F8FBFF;font-weight:900;}
-.content-page{padding:14px 16px 0;}
+  .content-page{padding:14px 16px 0;touch-action:pan-y;}
+  .tab-page-motion{will-change:transform,opacity;}
+  .tab-page-motion.from-right{animation:tabPageFromRight .22s cubic-bezier(.2,.8,.2,1) both;}
+  .tab-page-motion.from-left{animation:tabPageFromLeft .22s cubic-bezier(.2,.8,.2,1) both;}
+  @keyframes tabPageFromRight{from{opacity:.35;transform:translateX(26px)}to{opacity:1;transform:translateX(0)}}
+  @keyframes tabPageFromLeft{from{opacity:.35;transform:translateX(-26px)}to{opacity:1;transform:translateX(0)}}
+  @media (prefers-reduced-motion:reduce){.tab-page-motion.from-right,.tab-page-motion.from-left{animation:none;}}
 .page-intro{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:2px 0 14px;padding:0 0 10px;border-bottom:1px solid var(--line);}
 .page-intro-eyebrow{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:12px;font-weight:700;letter-spacing:1.5px;color:#2F80ED;line-height:1;}
 .page-intro-title{font-size:20px;font-weight:900;color:var(--ink);letter-spacing:.02em;margin-top:5px;line-height:1.25;}
@@ -9751,6 +9757,8 @@ function App() {
   const [loading,setLoading]=useState(false);
   const [loadMsg,setLoadMsg]=useState("読み込み中...");
   const [tab,setTab]=useState("home");
+  const [tabSlideDirection,setTabSlideDirection]=useState("");
+  const tabSwipeStartRef=useRef(null);
   const [dashInitialTab,setDashInitialTab]=useState("result");
   const [page,setPage]=useState(null); // null | {type,schedule?,match?}
   const [members,setMembers]=useState([]);
@@ -10059,10 +10067,11 @@ function App() {
     setUiTabVisibility(saved);
     return saved;
   };
-  const safeSetTab=useCallback((nextTab)=>{
+  const safeSetTab=useCallback((nextTab,slideDirection="")=>{
     const t=String(nextTab||"").trim();
-    if(!t) return setTab("home");
-    if(t==="member" || t==="memo") return setTab("home");
+    if(!t){setTabSlideDirection("");return setTab("home");}
+    if(t==="member" || t==="memo"){setTabSlideDirection("");return setTab("home");}
+    setTabSlideDirection(slideDirection);
     setTab(t);
   },[uiTabVisibility?.member,uiTabVisibility?.memo]);
   useEffect(()=>{
@@ -10152,6 +10161,29 @@ function App() {
     {k:"docs",   l:"資料"},
     {k:"settings",l:"設定"},
   ];
+  const handleTabSwipeStart=e=>{
+    const target=e.target instanceof Element ? e.target : null;
+    if(target?.closest("input, textarea, select, button, a, [role='button'], [contenteditable='true'], .dashboard-tabs, [data-no-tab-swipe='true']")){
+      tabSwipeStartRef.current=null;
+      return;
+    }
+    const touch=e.touches?.[0];
+    if(!touch) return;
+    tabSwipeStartRef.current={x:touch.clientX,y:touch.clientY,time:Date.now()};
+  };
+  const handleTabSwipeEnd=e=>{
+    const start=tabSwipeStartRef.current;
+    tabSwipeStartRef.current=null;
+    const touch=e.changedTouches?.[0];
+    if(!start||!touch||Date.now()-start.time>900) return;
+    const dx=touch.clientX-start.x;
+    const dy=touch.clientY-start.y;
+    if(Math.abs(dx)<72||Math.abs(dx)<=Math.abs(dy)*1.35) return;
+    const activeIndex=TABS.findIndex(t=>t.k===tab);
+    const nextIndex=activeIndex+(dx<0?1:-1);
+    if(nextIndex<0||nextIndex>=TABS.length) return;
+    safeSetTab(TABS[nextIndex].k,dx<0?"from-right":"from-left");
+  };
   const tabMeta = {
     cal:{eyebrow:"SCHEDULE",title:"日程",note:"予定・出欠・配車を管理"},
     match:{eyebrow:"MATCH CENTER",title:"試合",note:"大会ごとの記録を確認"},
@@ -10181,9 +10213,10 @@ function App() {
           TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),className:"app-tab"+(tab===t.k?" is-active":""),"aria-current":tab===t.k?"page":undefined},t.l))
         )
       ),
-      h("main",{className:"content-page"},
-        tabMeta[tab] && h(PageIntro,tabMeta[tab]),
-        currentTabContent)
+      h("main",{className:"content-page",onTouchStart:handleTabSwipeStart,onTouchEnd:handleTabSwipeEnd,onTouchCancel:()=>{tabSwipeStartRef.current=null;}},
+        h("div",{key:tab,className:"tab-page-motion "+tabSlideDirection},
+          tabMeta[tab] && h(PageIntro,tabMeta[tab]),
+          currentTabContent))
     )
   );
 }
@@ -10191,7 +10224,7 @@ render(h(App,{}), document.getElementById("app"));
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js?v=15")
+    navigator.serviceWorker.register("/sw.js?v=16")
       .then(reg => { try { reg.update(); } catch (e) {} })
       .catch(() => {});
   });
