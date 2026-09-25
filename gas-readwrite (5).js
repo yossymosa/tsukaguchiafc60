@@ -1517,6 +1517,20 @@ function dispatch(req) {
       return {};
     }
 
+    // ── YouTubeタイトル・概要欄の反映（管理者のみ） ──────────
+    case "updateYouTubeMetadata": {
+      const userId = String(req.userId || "").trim();
+      const operator = getUserById(userId);
+      const operatorRole = String(operator && operator.role || "").trim();
+      if (!operator || !["admin", "super_admin"].includes(operatorRole)) {
+        throw new Error("YouTubeへの反映は管理者のみ実行できます");
+      }
+      if (typeof updateYoutubeMetadataFromApp_ !== "function") {
+        throw new Error("YouTube連携スクリプトが見つかりません。youtube-sync.jsも同じGASプロジェクトへ貼り付けてください");
+      }
+      return updateYoutubeMetadataFromApp_(req);
+    }
+
     // ── 得点記録一括保存 ─────────────────────────────────────
     case "saveGoals": {
       const sh = getSheet("得点記録");

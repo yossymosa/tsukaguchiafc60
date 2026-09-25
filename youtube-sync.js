@@ -36,6 +36,81 @@ const HALF_PK = "pk";
 const LABEL_GOAL = "\u5f97\u70b9";
 const LABEL_CONCEDE = "\u5931\u70b9";
 
+// ============================================================
+// アプリで登録した動画URLへ、既存のYouTubeテンプレのタイトル・
+// 概要欄を反映する。YouTube Data API の高度なサービスを有効にした
+// Apps Script プロジェクトでのみ実行できる。
+// ============================================================
+function updateYoutubeMetadataFromApp_(req) {
+  if (typeof YouTube === "undefined" || !YouTube.Videos) {
+    throw new Error("YouTube API連携が未設定です。Apps Scriptの「サービス」で YouTube Data API を追加し、Google Cloud 側でも YouTube Data API v3 を有効にしてください");
+  }
+
+  const videos = Array.isArray(req && req.videos) ? req.videos : [];
+  if (!videos.length) throw new Error("反映する動画URLがありません");
+
+  const seen = {};
+  const updatedVideos = [];
+  videos.forEach((raw, index) => {
+    const videoId = extractYoutubeVideoIdForMetadata_(raw && raw.url);
+    if (!videoId) throw new Error((index + 1) + "件目のYouTube URLが正しくありません");
+    if (seen[videoId]) return;
+    seen[videoId] = true;
+
+    const title = String(raw && raw.title || "").trim();
+    const description = String(raw && raw.description || "");
+    if (!title) throw new Error("YouTubeタイトルが空です");
+    if (title.length > 100) throw new Error("YouTubeタイトルは100文字以内にしてください: " + title);
+    if (Utilities.newBlob(description).getBytes().length > 5000) {
+      throw new Error("YouTube概要欄は5000バイト以内にしてください: " + title);
+    }
+
+    try {
+      // snippetを丸ごと更新するため、既存のカテゴリ・タグ・言語は保持する。
+      const lookup = YouTube.Videos.list("snippet", {id: videoId, maxResults: 1});
+      const current = lookup && lookup.items && lookup.items[0];
+      if (!current || !current.snippet) {
+        throw new Error("対象動画が見つかりません。チャンネル所有者のGoogleアカウントで認可されているか確認してください");
+      }
+      const currentSnippet = current.snippet || {};
+      const snippet = {
+        title: title,
+        description: description,
+        categoryId: String(currentSnippet.categoryId || "17"),
+      };
+      if (Array.isArray(currentSnippet.tags)) snippet.tags = currentSnippet.tags.slice();
+      if (currentSnippet.defaultLanguage) snippet.defaultLanguage = String(currentSnippet.defaultLanguage);
+
+      YouTube.Videos.update({id: videoId, snippet: snippet}, "snippet");
+      updatedVideos.push({videoId: videoId, title: title, label: String(raw && raw.label || "")});
+    } catch (err) {
+      const message = String(err && err.message || err || "不明なエラー");
+      throw new Error("YouTube更新に失敗しました（" + title + "）: " + message);
+    }
+  });
+
+  return {updatedCount: updatedVideos.length, updatedVideos: updatedVideos};
+}
+
+function extractYoutubeVideoIdForMetadata_(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const patterns = [
+    /(?:youtube\.com|youtube-nocookie\.com)\/watch\?(?:[^#]*&)?v=([A-Za-z0-9_-]{11})(?:[&#?]|$)/i,
+    /(?:youtube\.com|youtube-nocookie\.com)\/(?:shorts|embed|live)\/([A-Za-z0-9_-]{11})(?:[?#/]|$)/i,
+    /youtu\.be\/([A-Za-z0-9_-]{11})(?:[?#/]|$)/i,
+  ];
+  let id = "";
+  for (let i = 0; i < patterns.length; i++) {
+    const match = raw.match(patterns[i]);
+    if (match && match[1]) {
+      id = match[1];
+      break;
+    }
+  }
+  return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : "";
+}
+
 function syncYouTubePlaylist() {
   const ss = SpreadsheetApp.openById(getSpreadsheetIdForYoutube_());
   const resultSh = ss.getSheetByName(SHEET_RESULTS);
