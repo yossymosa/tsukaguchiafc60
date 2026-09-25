@@ -47,6 +47,7 @@ const MAPS = {
     "試合形式":"formatLabel", "第○試合":"gameNumber", "メモ":"memo",
     "スケジュールID":"scheduleId", "種類":"type",
     "YouTubeURL":"youtubeUrl", "前半URL":"youtubeUrl1st", "後半URL":"youtubeUrl2nd", "PK戦URL":"youtubeUrlPk",
+    "YouTube撮影ファイル":"youtubeRecordingFiles",
     "PK塚口":"pkOur", "PK相手":"pkTheir",
     "PKキッカー":"pkKickers", "PK相手シーケンス":"pkTheirSeq",
     "塚口シュート":"ourShots", "相手シュート":"theirShots", "選手別シュート":"shotStats",
@@ -1529,6 +1530,61 @@ function dispatch(req) {
         throw new Error("YouTube連携スクリプトが見つかりません。youtube-sync.jsも同じGASプロジェクトへ貼り付けてください");
       }
       return updateYoutubeMetadataFromApp_(req);
+    }
+
+    // ── YouTube撮影ファイル名の予約（管理者のみ） ─────────────
+    case "saveYoutubeRecordingPlan": {
+      const userId = String(req.userId || "").trim();
+      const resultId = String(req.resultId || "").trim();
+      const operator = getUserById(userId);
+      const operatorRole = String(operator && operator.role || "").trim();
+      if (!operator || !["admin", "super_admin"].includes(operatorRole)) {
+        throw new Error("撮影ファイル名の登録は管理者のみ実行できます");
+      }
+      if (!resultId) throw new Error("試合IDがありません");
+      const rawPlans = req.recordingFiles && typeof req.recordingFiles === "object" ? req.recordingFiles : {};
+      const recordingFiles = {};
+      ["full", "first", "second", "pk"].forEach(key => {
+        const raw = rawPlans[key];
+        if (!raw || typeof raw !== "object") return;
+        const fileName = String(raw.fileName || "").trim();
+        if (!fileName) return;
+        if (!/^AFC_[A-Z0-9_\-]+(?:\.[A-Z0-9]+)?$/i.test(fileName)) {
+          throw new Error("撮影ファイル名の形式が正しくありません");
+        }
+        recordingFiles[key] = {
+          fileName: fileName,
+          preparedAt: String(raw.preparedAt || nowIso()),
+        };
+      });
+      if (!Object.keys(recordingFiles).length) throw new Error("撮影ファイル名がありません");
+
+      ensureSheetColumnsByMap("試合結果", MAPS.result);
+      const sh = getSheet("試合結果");
+      if (!sh || sh.getLastRow() < 2) throw new Error("試合結果シートが見つかりません");
+      const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+      const idCol = headers.indexOf("ID") + 1;
+      const recordingCol = headers.indexOf("YouTube撮影ファイル") + 1;
+      if (!idCol || !recordingCol) throw new Error("撮影ファイル名の保存列が見つかりません");
+      const ids = sh.getRange(2, idCol, sh.getLastRow() - 1, 1).getValues();
+      const rowIndex = ids.findIndex(row => String(row[0] || "").trim() === resultId);
+      if (rowIndex < 0) throw new Error("対象の試合が見つかりません");
+      sh.getRange(rowIndex + 2, recordingCol).setValue(JSON.stringify(recordingFiles));
+      return {recordingFiles: recordingFiles};
+    }
+
+    // ── 撮影ファイル名からYouTube動画を同期（管理者のみ） ──────
+    case "syncYoutubeRecordingFiles": {
+      const userId = String(req.userId || "").trim();
+      const operator = getUserById(userId);
+      const operatorRole = String(operator && operator.role || "").trim();
+      if (!operator || !["admin", "super_admin"].includes(operatorRole)) {
+        throw new Error("YouTube同期は管理者のみ実行できます");
+      }
+      if (typeof syncYouTubePlaylist !== "function") {
+        throw new Error("YouTube連携スクリプトが見つかりません。youtube-sync.jsも同じGASプロジェクトへ貼り付けてください");
+      }
+      return syncYouTubePlaylist();
     }
 
     // ── 得点記録一括保存 ─────────────────────────────────────

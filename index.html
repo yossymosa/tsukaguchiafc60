@@ -1535,13 +1535,28 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     if (goalType === "オウンゴール") return chooseOurScorer({...draft,goalType}, OPPONENT_OWN_GOAL_ID);
     return {...draft,goalType,...(isOpponentOwnGoalDraft(draft)?{scorerId:"",scorerName:"",assistId:"",assistName:""}:{})};
   };
+  const parseYoutubeRecordingFiles=value=>{
+    try{
+      const raw=typeof value==="string"?JSON.parse(value||"{}"):value;
+      if(!raw||typeof raw!=="object") return {};
+      const next={};
+      ["full","first","second","pk"].forEach(key=>{
+        const item=raw[key];
+        const fileName=String(item?.fileName||"").trim();
+        if(fileName) next[key]={fileName,preparedAt:String(item?.preparedAt||"")};
+      });
+      return next;
+    }catch(e){return {};}
+  };
   const [ytUrls,setYtUrls]=useState(()=>({
     full:String(goalDraftInit?.ytUrls?.full || match.youtubeUrl || ""),
     first:String(goalDraftInit?.ytUrls?.first || match.youtubeUrl1st || ""),
     second:String(goalDraftInit?.ytUrls?.second || match.youtubeUrl2nd || ""),
     pk:String(goalDraftInit?.ytUrls?.pk || match.youtubeUrlPk || "")
   }));
-  const [youtubeMetadataSyncing,setYoutubeMetadataSyncing]=useState(false);
+  const [youtubeRecordingFiles,setYoutubeRecordingFiles]=useState(()=>parseYoutubeRecordingFiles(match.youtubeRecordingFiles));
+  const [youtubeRecordingBusy,setYoutubeRecordingBusy]=useState("");
+  const [youtubeRecordingSyncing,setYoutubeRecordingSyncing]=useState(false);
   const [ytCopied,setYtCopied]=useState("");
   const [matchMemo,setMatchMemo]=useState(()=>String(goalDraftInit?.memo ?? match.memo ?? ""));
   const [matchStatus,setMatchStatus]=useState(()=>{
@@ -1623,6 +1638,53 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       }
     } catch (e) {}
     return "";
+  };
+  const buildYoutubeRecordingFileName=key=>{
+    const rawDate=String(match?.date||schedule?.date||"").replace(/[^0-9]/g,"").slice(0,8);
+    const now=new Date();
+    const fallbackDate=now.getFullYear()+String(now.getMonth()+1).padStart(2,"0")+String(now.getDate()).padStart(2,"0");
+    const datePart=rawDate||fallbackDate;
+    const matchPart=String(match?.id||"MATCH").replace(/[^A-Za-z0-9]/g,"").toUpperCase().slice(-10)||"MATCH";
+    const gameDigits=String(match?.gameNumber||"0").replace(/\D/g,"");
+    const gamePart=String(gameDigits||"0").padStart(2,"0").slice(-2);
+    const suffix={full:"FULL",first:"1ST",second:"2ND",pk:"PK"}[key]||"VIDEO";
+    return `AFC_${datePart}_${matchPart}_G${gamePart}_${suffix}.MOV`;
+  };
+  const prepareYoutubeRecording=async(key)=>{
+    if(!isAdmin||youtubeRecordingBusy) return;
+    const current=youtubeRecordingFiles[key]||{};
+    const fileName=String(current.fileName||buildYoutubeRecordingFileName(key)).trim();
+    const next={...youtubeRecordingFiles,[key]:{fileName,preparedAt:current.preparedAt||new Date().toISOString()}};
+    setYoutubeRecordingBusy(key);
+    try{
+      const result=await api("saveYoutubeRecordingPlan",{
+        userId:String(user?.id||"").trim(),
+        resultId:String(match?.id||"").trim(),
+        recordingFiles:next
+      });
+      setYoutubeRecordingFiles(parseYoutubeRecordingFiles(result?.recordingFiles||next));
+      await copyToClipboard(fileName);
+      alert("撮影ファイル名を保存してコピーしました。iPadで撮影後、「ファイル」に保存して同じ名前へ変更してください。\n\n"+fileName);
+    }catch(e){
+      alert("撮影準備エラー: "+(e?.message||e));
+    }
+    setYoutubeRecordingBusy("");
+  };
+  const syncYoutubeRecordingFiles=async()=>{
+    if(!isAdmin||youtubeRecordingSyncing) return;
+    setYoutubeRecordingSyncing(true);
+    try{
+      const result=await api("syncYoutubeRecordingFiles",{userId:String(user?.id||"").trim()});
+      const linked=Number(result?.linkedCount||0);
+      const pending=Number(result?.pendingCount||0);
+      alert("YouTube確認が完了しました。\nリンク: "+linked+"件\n処理待ち: "+pending+"件");
+      const updatedMatch=(Array.isArray(result?.updatedResults)?result.updatedResults:[]).find(item=>String(item?.id||"")===String(match?.id||""));
+      if(typeof onShotSaved==="function") await onShotSaved(updatedMatch||{});
+      else if(typeof onSaved==="function") await onSaved();
+    }catch(e){
+      alert("YouTube同期エラー: "+(e?.message||e));
+    }
+    setYoutubeRecordingSyncing(false);
   };
   // editGoal: {type:"our"|"their", idx:number}
   const [editGoal,setEditGoal]=useState(null);
@@ -2104,6 +2166,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       second:String(draft?.ytUrls?.second || match.youtubeUrl2nd || ""),
       pk:String(draft?.ytUrls?.pk || match.youtubeUrlPk || ""),
     });
+    setYoutubeRecordingFiles(parseYoutubeRecordingFiles(match?.youtubeRecordingFiles));
     setMatchStats(draft?.matchStats && typeof draft.matchStats === "object" ? {
       ourShots:Math.max(0, Number(draft.matchStats.ourShots||0)||0),
       theirShots:Math.max(0, Number(draft.matchStats.theirShots||0)||0),
@@ -2141,7 +2204,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setMatchClockSec(Math.max(0, Number(draft?.matchClockSec || 0) || 0));
     clockBaseSecRef.current = 0;
     clockStartMsRef.current = 0;
-  }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.pkOur, match?.pkTheir, match?.pkKickers, match?.pkTheirSeq, match?.formation, match?.formationSlots, match?.substitutions]);
+  }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.pkOur, match?.pkTheir, match?.pkKickers, match?.pkTheirSeq, match?.formation, match?.formationSlots, match?.substitutions, match?.youtubeUrl, match?.youtubeUrl1st, match?.youtubeUrl2nd, match?.youtubeUrlPk, match?.youtubeRecordingFiles]);
   useEffect(() => {
     writeShotCache(match?.id, shotByHalf, theirShotsByHalf);
   }, [match?.id, JSON.stringify(shotByHalf), JSON.stringify(theirShotsByHalf)]);
@@ -2342,46 +2405,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       }
     }catch(e){alert("保存エラー: "+e.message);}
     setLoading(false);
-  };
-  const syncYoutubeMetadata=async()=>{
-    if(!isAdmin||youtubeMetadataSyncing) return;
-    const templateMatch={
-      ...match,
-      goals,
-      theirGoals:theirG,
-      pkKickers:hasPk?pkKickers:[],
-      pkTheirSeq:hasPk?pkTheirSeq:[],
-      pkOur:hasPk?pkOurScore:"",
-      pkTheir:hasPk?pkTheirScore:""
-    };
-    const candidates=[
-      {label:"通し",url:ytUrls.full,title:makeYtTitle(templateMatch,schedule,""),description:makeYtDesc(templateMatch,members,"")},
-      {label:"1st",url:ytUrls.first,title:makeYtTitle(templateMatch,schedule,"1st"),description:makeYtDesc(templateMatch,members,"1st")},
-      {label:"2nd",url:ytUrls.second,title:makeYtTitle(templateMatch,schedule,"2nd"),description:makeYtDesc(templateMatch,members,"2nd")},
-      {label:"PK",url:ytUrls.pk,title:makeYtTitle(templateMatch,schedule,"PK戦"),description:makeYtPkDesc(templateMatch)}
-    ].map(item=>({...item,url:normalizeYoutubeLink(item.url)})).filter(item=>item.url);
-    const seenUrls=new Set();
-    const videos=candidates.filter(item=>{
-      if(seenUrls.has(item.url)) return false;
-      seenUrls.add(item.url);
-      return true;
-    });
-    if(!videos.length){
-      alert("先にYouTube動画URLを入力してください");
-      return;
-    }
-    setYoutubeMetadataSyncing(true);
-    try{
-      // URL・得点・PK結果を保存してから、同じ内容でYouTubeを更新する。
-      const {savePayload}=buildGoalSavePayload();
-      await api("saveGoals",savePayload);
-      clearGoalDraft(match?.id);
-      const result=await api("updateYouTubeMetadata",{userId:String(user?.id||"").trim(),resultId:String(match?.id||"").trim(),videos});
-      alert("YouTubeのタイトル・概要欄を"+String(result?.updatedCount||videos.length)+"件反映しました");
-    }catch(e){
-      alert("YouTube反映エラー: "+(e?.message||e));
-    }
-    setYoutubeMetadataSyncing(false);
   };
   const saveMatchFavorite = async(nextFavorite) => {
     const resultId = String(match?.id || "").trim();
@@ -2827,20 +2850,31 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       )
     )
   );
+  const youtubeRecordingDefinitions=[
+    {key:"full",label:"通し動画",suffix:"FULL",url:youtubeFullUrl},
+    ...(visibleHalfOptions.includes("1st")?[{key:"first",label:"1st",suffix:"1ST",url:youtubeFirstUrl}]:[]),
+    ...(visibleHalfOptions.includes("2nd")?[{key:"second",label:"2nd",suffix:"2ND",url:youtubeSecondUrl}]:[]),
+    {key:"pk",label:"PK戦",suffix:"PK",url:youtubePkUrl}
+  ];
   const youtubeInputBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
-    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:6}},"YOUTUBE VIDEO"),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"動画URLを登録してから反映すると、いまのYouTubeテンプレのタイトル・概要欄を自動入力します。"),
-    [
-      {key:"full",label:"通し動画URL",placeholder:"通し動画の YouTube URL"},
-      {key:"first",label:"1st 動画URL",placeholder:"1st 動画の YouTube URL"},
-      {key:"second",label:"2nd 動画URL",placeholder:"2nd 動画の YouTube URL"}
-    ].map(item=>h("div",{key:item.key,style:{marginBottom:10}},
-      h("div",{style:{fontSize:11,fontWeight:800,color:"#475569",marginBottom:5}},item.label),
-      h("input",{type:"url",value:ytUrls[item.key],onChange:e=>setYtUrls(prev=>({...prev,[item.key]:e.target.value})),placeholder:item.placeholder,style:{...css.inp,width:"100%"}})
-    )),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.5,marginBottom:12}},"PK戦動画は下の「PK SHOOTOUT」内で登録します。URLは自動保存されます。"),
-    h("button",{onClick:syncYoutubeMetadata,disabled:youtubeMetadataSyncing||loading,style:{...css.bS,width:"100%",padding:"12px",opacity:youtubeMetadataSyncing||loading?0.65:1,cursor:youtubeMetadataSyncing||loading?"wait":"pointer"}},
-      youtubeMetadataSyncing?"YouTubeへ反映中...":"YouTubeへタイトル・概要欄を反映")
+    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:6}},"VIDEO RECORDING"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"撮影前にファイル名を作成します。iPadで撮影後は「ファイル」へ保存し、コピーした名前に変更してからYouTubeへアップしてください。"),
+    h("div",{style:{display:"grid",gap:8,marginBottom:12}},
+      youtubeRecordingDefinitions.map(item=>{
+        const plan=youtubeRecordingFiles[item.key];
+        const linked=!!item.url;
+        return h("div",{key:item.key,style:{background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,padding:"10px 11px"}},
+          h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:plan?.fileName?6:0}},
+            h("div",{style:{fontSize:12,fontWeight:900,color:"#102A43"}},item.label),
+            h("div",{style:{fontSize:10,fontWeight:800,color:linked?"#15803D":"#64748B"}},linked?"リンク済み":"未リンク")),
+          plan?.fileName&&h("div",{style:{fontFamily:"monospace",fontSize:10,color:"#334155",wordBreak:"break-all",lineHeight:1.45,marginBottom:8}},plan.fileName),
+          h("button",{onClick:()=>prepareYoutubeRecording(item.key),disabled:!!youtubeRecordingBusy||linked,style:{...css.bS,width:"100%",padding:"8px 10px",fontSize:12,opacity:youtubeRecordingBusy||linked?0.6:1,cursor:youtubeRecordingBusy||linked?"default":"pointer"}},
+            youtubeRecordingBusy===item.key?"保存中...":linked?"YouTubeにリンク済み":plan?.fileName?"ファイル名をコピー":"撮影名を作成・コピー")
+        );
+      })
+    ),
+    h("button",{onClick:syncYoutubeRecordingFiles,disabled:youtubeRecordingSyncing||loading,style:{...css.bS,width:"100%",padding:"12px",opacity:youtubeRecordingSyncing||loading?0.65:1,cursor:youtubeRecordingSyncing||loading?"wait":"pointer"}},
+      youtubeRecordingSyncing?"YouTubeを確認中...":"YouTubeのアップロードを確認")
   );
   const matchStatusBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
     h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"MATCH STATUS / TIMER"),
@@ -3059,15 +3093,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
                   style:{flex:1,padding:"9px",background:"#fff",color:"#B91C1C",border:"1px solid #B91C1C",borderRadius:6,fontSize:13,fontWeight:800,cursor:"pointer"}},"＋ × 失敗"))),
           h("div",{style:{marginTop:14,paddingTop:14,borderTop:"1px solid #E2E8F0"}},
             h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:800,color:"#102A43",letterSpacing:1.1,marginBottom:7}},"PK VIDEO"),
-            isAdmin
-              ? h(Fragment,{},
-                  h("input",{type:"url",value:ytUrls.pk,onChange:e=>setYtUrls(prev=>({...prev,pk:e.target.value})),
-                    placeholder:"PK戦の YouTube URL を貼り付け",style:{...css.inp,width:"100%",marginBottom:6}}),
-                  h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.5}},"入力後は自動保存され、試合詳細上部の「PK」ボタンから開けます")
-                )
-              : youtubePkUrl
-                ? h("a",{href:youtubePkUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",background:"#B91C1C",border:"1px solid #B91C1C",borderRadius:4,padding:"7px 11px",color:"#fff",fontSize:12,fontWeight:800,textDecoration:"none"}},"PK戦動画を開く")
-                : h("div",{style:{fontSize:12,color:"#94A3B8"}},"PK戦動画は未登録です")
+            youtubePkUrl
+              ? h("a",{href:youtubePkUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",background:"#B91C1C",border:"1px solid #B91C1C",borderRadius:4,padding:"7px 11px",color:"#fff",fontSize:12,fontWeight:800,textDecoration:"none"}},"PK戦動画を開く")
+              : h("div",{style:{fontSize:12,color:"#94A3B8",lineHeight:1.5}},"上の「VIDEO RECORDING」で撮影名を作成し、同じファイル名でYouTubeへアップすると自動リンクされます")
           ),
         ),
       ),
