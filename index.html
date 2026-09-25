@@ -9578,7 +9578,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
           familyListView.length ? familyListView.join("、") : "未登録"),
         h("div",{style:{fontSize:12,color:"#888",marginBottom:8}},"権限"),
         h("div",{style:{fontSize:15,fontWeight:700,color:"#1a1a2e",marginBottom:12}},roleLabel(user.role)),
-        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        ["admin","super_admin"].includes(String(user?.role||"").trim()) && h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
           h("div",{style:{background:"#F8FAFC",borderRadius:10,padding:"10px 12px"}},
             h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:2}},"アクセス回数"),
             h("div",{style:{fontSize:15,fontWeight:800,color:"#1a1a2e"}},String(accessCount))),
