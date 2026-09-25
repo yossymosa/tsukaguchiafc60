@@ -1380,7 +1380,7 @@ function dispatch(req) {
       const blob = Utilities.newBlob(bytes, mimeType, ["member", memberName, stamp, safeName].filter(Boolean).join("_"));
       const file = folder.createFile(blob);
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      const photoUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
+      const photoUrl = "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w800";
       sh.getRange(targetRow, photoUrlCol).setValue(photoUrl);
       return { memberId: memberId, photoUrl: photoUrl, fileId: file.getId() };
     }

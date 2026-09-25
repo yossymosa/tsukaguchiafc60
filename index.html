@@ -673,16 +673,95 @@ function normalizeMember(member) {
   const grade = resolveGrade(member);
   return {...member, grade, gradeDisplay: formatGenerationGrade(grade, member?.generation)};
 }
-function MemberFace({member,size=32,alt=""}) {
+function getMemberPhotoDisplayUrl(member) {
   const photoUrl = String(member?.photoUrl || "").trim();
+  if (!photoUrl) return "";
+  const idMatch = photoUrl.match(/[?&]id=([^&#]+)/) || photoUrl.match(/\/d\/([^/?#]+)/);
+  const fileId = idMatch && idMatch[1] ? decodeURIComponent(idMatch[1]) : "";
+  return fileId ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w800` : photoUrl;
+}
+function MemberFace({member,size=32,alt=""}) {
+  const photoUrl = getMemberPhotoDisplayUrl(member);
   if (!photoUrl) return null;
   return h("img",{
     src:photoUrl,
     alt:alt || member?.name || "",
-    referrerPolicy:"no-referrer",
     onError:e=>{e.currentTarget.style.display="none";},
     style:{width:size,height:size,borderRadius:"50%",objectFit:"cover",objectPosition:"center",display:"block",flexShrink:0,background:"#E2E8F0"}
   });
+}
+function MemberPhotoCropModal({source,fileName,onClose,onSave}) {
+  const VIEW_SIZE = 260;
+  const OUTPUT_SIZE = 480;
+  const [imageInfo,setImageInfo] = useState(null);
+  const [zoom,setZoom] = useState(1);
+  const [offset,setOffset] = useState({x:0,y:0});
+  const [saving,setSaving] = useState(false);
+  const dragRef = useRef(null);
+  const clampOffset = (next, nextZoom=zoom) => {
+    if (!imageInfo) return next;
+    const baseScale = Math.max(VIEW_SIZE / imageInfo.width, VIEW_SIZE / imageInfo.height);
+    const maxX = Math.max(0, (imageInfo.width * baseScale * nextZoom - VIEW_SIZE) / 2);
+    const maxY = Math.max(0, (imageInfo.height * baseScale * nextZoom - VIEW_SIZE) / 2);
+    return {
+      x: Math.max(-maxX, Math.min(maxX, Number(next.x || 0))),
+      y: Math.max(-maxY, Math.min(maxY, Number(next.y || 0)))
+    };
+  };
+  useEffect(()=>{
+    setOffset(prev=>clampOffset(prev,zoom));
+  },[zoom,imageInfo?.width,imageInfo?.height]);
+  const startDrag = e => {
+    if (!imageInfo || saving) return;
+    dragRef.current = {x:e.clientX,y:e.clientY,offset};
+    if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const moveDrag = e => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    setOffset(clampOffset({x:drag.offset.x + e.clientX - drag.x,y:drag.offset.y + e.clientY - drag.y}));
+  };
+  const endDrag = () => { dragRef.current = null; };
+  const saveCrop = async() => {
+    if (!imageInfo || saving) return;
+    setSaving(true);
+    try {
+      const img = await new Promise((resolve,reject)=>{
+        const target = new Image();
+        target.onload = () => resolve(target);
+        target.onerror = () => reject(new Error("画像を読み込めませんでした"));
+        target.src = source;
+      });
+      const baseScale = Math.max(VIEW_SIZE / img.naturalWidth, VIEW_SIZE / img.naturalHeight);
+      const sourceWidth = VIEW_SIZE / (baseScale * zoom);
+      const sourceHeight = VIEW_SIZE / (baseScale * zoom);
+      const centerX = img.naturalWidth / 2 - offset.x / (baseScale * zoom);
+      const centerY = img.naturalHeight / 2 - offset.y / (baseScale * zoom);
+      const sx = Math.max(0, Math.min(img.naturalWidth - sourceWidth, centerX - sourceWidth / 2));
+      const sy = Math.max(0, Math.min(img.naturalHeight - sourceHeight, centerY - sourceHeight / 2));
+      const canvas = document.createElement("canvas");
+      canvas.width = OUTPUT_SIZE;
+      canvas.height = OUTPUT_SIZE;
+      canvas.getContext("2d").drawImage(img,sx,sy,sourceWidth,sourceHeight,0,0,OUTPUT_SIZE,OUTPUT_SIZE);
+      const croppedName = (String(fileName || "member-photo").replace(/\.[^.]+$/,"")) + ".jpg";
+      await onSave({dataUrl:canvas.toDataURL("image/jpeg",0.9),fileName:croppedName});
+    } catch(e) {
+      alert("切り取り保存エラー: " + (e?.message || e));
+    }
+    setSaving(false);
+  };
+  return h(Modal,{title:"顔写真を切り取る",onClose:saving?()=>{}:onClose},
+    h("div",{style:{fontSize:12,color:"#64748B",lineHeight:1.6,marginBottom:14}},"写真を動かして、丸枠に顔を合わせてください。下のバーで拡大できます。"),
+    h("div",{onPointerDown:startDrag,onPointerMove:moveDrag,onPointerUp:endDrag,onPointerCancel:endDrag,
+      style:{width:VIEW_SIZE,height:VIEW_SIZE,margin:"0 auto 16px",borderRadius:"50%",overflow:"hidden",position:"relative",background:"#E2E8F0",cursor:imageInfo?"grab":"wait",touchAction:"none",boxShadow:"0 0 0 4px #102A43"}},
+      h("img",{src:source,alt:"選択した写真",draggable:false,onLoad:e=>setImageInfo({width:e.currentTarget.naturalWidth,height:e.currentTarget.naturalHeight}),
+        style:{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center",transform:`translate(${offset.x}px,${offset.y}px) scale(${zoom})`,transformOrigin:"center center",pointerEvents:"none",userSelect:"none"}})),
+    h("label",{style:{display:"block",fontSize:12,fontWeight:800,color:"#334155",marginBottom:8}},"拡大"),
+    h("input",{type:"range",min:"1",max:"2.5",step:"0.05",value:zoom,onChange:e=>setZoom(Number(e.target.value)||1),style:{width:"100%",accentColor:"#102A43",marginBottom:18}}),
+    h("div",{style:{display:"flex",gap:10}},
+      h("button",{onClick:onClose,disabled:saving,style:css.bG},"キャンセル"),
+      h("button",{onClick:saveCrop,disabled:saving||!imageInfo,style:{...css.bS,background:"#102A43",opacity:saving||!imageInfo?0.6:1}},saving?"保存中...":"この写真にする"))
+  );
 }
 function hasPkDecisionData(r){
   try{
@@ -9270,6 +9349,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
   const [familyText,setFamilyText] = useState(familyListView.join("\n"));
   const [saving,setSaving] = useState(false);
   const [photoUploading,setPhotoUploading] = useState(false);
+  const [photoCrop,setPhotoCrop] = useState(null);
   const [tabVisibility,setTabVisibility] = useState(()=>normalizeUiTabVisibility(uiTabVisibility));
   const [tabVisibilitySaving,setTabVisibilitySaving] = useState(false);
   const [userDrafts,setUserDrafts] = useState({});
@@ -9361,21 +9441,30 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
       alert("JPG、PNG、WebP形式の写真を選択してください");
       return;
     }
-    if (Number(file.size || 0) > 8 * 1024 * 1024) {
-      alert("写真は8MB以下にしてください");
+    if (Number(file.size || 0) > 15 * 1024 * 1024) {
+      alert("写真は15MB以下にしてください");
       return;
     }
-    setPhotoUploading(true);
     try {
       const dataUrl = await readFileAsDataUrl(file);
-      const base64 = String(dataUrl || "").split(",")[1] || "";
-      if (!base64) throw new Error("写真の読み込みに失敗しました");
-      await onUploadMemberPhoto({memberId:targetMember.id,fileName:file.name || "member-photo",mimeType:file.type,base64});
-      alert("顔写真を更新しました");
+      if (!dataUrl) throw new Error("写真の読み込みに失敗しました");
+      setPhotoCrop({source:dataUrl,fileName:file.name || "member-photo",memberId:targetMember.id});
     } catch(e) {
-      alert("顔写真の更新エラー: " + e.message);
+      alert("写真の読み込みエラー: " + e.message);
     }
-    setPhotoUploading(false);
+  };
+  const saveCroppedPhoto = async({dataUrl,fileName}) => {
+    if (!photoCrop?.memberId) throw new Error("選手を選択してください");
+    const base64 = String(dataUrl || "").split(",")[1] || "";
+    if (!base64) throw new Error("写真の切り取りに失敗しました");
+    setPhotoUploading(true);
+    try {
+      await onUploadMemberPhoto({memberId:photoCrop.memberId,fileName:fileName || "member-photo.jpg",mimeType:"image/jpeg",base64});
+      setPhotoCrop(null);
+      alert("顔写真を更新しました");
+    } finally {
+      setPhotoUploading(false);
+    }
   };
   const updateUserDraftField = (targetUserId, field, value) => {
     const uid = String(targetUserId || "").trim();
@@ -9443,6 +9532,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
   };
 
   return h(Fragment,{},
+    photoCrop&&h(MemberPhotoCropModal,{source:photoCrop.source,fileName:photoCrop.fileName,onClose:()=>setPhotoCrop(null),onSave:saveCroppedPhoto}),
     h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"👤 アカウント"),
       editing ? h(Fragment,{},
@@ -9500,8 +9590,8 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
         h("div",{style:{minWidth:0,flex:1}},
           h("div",{style:{fontSize:13,fontWeight:800,color:"#1A1A2E"}},"顔写真"),
           h("div",{style:{fontSize:11,color:"#64748B",marginTop:3,lineHeight:1.5}},"ゴールは大きく、アシストは小さく丸く表示されます")),
-        h("label",{style:{display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#102A43",color:"#fff",borderRadius:7,padding:"9px 11px",fontSize:12,fontWeight:800,cursor:photoUploading||!child?"wait":"pointer",opacity:photoUploading||!child?0.55:1}},
-          h("input",{type:"file",accept:"image/jpeg,image/png,image/webp",onChange:uploadPhoto,disabled:photoUploading||!child,style:{display:"none"}}),
+        h("label",{style:{display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#102A43",color:"#fff",borderRadius:7,padding:"9px 11px",fontSize:12,fontWeight:800,cursor:photoUploading||!child||photoCrop?"wait":"pointer",opacity:photoUploading||!child||photoCrop?0.55:1}},
+          h("input",{type:"file",accept:"image/jpeg,image/png,image/webp",onChange:uploadPhoto,disabled:photoUploading||!child||!!photoCrop,style:{display:"none"}}),
           photoUploading?"更新中...":"写真を選ぶ"))),
     ["admin","super_admin"].includes(String(user?.role||"").trim()) && h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:10}},"🧩 タブ表示設定"),
