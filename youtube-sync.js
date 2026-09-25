@@ -139,13 +139,16 @@ function syncYouTubePlaylist() {
 
   recentVideos.forEach(video => {
     const fileKey = normalizeYoutubeRecordingFileName_(video.fileName);
-    const plan = planned[fileKey];
-    if (!plan || linkedKeys[fileKey]) return;
+    const exactPlanKey = youtubeRecordingPlanKey_(fileKey, video.fileSize);
+    const fallbackPlanKey = youtubeRecordingPlanKey_(fileKey, 0);
+    const planKey = planned[exactPlanKey] ? exactPlanKey : (planned[fallbackPlanKey] ? fallbackPlanKey : "");
+    const plan = planKey ? planned[planKey] : null;
+    if (!plan || linkedKeys[planKey]) return;
 
     const targetCol = plan.key === "first" ? col.yt1st : plan.key === "second" ? col.yt2nd : plan.key === "pk" ? col.ytPk : col.yt;
     const currentUrl = String(resultSh.getRange(plan.row, targetCol).getValue() || "").trim();
     if (currentUrl) {
-      linkedKeys[fileKey] = true;
+      linkedKeys[planKey] = true;
       return;
     }
 
@@ -154,7 +157,7 @@ function syncYouTubePlaylist() {
     // YouTube側のタイトル・概要欄が更新できた動画だけをアプリへリンクする。
     updateYoutubeMetadataFromApp_({videos: [metadata]});
     resultSh.getRange(plan.row, targetCol).setValue(video.url);
-    linkedKeys[fileKey] = true;
+    linkedKeys[planKey] = true;
     linkedCount++;
     updatesByResult[plan.resultId] = {
       ...(updatesByResult[plan.resultId] || {id: plan.resultId}),
@@ -179,10 +182,13 @@ function loadYoutubeRecordingPlans_(resultSh, headers) {
     let recordingFiles = {};
     try { recordingFiles = JSON.parse(String(row[recordingIndex] || "{}")); } catch (e) { recordingFiles = {}; }
     ["full", "first", "second", "pk"].forEach(key => {
-      const fileName = String(recordingFiles && recordingFiles[key] && recordingFiles[key].fileName || "").trim();
+      const entry = recordingFiles && recordingFiles[key] || {};
+      const fileName = String(entry.fileName || "").trim();
       const fileKey = normalizeYoutubeRecordingFileName_(fileName);
-      if (!fileKey || !/^AFC_/.test(fileKey) || plans[fileKey]) return;
-      plans[fileKey] = {resultId: resultId, row: index + 2, key: key, fileName: fileName};
+      const fileSize = Math.max(0, Number(entry.fileSize || 0) || 0);
+      const planKey = youtubeRecordingPlanKey_(fileKey, fileSize);
+      if (!fileKey || plans[planKey]) return;
+      plans[planKey] = {resultId: resultId, row: index + 2, key: key, fileName: fileName, fileSize: fileSize};
     });
   });
   return plans;
@@ -195,6 +201,12 @@ function normalizeYoutubeRecordingFileName_(value) {
     .pop()
     .replace(/\.[^.]+$/, "")
     .toUpperCase();
+}
+
+function youtubeRecordingPlanKey_(fileKey, fileSize) {
+  const name = String(fileKey || "").trim();
+  const size = Math.max(0, Number(fileSize || 0) || 0);
+  return name + "|" + (size || "legacy");
 }
 
 function fetchRecentOwnedYoutubeVideosWithFiles_() {
@@ -215,6 +227,7 @@ function fetchRecentOwnedYoutubeVideosWithFiles_() {
     id: String(item.id || ""),
     url: "https://www.youtube.com/watch?v=" + String(item.id || ""),
     fileName: String(item.fileDetails && item.fileDetails.fileName || ""),
+    fileSize: Math.max(0, Number(item.fileDetails && item.fileDetails.fileSize || 0) || 0),
     title: String(item.snippet && item.snippet.title || ""),
   })).filter(item => item.id && item.fileName);
 }

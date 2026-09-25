@@ -227,7 +227,12 @@ function parseYoutubeRecordingFiles_(value) {
     const entry = parsed[key];
     const fileName = String(entry && entry.fileName || "").trim();
     if (!fileName) return;
-    result[key] = {fileName: fileName, preparedAt: String(entry.preparedAt || "")};
+    result[key] = {
+      fileName: fileName,
+      preparedAt: String(entry.preparedAt || ""),
+      capturedAt: String(entry.capturedAt || ""),
+      fileSize: Math.max(0, Number(entry.fileSize || 0) || 0),
+    };
   });
   return result;
 }
@@ -1582,12 +1587,14 @@ function dispatch(req) {
         if (!raw || typeof raw !== "object") return;
         const fileName = String(raw.fileName || "").trim();
         if (!fileName) return;
-        if (!/^AFC_[A-Z0-9_\-]+(?:\.[A-Z0-9]+)?$/i.test(fileName)) {
+        if (fileName.length > 180 || /[\\/\u0000-\u001F]/.test(fileName)) {
           throw new Error("撮影ファイル名の形式が正しくありません");
         }
         recordingFiles[key] = {
           fileName: fileName,
           preparedAt: String(raw.preparedAt || nowIso()),
+          capturedAt: String(raw.capturedAt || ""),
+          fileSize: Math.max(0, Number(raw.fileSize || 0) || 0),
         };
       });
       if (!Object.keys(recordingFiles).length) throw new Error("撮影ファイル名がありません");
