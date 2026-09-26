@@ -2468,6 +2468,19 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setModal(null);
   };
   const addTheir=()=>{if(ntg.minute==="")return alert("時間を入力してください");setTheirG(p=>[...p,{...ntg,minute:+ntg.minute,second:+(ntg.second||0)}]);setNtg(p=>({...p,minute:"",second:"00"}));setModal(null);};
+  const openGoalEditor=(event,g,isUs)=>{
+    event?.preventDefault();
+    event?.stopPropagation();
+    const sourceIdx=Number(g?.sourceIdx);
+    if(!Number.isInteger(sourceIdx)){
+      alert("このゴール記録を開けません。画面を更新して、もう一度お試しください。");
+      return;
+    }
+    const baseG={...normalizeGoalItem(g),minute:String(g.minute),second:String(Math.max(0, Number(g.second||0)||0)).padStart(2,"0")};
+    setEditGoal({type:isUs?"our":"their",idx:sourceIdx});
+    setEditNg(baseG);
+    setModal("editGoal");
+  };
   const save=async()=>{
     setLoading(true);
     try{
@@ -2728,16 +2741,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           )
         ),
         isAdmin&&h("div",{style:{display:"flex",flexDirection:"column",gap:3,alignItems:"stretch"}},
-          h("button",{onClick:()=>{
-              const baseG={...normalizeGoalItem(g),minute:String(g.minute),second:String(Math.max(0, Number(g.second||0)||0)).padStart(2,"0")};
-              setEditGoal({type:isUs?"our":"their",idx:g.sourceIdx});
-              setEditNg(baseG);
-              setModal("editGoal");
-            },style:{background:"none",border:"1px solid #ddd",borderRadius:6,color:"#aaa",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"編集"),
-          h("button",{onClick:()=>{
+          h("button",{type:"button",onClick:event=>openGoalEditor(event,g,isUs),"aria-label":minuteLabel+"のゴールを編集",style:{minHeight:34,background:"#fff",border:"1px solid #B8C6D5",borderRadius:4,color:"#334155",fontSize:11,fontWeight:800,padding:"5px 6px",cursor:"pointer",touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}},"編集"),
+          h("button",{type:"button",onClick:()=>{
               if(isUs)setGoals(p=>p.filter((_,j)=>j!==g.sourceIdx));
               else setTheirG(p=>p.filter((_,j)=>j!==g.sourceIdx));
-            },style:{background:"#fff",border:"1px solid #E8C7CB",borderRadius:6,color:"#B91C1C",fontSize:10,padding:"2px 6px",cursor:"pointer"}},"削除")
+            },style:{minHeight:34,background:"#fff",border:"1px solid #E8C7CB",borderRadius:4,color:"#B91C1C",fontSize:11,fontWeight:800,padding:"5px 6px",cursor:"pointer",touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}},"削除")
         )
       );
     })
