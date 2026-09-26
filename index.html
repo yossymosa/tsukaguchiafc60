@@ -3145,7 +3145,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       )
     : null;
 
-  return h("div",{className:"page detail-page",ref:goalPageRef},
+  // 入力モーダルは試合ページの子要素にせず、画面直下の兄弟として描画する。
+  // iOS の fixed 要素が sticky ヘッダーやスクロール領域の下に潜るのを防ぐ。
+  return h(Fragment,null,
+    h("div",{className:"page detail-page",ref:goalPageRef},
     loading&&h(Loader,{msg:"保存中..."}),
     headerBlock,
     h("div",{style:{padding:"8px 16px 0"}},
@@ -3231,7 +3234,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         },
         style:{width:"100%",padding:"10px 12px",fontSize:12,fontWeight:800,marginBottom:10,borderRadius:6,border:"1px solid #B8C6D5",background:"#fff",color:"#102A43",cursor:"pointer"}
        },"↑ 試合上部へ戻る"),
-      formationBlock,
+      formationBlock)),
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"得点を追加",onClose:()=>setModal(null)},
@@ -3278,7 +3281,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     substitutionModal,
 
     // ゴール編集モーダル
-    editGoalModal)));
+    editGoalModal));
 }
 
 // ── ホームタブ ─────────────────────────────────────────────────
