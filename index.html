@@ -66,6 +66,13 @@ button:active{transform:translateY(1px);}
 .schedule-detail-panel button{border-radius:6px !important;box-shadow:none !important;}
 .schedule-detail-panel summary{list-style:none;}
 .schedule-detail-panel summary::-webkit-details-marker{display:none;}
+.detail-page{background:var(--ground);}
+.detail-page .match-section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:none;}
+.detail-page .match-section-heading{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:14px;font-weight:800;letter-spacing:1.2px;color:var(--navy);}
+.detail-page details>summary{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-weight:800;letter-spacing:1.1px;color:var(--navy);}
+.detail-page details>summary span{font-family:'Noto Sans JP',sans-serif;letter-spacing:0;}
+.detail-page .match-half-tabs{display:flex;gap:6px;padding:4px;background:#F1F5F9;border:1px solid var(--line);border-radius:6px;}
+.detail-page .match-half-tabs button{border-radius:3px !important;}
 .login-shell{min-height:100vh;background:var(--ink);display:flex;align-items:center;justify-content:center;padding:24px;}
 .login-card{background:#fff;border:1px solid #D8E0E8;border-top:4px solid #2F80ED;padding:30px;width:100%;max-width:360px;box-shadow:0 18px 48px rgba(0,0,0,.26);}
 .login-brand{display:flex;align-items:center;gap:12px;margin-bottom:28px;}
@@ -2397,11 +2404,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     });
   };
   const openAddOurGoal = () => {
-    applyClockToGoalDraft("our", -20);
     setModal("our");
   };
   const openAddTheirGoal = () => {
-    applyClockToGoalDraft("their", -20);
     setModal("their");
   };
   const openAddSub = () => {
@@ -2550,7 +2555,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     return true;
   });
   const youtubeKeyLabel = key => key==="first" ? "1st" : key==="second" ? "2nd" : key==="pk" ? "PK" : "FULL";
-  const halfLabelMap = {"1st":"前半","2nd":"後半","3rd":"3rd"};
+  const halfLabelMap = {"1st":"前半","2nd":"後半","3rd":"3本目"};
+  const halfTabLabel = half => halfLabelMap[normalizeHalfLabel(half)] || String(half || "");
   const scoreboardCols = ["total", ...visibleHalfOptions];
   const scoreboardColLabel = col => col==="total" ? "合計" : (halfLabelMap[col] || col);
   const scoreboardValue = (team, col) => {
@@ -2609,8 +2615,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     )
   );
 
-  const scoreboardBlock = h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
-    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"SCOREBOARD"),
+  const scoreboardBlock = h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("div",{className:"match-section-heading",style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"SCOREBOARD"),
     h("div",{style:{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:10,marginBottom:6}},
       h("div",{style:{textAlign:"left"}},
         h("div",{style:{fontSize:14,fontWeight:900,color:"#1D4E89",lineHeight:1.2}},"塚口AFC")
@@ -2665,8 +2671,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       : h("div",{style:{borderTop:"1px solid #D8E0E8",paddingTop:7,fontSize:11,color:"#64748B"}},"キッカー詳細は未登録です")
   );
 
-  const matchStatsBlock = h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
-    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"STATS"),
+  const matchStatsBlock = h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("div",{className:"match-section-heading",style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"STATS"),
     h("div",{style:{display:"grid",gridTemplateColumns:"76px 1fr 92px 1fr 76px",alignItems:"center",gap:6,marginBottom:6}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#1D4ED8",textAlign:"center"}},"塚口AFC"),
       h("div",{}),
@@ -2699,17 +2705,17 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     })
   );
 
-  const goalsTimelineBlock = h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
+  const goalsTimelineBlock = h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
-      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2}},"GOALS TIMELINE"),
+      h("div",{className:"match-section-heading",style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2}},"GOALS TIMELINE"),
       h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}},
         h("div",{style:{display:"flex",gap:14,fontSize:11,fontWeight:700}},
           h("span",{style:{color:"#1D4ED8"}},"塚口"),
           h("span",{style:{color:"#64748B"}},match.opponent||"相手")
         ),
         isAdmin&&h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}},
-          h("button",{onClick:openAddOurGoal,style:{background:"#102A43",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},"得点を入力"),
-          h("button",{onClick:openAddTheirGoal,style:{background:"#475569",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},"失点を入力")
+          h("button",{type:"button",onClick:openAddOurGoal,style:{background:"#102A43",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:"pointer",touchAction:"manipulation"}},"得点を入力"),
+          h("button",{type:"button",onClick:openAddTheirGoal,style:{background:"#475569",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:"pointer",touchAction:"manipulation"}},"失点を入力")
         )
       )
     ),
@@ -2896,8 +2902,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     ))
   );
 
-  const matchInputBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
-    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:12}},"INPUT"),
+  const matchInputBlock = isAdmin&&h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("div",{className:"match-section-heading",style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:12}},"INPUT"),
     h("div",{style:{background:"#F8FAFC",borderRadius:6,padding:12,border:"1px solid #D8E0E8"}},
       h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:8}},"シュート入力"),
       h("div",{style:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}},
@@ -2946,8 +2952,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     ...(visibleHalfOptions.includes("2nd")?[{key:"second",label:"2nd",suffix:"2ND",url:youtubeSecondUrl}]:[]),
     {key:"pk",label:"PK戦",url:youtubePkUrl}
   ];
-  const youtubeInputBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
-    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:6}},"VIDEO CAPTURE"),
+  const youtubeInputBlock = isAdmin&&h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("div",{className:"match-section-heading",style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:6}},"VIDEO CAPTURE"),
     h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"「撮影」を押すとカメラを開きます。撮影完了時に動画の実ファイル名と容量を記録するため、名前の変更は不要です。"),
     h("input",{ref:youtubeCaptureInputRef,type:"file",accept:"video/*",capture:"environment",onChange:saveYoutubeCapturedVideo,style:{display:"none"}}),
     h("input",{ref:youtubeVideoPickerRef,type:"file",accept:"video/*",onChange:saveYoutubeCapturedVideo,style:{display:"none"}}),
@@ -2980,8 +2986,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     h("button",{onClick:syncYoutubeRecordingFiles,disabled:youtubeRecordingSyncing||loading,style:{...css.bS,width:"100%",padding:"12px",opacity:youtubeRecordingSyncing||loading?0.65:1,cursor:youtubeRecordingSyncing||loading?"wait":"pointer"}},
       youtubeRecordingSyncing?"YouTubeを確認中...":"YouTubeのアップロードを確認")
   );
-  const matchStatusBlock = isAdmin&&h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
-    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"MATCH STATUS / TIMER"),
+  const matchStatusBlock = isAdmin&&h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("div",{className:"match-section-heading",style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"MATCH STATUS / TIMER"),
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8,padding:"8px 10px",borderRadius:6,background:"#F8FAFC",border:"1px solid #D8E0E8"}},
       h("div",{},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:2}},"試合タイマー"),
@@ -3091,16 +3097,16 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const editGoalModal = (modal==="editGoal"&&editNg&&editGoal)
     ? h(Modal,{title:"ゴールを編集",onClose:()=>setModal(null)},
         editGoal.type==="our"&&h("div",{style:{marginBottom:14}},
-          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"1st / 2nd / 3rd"),
-          h("div",{style:{display:"flex",gap:8}},visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setEditNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`1px solid ${editNg.half===hf?"#102A43":"#D8E0E8"}`,borderRadius:6,background:editNg.half===hf?"#102A43":"#fff",color:editNg.half===hf?"#fff":"#64748B",fontSize:15,fontWeight:800,cursor:"pointer"}},hf)))),
+          h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:8}},"ハーフ"),
+          h("div",{className:"match-half-tabs"},visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setEditNg(p=>({...p,half:hf})),style:{flex:1,padding:10,border:`1px solid ${editNg.half===hf?"#102A43":"transparent"}`,borderRadius:6,background:editNg.half===hf?"#102A43":"transparent",color:editNg.half===hf?"#fff":"#64748B",fontSize:13,fontWeight:800,cursor:"pointer"}},halfTabLabel(hf))))),
         editGoal.type==="their"&&h("div",{style:{marginBottom:14}},
-          h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"1st / 2nd / 3rd"),
-          h("div",{style:{display:"flex",gap:8}},visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setEditNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`1px solid ${editNg.half===hf?"#475569":"#D8E0E8"}`,borderRadius:6,background:editNg.half===hf?"#475569":"#fff",color:editNg.half===hf?"#fff":"#64748B",fontSize:15,fontWeight:800,cursor:"pointer"}},hf)))),
+          h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:8}},"ハーフ"),
+          h("div",{className:"match-half-tabs"},visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setEditNg(p=>({...p,half:hf})),style:{flex:1,padding:10,border:`1px solid ${editNg.half===hf?"#475569":"transparent"}`,borderRadius:6,background:editNg.half===hf?"#475569":"transparent",color:editNg.half===hf?"#fff":"#64748B",fontSize:13,fontWeight:800,cursor:"pointer"}},halfTabLabel(hf))))),
         h("div",{style:{display:"flex",gap:10,marginBottom:14}},
           h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),
-            h("input",{value:editNg.minute,onChange:e=>setEditNg(p=>({...p,minute:e.target.value})),type:"number",min:"0",max:"90",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
+            h("input",{value:editNg.minute,onInput:e=>setEditNg(p=>({...p,minute:e.target.value})),type:"number",min:"0",max:"90",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
           h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒"),
-            h("input",{value:editNg.second,onChange:e=>setEditNg(p=>({...p,second:e.target.value})),onBlur:e=>setEditNg(p=>({...p,second:(String(e.target.value||"").trim()===""?"00":String(Math.max(0,Math.min(59,Number(e.target.value)||0))).padStart(2,"0"))})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
+            h("input",{value:editNg.second,onInput:e=>setEditNg(p=>({...p,second:e.target.value})),onBlur:e=>setEditNg(p=>({...p,second:(String(e.target.value||"").trim()===""?"00":String(Math.max(0,Math.min(59,Number(e.target.value)||0))).padStart(2,"0"))})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
         editGoal.type==="our"&&h("div",{style:{marginBottom:14}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"得点者"),
           h("select",{value:isOpponentOwnGoalDraft(editNg)?OPPONENT_OWN_GOAL_ID:(editNg.scorerId||""),onChange:e=>setEditNg(p=>chooseOurScorer(p,e.target.value)),style:css.inp},
@@ -3229,15 +3235,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
 
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"得点を追加",onClose:()=>setModal(null)},
-      h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"1st / 2nd / 3rd"),
-        h("div",{style:{display:"flex",gap:8}},visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setNg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`1px solid ${ng.half===hf?"#102A43":"#D8E0E8"}`,borderRadius:6,background:ng.half===hf?"#102A43":"#fff",color:ng.half===hf?"#fff":"#64748B",fontSize:15,fontWeight:800,cursor:"pointer"}},hf)))),
+      h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:8}},"ハーフ"),
+        h("div",{className:"match-half-tabs"},visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setNg(p=>({...p,half:hf})),style:{flex:1,padding:10,border:`1px solid ${ng.half===hf?"#102A43":"transparent"}`,borderRadius:6,background:ng.half===hf?"#102A43":"transparent",color:ng.half===hf?"#fff":"#64748B",fontSize:13,fontWeight:800,cursor:"pointer"}},halfTabLabel(hf))))),
       h("div",{style:{marginBottom:12,display:"flex",justifyContent:"flex-end"}},
         h("button",{onClick:()=>applyClockToGoalDraft("our",-20),style:{border:"1px solid #B8C6D5",background:"#F8FAFC",color:"#1D4E89",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},
           "現在時刻-20秒を反映")
       ),
       h("div",{style:{display:"flex",gap:10,marginBottom:14}},
-        h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),h("input",{value:ng.minute,onChange:e=>setNg(p=>({...p,minute:e.target.value})),type:"number",min:"0",max:"90",placeholder:"12",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
-        h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒"),h("input",{value:ng.second,onChange:e=>setNg(p=>({...p,second:e.target.value})),onBlur:e=>setNg(p=>({...p,second:(String(e.target.value||"").trim()===""?"00":String(Math.max(0,Math.min(59,Number(e.target.value)||0))).padStart(2,"0"))})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
+        h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),h("input",{value:ng.minute,onInput:e=>setNg(p=>({...p,minute:e.target.value})),type:"number",min:"0",max:"90",placeholder:"12",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
+        h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒"),h("input",{value:ng.second,onInput:e=>setNg(p=>({...p,second:e.target.value})),onBlur:e=>setNg(p=>({...p,second:(String(e.target.value||"").trim()===""?"00":String(Math.max(0,Math.min(59,Number(e.target.value)||0))).padStart(2,"0"))})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
       h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"得点者"),
         h("select",{value:isOpponentOwnGoalDraft(ng)?OPPONENT_OWN_GOAL_ID:ng.scorerId,onChange:e=>setNg(p=>chooseOurScorer(p,e.target.value)),style:css.inp},
           h("option",{value:""},"選手を選んでください"),
@@ -3255,16 +3261,16 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
 
     // 失点モーダル
     modal==="their"&&h(Modal,{title:"失点を追加",onClose:()=>setModal(null)},
-      h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"1st / 2nd / 3rd"),
-        h("div",{style:{display:"flex",gap:8}},visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setNtg(p=>({...p,half:hf})),style:{flex:1,padding:12,border:`1px solid ${ntg.half===hf?"#475569":"#D8E0E8"}`,borderRadius:6,background:ntg.half===hf?"#475569":"#fff",color:ntg.half===hf?"#fff":"#64748B",fontSize:15,fontWeight:800,cursor:"pointer"}},hf)))),
+      h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:8}},"ハーフ"),
+        h("div",{className:"match-half-tabs"},visibleHalfOptions.map(hf=>h("button",{key:hf,onClick:()=>setNtg(p=>({...p,half:hf})),style:{flex:1,padding:10,border:`1px solid ${ntg.half===hf?"#475569":"transparent"}`,borderRadius:6,background:ntg.half===hf?"#475569":"transparent",color:ntg.half===hf?"#fff":"#64748B",fontSize:13,fontWeight:800,cursor:"pointer"}},halfTabLabel(hf))))),
       h("div",{style:{marginBottom:12,display:"flex",justifyContent:"flex-end"}},
         h("button",{onClick:()=>applyClockToGoalDraft("their",-20),style:{border:"1px solid #B8C6D5",background:"#F8FAFC",color:"#1D4E89",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},
           "現在時刻-20秒を反映")
       ),
       h("div",{style:{fontSize:11,color:"#64748B",margin:"-4px 0 10px",textAlign:"right"}},"※ 反映後に分・秒は手入力で変更できます"),
       h("div",{style:{display:"flex",gap:10,marginBottom:14}},
-        h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),h("input",{value:ntg.minute,onChange:e=>setNtg(p=>({...p,minute:e.target.value})),type:"number",placeholder:"8",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
-        h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒"),h("input",{value:ntg.second,onChange:e=>setNtg(p=>({...p,second:e.target.value})),onBlur:e=>setNtg(p=>({...p,second:(String(e.target.value||"").trim()===""?"00":String(Math.max(0,Math.min(59,Number(e.target.value)||0))).padStart(2,"0"))})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
+        h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"分"),h("input",{value:ntg.minute,onInput:e=>setNtg(p=>({...p,minute:e.target.value})),type:"number",placeholder:"8",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}})),
+        h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒"),h("input",{value:ntg.second,onInput:e=>setNtg(p=>({...p,second:e.target.value})),onBlur:e=>setNtg(p=>({...p,second:(String(e.target.value||"").trim()===""?"00":String(Math.max(0,Math.min(59,Number(e.target.value)||0))).padStart(2,"0"))})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
       h("div",{style:{marginBottom:20}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"種別"),
         h("div",{style:{display:"flex",gap:8}},[{v:"通常",c:"#475569"},{v:"オウンゴール",c:"#102A43"}].map(x=>h("button",{key:x.v,onClick:()=>setNtg(p=>({...p,goalType:x.v})),style:{flex:1,padding:10,border:`1px solid ${ntg.goalType===x.v?x.c:"#D8E0E8"}`,borderRadius:6,background:ntg.goalType===x.v?x.c:"#fff",color:ntg.goalType===x.v?"#fff":"#64748B",fontSize:12,fontWeight:800,cursor:"pointer"}},x.v)))),
       h("div",{style:{display:"flex",gap:10}},h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),h("button",{onClick:addTheir,style:{...css.bS,background:"#607D8B"}},"追加"))),
