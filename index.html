@@ -1987,12 +1987,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   }, [membersSorted, scheduleIdForAttend, attendMap]);
   const goalAssistSelectableMembers = useMemo(() => {
     if (!scheduleIdForAttend || attendMap === null) return membersSorted;
-    return membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
+    const attending = membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
+    // 出欠が未入力の試合でも、得点記録そのものは止めない。
+    return attending.length ? attending : membersSorted;
   }, [membersSorted, scheduleIdForAttend, attendMap]);
   const pkSelectableMembers = useMemo(() => {
     if (!scheduleIdForAttend) return membersSorted;
-    if (attendMap === null) return [];
-    return membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
+    if (attendMap === null) return membersSorted;
+    const attending = membersSorted.filter(m => String(attendMap[String(m.id || "").trim()] || "") === "○");
+    return attending.length ? attending : membersSorted;
   }, [membersSorted, scheduleIdForAttend, attendMap]);
   const memberOptionsByPosition = (list) => {
     const base = Array.isArray(list) ? list : [];
