@@ -223,6 +223,9 @@ function getTC(type) {
     "公式戦":{bg:"#1D4E89",lb:"公式戦"},
     "トレマ":{bg:"#2F80ED",lb:"トレマ"},
     "カップ戦":{bg:"#0F172A",lb:"カップ戦"},
+    five_accompany:{bg:"#7C3AED",lb:"5年帯同"},
+    "5年帯同":{bg:"#7C3AED",lb:"5年帯同"},
+    "５年帯同":{bg:"#7C3AED",lb:"5年帯同"},
     "event":{bg:"#0F766E",lb:"イベント"},
     "イベント":{bg:"#0F766E",lb:"イベント"},
   };
@@ -234,14 +237,27 @@ function normalizeType(type) {
   if (label === "カップ戦") return "cup";
   if (label === "トレマ") return "training";
   if (label === "練習") return "practice";
+  if (label === "5年帯同") return "five_accompany";
   if (label === "イベント") return "event";
   return String(type || "");
+}
+function isFiveGradeAccompanyType(type) {
+  const value = toHalfWidthDigits(String(type || "")).trim();
+  return value === "five_accompany" || value === "5年帯同" || value === "5年生帯同";
+}
+function isFiveGradeAccompanyResult(result, schedules=[]) {
+  if (!result) return false;
+  const linked = Array.isArray(schedules) && schedules.length
+    ? findLinkedScheduleForResult(result, schedules)
+    : null;
+  return isFiveGradeAccompanyType(linked?.type || result?.type);
 }
 const TC={
   practice:{bg:"#15803D",lb:"練習"},
   official:{bg:"#1D4E89",lb:"公式戦"},
   training:{bg:"#2F80ED",lb:"トレマ"},
   cup:     {bg:"#0F172A",lb:"カップ戦"},
+  five_accompany:{bg:"#7C3AED",lb:"5年帯同"},
   event:   {bg:"#0F766E",lb:"イベント"},
 };
 const PC={FW:{bg:"#64748B"},MF:{bg:"#64748B"},DF:{bg:"#64748B"},GK:{bg:"#64748B"}};
@@ -836,6 +852,8 @@ function isMatchFinished(r){
   return false;
 }
 function shouldCountMatchForStats(r){
+  // 5年帯同は記録として残すが、4年チームの成績には含めない。
+  if(isFiveGradeAccompanyType(r?.type)) return false;
   if(!isMatchFinished(r)) return false;
   const status = normalizeMatchStatus(r?.matchStatus);
   if(status==="finished") return true;
@@ -3480,7 +3498,7 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
   const fiscalLabel = `${String(fiscalStartYear).slice(-2)}年度`;
   const fiscalResults = (results||[]).filter(r=>{
     const d = nd(r.date);
-    return !!d && d >= fiscalFrom && d <= fiscalTo;
+    return !!d && d >= fiscalFrom && d <= fiscalTo && !isFiveGradeAccompanyResult(r, schedules);
   });
   const fiscalStats = calcStats(fiscalResults);
   const getScheduleTimeText = s => {
@@ -6962,6 +6980,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
 
   const TEAM_GENERATION = 60;
   const targetGradeNum = getCurrentThirdGeneration() - TEAM_GENERATION + 3;
+  const isFiveGradeAccompanySchedule = normalizeType(schedule.type) === "five_accompany";
   const parseGeneration = m => {
     const n = Number(String(m?.generation || "").replace(/[^\d]/g, ""));
     return Number.isFinite(n) ? n : 0;
@@ -6972,6 +6991,17 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
   };
   const classifyAttendMember = m => {
     const gen = parseGeneration(m);
+    if (isFiveGradeAccompanySchedule) {
+      if (gen) {
+        if (gen === TEAM_GENERATION) return "core";
+        if (gen === TEAM_GENERATION - 1) return "grade5";
+        return "exclude";
+      }
+      const gradeNum = getResolvedGradeNum(m);
+      if (gradeNum === targetGradeNum) return "core";
+      if (gradeNum === targetGradeNum + 1) return "grade5";
+      return "exclude";
+    }
     if (gen) {
       if (gen === TEAM_GENERATION) return "core";
       if (gen > TEAM_GENERATION) return "accompany";
@@ -6991,8 +7021,10 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
   });
   const coreMembers = sortMembers(members.filter(m => classifyAttendMember(m) === "core"));
   const accompanyMembers = sortMembers(members.filter(m => classifyAttendMember(m) === "accompany"));
-  const visibleAdminMembers = [...coreMembers, ...accompanyMembers];
-  const membersForSummary = isAdmin ? visibleAdminMembers : members;
+  const fifthGradeMembers = sortMembers(members.filter(m => classifyAttendMember(m) === "grade5"));
+  const visibleAdminMembers = [...coreMembers, ...fifthGradeMembers, ...accompanyMembers];
+  const membersForSummary = visibleAdminMembers;
+  const isMyMemberTarget = !!myMember && visibleAdminMembers.some(m => String(m.id || "") === String(myMember.id || ""));
 
   // 集計
   const counts = ["○","×","△"].map(s => membersForSummary.filter(m => attend[m.id]===s).length);
@@ -7117,7 +7149,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
       "閲覧専用アカウントのため出欠は編集できません"),
 
     // 一般ユーザー：自分だけ
-    !isAdmin && myMember && h("div",{},
+    !isAdmin && myMember && isMyMemberTarget && h("div",{},
       h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},myMember.name+"さんの出欠"),
       h("div",{style:{display:"flex",gap:8}},
         ["○","×","△"].map(s => {
@@ -7134,18 +7166,36 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
         }))),
 
     // memberIdが設定されていないユーザー
-    !isAdmin && !myMember && h("div",{style:{color:"#aaa",fontSize:13,textAlign:"center",padding:"8px 0"}},
-      "出欠登録にはメンバー紐づけが必要です（コーチに連絡）"),
+    !isAdmin && (!myMember || !isMyMemberTarget) && h("div",{style:{color:"#aaa",fontSize:13,textAlign:"center",padding:"8px 0"}},
+      myMember ? "この予定の出欠対象ではありません" : "出欠登録にはメンバー紐づけが必要です（コーチに連絡）"),
 
-    // admin：60期生＋帯同メンバー（上級生は表示しない）
+    // admin：4年生を基本に、5年帯同の日だけ5年生を追加表示
     isAdmin && h("div",{},
       visibleAdminMembers.length===0&&h("div",{style:{color:"#ccc",fontSize:13,padding:8}},"表示対象メンバーがありません"),
       coreMembers.length>0&&h("div",{style:{marginBottom:12}},
-        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},"60期生"),
+        h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:8}},isFiveGradeAccompanySchedule ? "4年生（60期）" : "60期生"),
         coreMembers.map(m=>{
           const cur = attend[m.id]||"未";
           const isSaving = saving === m.id;
           return h("div",{key:m.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"8px 12px",background:"#F8F9FA",borderRadius:10}},
+            h("div",{style:{width:28,height:28,borderRadius:6,background:(PC[m.position]||{bg:"#999"}).bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
+            h("div",{style:{flex:1,minWidth:0}},
+              h("div",{style:{fontSize:13,fontWeight:600,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},m.name),
+              h("div",{style:{fontSize:11,color:"#9aa3b2"}},formatMemberGenerationGrade(m)||m.grade||"-")),
+            h("div",{style:{display:"flex",gap:4}},
+              ["○","×","△"].map(s=>{
+                const st = ATTEND_STYLE[s];
+                const active = cur === s;
+                return h("button",{key:s,onClick:()=>save(m.id,s),disabled:isSaving,
+                  style:{width:34,height:34,border:"none",borderRadius:8,background:active?st.bg:"#eee",color:active?st.c:"#aaa",fontSize:14,fontWeight:700,cursor:"pointer",opacity:isSaving?0.5:1}},s);
+              })));
+        })),
+      fifthGradeMembers.length>0&&h("div",{style:{marginTop:8,padding:"12px 14px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:12}},
+        h("div",{style:{fontSize:11,fontWeight:800,color:"#6D28D9",marginBottom:10}},"5年生（帯同）"),
+        fifthGradeMembers.map(m=>{
+          const cur = attend[m.id]||"未";
+          const isSaving = saving === m.id;
+          return h("div",{key:m.id,style:{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"8px 12px",background:"#fff",borderRadius:10}},
             h("div",{style:{width:28,height:28,borderRadius:6,background:(PC[m.position]||{bg:"#999"}).bg,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}},m.number),
             h("div",{style:{flex:1,minWidth:0}},
               h("div",{style:{fontSize:13,fontWeight:600,color:"#1a1a2e",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},m.name),
@@ -7428,6 +7478,7 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
     });
     return rows;
   })();
+  const monthAccompanyResults = monthResults.filter(r => isFiveGradeAccompanyResult(r, schedules));
   const monthStat = calcStats(monthResults);
 
   return h(Fragment,{},
@@ -7474,13 +7525,15 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
         h("span",{style:{color:"#15803D",fontWeight:700}},monthStat.wins+"勝"),
         h("span",{style:{color:"#A16207",fontWeight:700}},monthStat.draws+"分"),
         h("span",{style:{color:"#B91C1C",fontWeight:700}},monthStat.losses+"敗"),
-        h("span",{style:{color:"#64748B"}},(cur.scheds.length || 0)+"日程 / "+monthStat.games+"試合"))),
+        h("span",{style:{color:"#64748B"}},(cur.scheds.length || 0)+"日程 / "+monthStat.games+"試合"),
+        monthAccompanyResults.length>0&&h("span",{style:{color:"#6D28D9",fontSize:10,fontWeight:800}},"5年帯同 "+monthAccompanyResults.length+"試合（集計外）"))),
 
     (cur?.scheds || []).map((s,i) => {
       const tc = getTC(s.type);
       const dt = fmt(s.date);
       const dayRows = getResultsForSchedule(s);
       const st = calcStats(dayRows);
+      const isFiveGradeAccompany = normalizeType(s.type) === "five_accompany";
       const favoriteDayRows = dayRows
         .filter(r => favoriteResultIds.has(String(r?.id || "").trim()))
         .sort((a,b)=>
@@ -7507,10 +7560,13 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
           )
         ),
         h("div",{style:{textAlign:"right",flexShrink:0,color:"#64748B"}},
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#15803D"}},st.wins+"勝"),
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#A16207"}},st.draws+"分"),
-          h("div",{style:{fontSize:11,fontWeight:700,color:"#B91C1C"}},st.losses+"敗"),
-          h("div",{style:{fontSize:10,color:"#94A3B8",marginTop:2}},st.games+"試合")));
+          isFiveGradeAccompany
+            ? h("div",{style:{fontSize:10,fontWeight:800,color:"#6D28D9",lineHeight:1.45}},"記録用\n集計外")
+            : h(Fragment,{},
+                h("div",{style:{fontSize:11,fontWeight:700,color:"#15803D"}},st.wins+"勝"),
+                h("div",{style:{fontSize:11,fontWeight:700,color:"#A16207"}},st.draws+"分"),
+                h("div",{style:{fontSize:11,fontWeight:700,color:"#B91C1C"}},st.losses+"敗"),
+                h("div",{style:{fontSize:10,color:"#94A3B8",marginTop:2}},st.games+"試合"))));
     })
   );
 }
@@ -7677,13 +7733,15 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const periodGrade3ShortLabel = `${String(grade3FiscalStart).slice(-2)}年度`;
   const periodGrade4ShortLabel = `${String(grade4FiscalStart).slice(-2)}年度`;
   const filtered=useMemo(()=>results.filter(r=>{
+    // 5年帯同は試合記録には残すが、この4年チームの成績・個人成績には含めない。
+    if(isFiveGradeAccompanyResult(r, schedules)) return false;
     if(typeF!=="all"&&!typeMatch(r,typeF)) return false;
     const d=nd(r.date);
     if(!isValidDateKey(d)) return false;
     if(periodRange.f&&d<periodRange.f) return false;
     if(periodRange.t&&d>periodRange.t) return false;
     return true;
-  }),[results,typeF,periodRange]);
+  }),[results,schedules,typeF,periodRange]);
   const normalizeOppSearch = s => String(s||"").toLowerCase().replace(/\s+/g,"");
   const opponentOptions=useMemo(()=>
     [...new Set(filtered.map(r=>String(r?.opponent||"").trim()).filter(Boolean))].sort()
@@ -8159,6 +8217,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
     official:["春季大会","夏季大会","秋季大会","冬季大会","リーグ戦","選手権","県大会","市大会","その他"],
     cup:["カップ戦","招待大会","フレンドリーマッチ","その他"],
     training:["練習試合","トレーニングマッチ","その他"],
+    five_accompany:["帯同試合","公式戦","練習試合","その他"],
     practice:[],
     event:["スポーツ交流","親子イベント","その他"],
   };
@@ -8343,7 +8402,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
   // 凡例＋追加ボタン
     h("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,padding:"10px 12px",background:"#F8FAFC",borderTop:"1px solid #D8E0E8",flexWrap:"wrap"}},
       h("div",{style:{display:"flex",gap:5,flexWrap:"wrap",flex:1,minWidth:220}},
-        [{c:"#15803D",l:"練習"},{c:"#1D4E89",l:"公式戦"},{c:"#2F80ED",l:"トレマ"},{c:"#102A43",l:"カップ戦"},{c:"#0F766E",l:"イベント"}].map(x=>
+        [{c:"#15803D",l:"練習"},{c:"#1D4E89",l:"公式戦"},{c:"#2F80ED",l:"トレマ"},{c:"#102A43",l:"カップ戦"},{c:"#7C3AED",l:"5年帯同"},{c:"#0F766E",l:"イベント"}].map(x=>
           h(Bdg,{key:x.l,label:x.l,color:x.c,bg:"#fff",small:true})
         )
       ),
@@ -9017,6 +9076,7 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate,onReorder}) {
 function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users=[],initialTab="",onGoToMatch,onAdd,onEdit,onDelete,onDeleteSchedule,onBack,onHome,onSaveMvp}) {
   const isEventDay = normalizeType(schedule.type) === "event";
   const isPracticeDay = normalizeType(schedule.type) === "practice";
+  const isFiveGradeAccompanyDay = normalizeType(schedule.type) === "five_accompany";
   const isSimpleDay = isEventDay || isPracticeDay;
   const resolveDayTab = raw => {
     const fallback = isSimpleDay ? "detail" : "matches";
@@ -9343,7 +9403,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"種類"),
         h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
-          [{k:"practice",l:"練習"},{k:"official",l:"公式戦"},{k:"training",l:"トレマ"},{k:"cup",l:"カップ戦"},{k:"event",l:"イベント"}].map(t=>
+          [{k:"practice",l:"練習"},{k:"official",l:"公式戦"},{k:"training",l:"トレマ"},{k:"cup",l:"カップ戦"},{k:"five_accompany",l:"5年帯同"},{k:"event",l:"イベント"}].map(t=>
             h("button",{key:t.k,onClick:()=>setSchForm(p=>({...p,type:t.k,carpoolDeadline:(t.k==="practice"||t.k==="event")?"":p.carpoolDeadline})),style:{padding:"7px 14px",border:`2px solid ${schForm.type===t.k?"#1D4ED8":"#eee"}`,borderRadius:20,background:schForm.type===t.k?"#1D4ED8":"#fff",color:schForm.type===t.k?"#fff":"#666",fontSize:12,fontWeight:700,cursor:"pointer"}},t.l)))),
       h("div",{style:{marginBottom:12}},
         h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"日付"),
@@ -9422,8 +9482,12 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
             background:"#1D4E89",color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}},
             "YouTubeテンプレ")
       ),
+      // 5年帯同は試合記録だけを残し、勝敗・個人成績へは集計しない。
+      dayTab==="matches"&&dayR.length>0&&isFiveGradeAccompanyDay&&h("div",{style:{background:"#F5F3FF",borderRadius:8,padding:"12px 14px",marginBottom:14,border:"1px solid #DDD6FE"}},
+        h("div",{style:{fontSize:13,fontWeight:900,color:"#5B21B6",marginBottom:3}},"5年帯同の試合記録"),
+        h("div",{style:{fontSize:12,color:"#6D28D9",lineHeight:1.55}},dayR.length+"試合を記録中。勝敗・勝率・個人成績・ランキングには含まれません。")),
       // 試合一覧・成績（matches タブ）
-      dayTab==="matches"&&dayR.length>0&&h("div",{style:{background:"#fff",borderRadius:8,padding:"16px 14px",marginBottom:14,boxShadow:"none",border:"1px solid #D8E0E8"}},
+      dayTab==="matches"&&dayR.length>0&&!isFiveGradeAccompanyDay&&h("div",{style:{background:"#fff",borderRadius:8,padding:"16px 14px",marginBottom:14,boxShadow:"none",border:"1px solid #D8E0E8"}},
         h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:12}},"TODAY'S RESULTS"),
         h("div",{style:{display:"flex",justifyContent:"center",gap:0,border:"1px solid #E2E8F0",borderRadius:6,overflow:"hidden"}},
           h("div",{style:{textAlign:"center",padding:"10px 20px",flex:1,borderRight:"1px solid #E2E8F0",background:"#fff"}},
