@@ -1009,9 +1009,44 @@ function RWdg({our,their,pk,status,date}) {
   const label=win?"勝ち":lose?"負け":"引分";
   return h("span",{style:{background:c,color:"#fff",borderRadius:8,padding:"2px 10px",fontSize:11,fontWeight:800}},label+(pkW?" (PK)":pkL?" (PK)":""));
 }
-function ScoreLine({our,their,size=18}) {
-  const c=Number(our)>Number(their)?"#15803D":Number(our)===Number(their)?"#A16207":"#B91C1C";
-  return h("span",{style:{fontSize:size,fontWeight:900,color:c,whiteSpace:"nowrap"}},Number(our),h("span",{style:{color:"#ddd",fontSize:size*0.7,margin:"0 3px"}},"-"),Number(their));
+const DEFAULT_OPPONENT_COLOR = "#475569";
+const OPPONENT_COLOR_OPTIONS = [
+  {value:"#475569",label:"スレート"}, {value:"#1D4ED8",label:"ブルー"},
+  {value:"#0F766E",label:"ティール"}, {value:"#15803D",label:"グリーン"},
+  {value:"#B91C1C",label:"レッド"}, {value:"#B45309",label:"オレンジ"},
+  {value:"#7E22CE",label:"パープル"}, {value:"#BE185D",label:"ピンク"}
+];
+function normalizeOpponentColor(value) {
+  const color=String(value||"").trim();
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toUpperCase() : DEFAULT_OPPONENT_COLOR;
+}
+function getOpponentColor(result) {
+  return normalizeOpponentColor(result?.opponentColor);
+}
+function OpponentColorPicker({value,onChange}) {
+  const selected=normalizeOpponentColor(value);
+  return h("div",{style:{display:"grid",gap:8}},
+    h("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}},
+      OPPONENT_COLOR_OPTIONS.map(option=>{
+        const active=selected===option.value;
+        return h("button",{key:option.value,type:"button",onClick:()=>onChange(option.value),title:option.label,"aria-label":"相手カラー: "+option.label,
+          style:{width:31,height:31,padding:0,border:active?"3px solid #102A43":"2px solid #fff",outline:active?"1px solid "+option.value:"1px solid #CBD5E1",borderRadius:8,background:option.value,cursor:"pointer",boxShadow:active?"0 0 0 2px #E2E8F0":"none"}},
+          active&&h("span",{style:{color:"#fff",fontSize:15,fontWeight:900,textShadow:"0 1px 2px rgba(0,0,0,.55)"}},"✓"));
+      }),
+      h("label",{style:{display:"inline-flex",alignItems:"center",gap:6,minHeight:31,padding:"0 8px",border:"1px solid #CBD5E1",borderRadius:8,fontSize:11,fontWeight:800,color:"#475569",background:"#fff"}},
+        "自由設定",
+        h("input",{type:"color",value:selected,onInput:e=>onChange(e.currentTarget.value),onChange:e=>onChange(e.currentTarget.value),style:{width:22,height:22,padding:0,border:"none",background:"transparent",cursor:"pointer"}})
+      )
+    ),
+    h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B"}},"選んだ色は、相手名と相手側スコアへ反映されます。")
+  );
+}
+function ScoreLine({our,their,size=18,opponentColor}) {
+  const theirColor=normalizeOpponentColor(opponentColor);
+  return h("span",{style:{display:"inline-flex",alignItems:"baseline",fontSize:size,fontWeight:900,whiteSpace:"nowrap"}},
+    h("span",{style:{color:"#1D4E89"}},Number(our)),
+    h("span",{style:{color:"#94A3B8",fontSize:size*0.7,margin:"0 3px"}},"-"),
+    h("span",{style:{color:theirColor}},Number(their)));
 }
 function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy,onEnableNotifications}) {
   const video26 = HOME_LINKS.find(l => /26年度/.test(String(l.label || "")));
@@ -1943,14 +1978,13 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setFormation(key);
     setFormationSlots(prev=>key ? buildFormationSlots(key, prev) : {});
   };
-  const won=ourT>thT,draw=ourT===thT,rc=won?"#15803D":draw?"#A16207":"#B91C1C";
   // PK集計
   const pkOurScore=pkKickers.length ? pkKickers.filter(k=>k.success).length : (hasPk ? legacyPkResult.our : 0);
   const pkTheirScore=pkTheirSeq.length ? pkTheirSeq.filter(Boolean).length : (hasPk ? legacyPkResult.their : 0);
   const pkOn=hasPk;
   const pkWin=pkOn&&pkOurScore>pkTheirScore;
   const pkLose=pkOn&&pkOurScore<pkTheirScore;
-  const finalColor=pkWin?"#15803D":pkLose?"#B91C1C":rc;
+  const opponentColor=getOpponentColor(match);
   // PK表示文字列
   const pkOurStr=pkKickers.map(k=>k.success?"○":"×").join("");
   const pkTheirStr=pkTheirSeq.map(s=>s?"○":"×").join("");
@@ -2651,7 +2685,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           match.formatLabel&&h(Bdg,{label:match.formatLabel,color:"rgba(255,255,255,0.6)",bg:"rgba(255,255,255,0.1)"}),
           h(Bdg,{label:matchStatus==="finished"?"試合終了":"試合前",color:matchStatus==="finished"?"#14532D":"#475569",bg:matchStatus==="finished"?"#DCFCE7":"#E2E8F0"})
         ),
-        h("div",{style:{fontSize:20,fontWeight:900,color:"#fff"}},"vs "+match.opponent),
+        h("div",{style:{display:"flex",alignItems:"center",gap:8,fontSize:20,fontWeight:900,color:"#fff"}},
+          h("span",{style:{width:4,height:22,background:opponentColor,borderRadius:2,flexShrink:0}}),"vs "+match.opponent),
         h("div",{style:{fontSize:12,color:"rgba(255,255,255,0.55)",marginTop:4}},dt.full+(schedule?.location?" · "+schedule.location:""))
       ),
       h("div",{style:{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.55)",letterSpacing:1.2}},match.formatLabel||"")
@@ -2679,16 +2714,16 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       ),
       h("div",{style:{textAlign:"center"}},
         h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:10,lineHeight:1}},
-          h("span",{style:{fontSize:38,fontWeight:900,color:finalColor}},ourT),
+          h("span",{style:{fontSize:38,fontWeight:900,color:"#1D4E89"}},ourT),
           h("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minWidth:36,gap:1}},
             phaseScores.map((s,idx)=>h("div",{key:`phase-${idx}`,style:{fontSize:11,fontWeight:900,color:"#64748B",lineHeight:1.1}},s))
           ),
-          h("span",{style:{fontSize:38,fontWeight:900,color:finalColor}},thT)
+          h("span",{style:{fontSize:38,fontWeight:900,color:opponentColor}},thT)
         ),
         pkOn&&h("div",{style:{fontSize:11,color:"#64748B",marginTop:2,fontWeight:700}},"PK "+pkOurScore+"-"+pkTheirScore)
       ),
       h("div",{style:{textAlign:"right"}},
-        h("div",{style:{fontSize:14,fontWeight:900,color:"#334155",lineHeight:1.2}},match.opponent||"相手")
+        h("div",{style:{fontSize:14,fontWeight:900,color:opponentColor,lineHeight:1.2}},match.opponent||"相手")
       )
     ),
     !pkOn&&h("div",{style:{marginTop:4,display:"flex",justifyContent:"center"}},h(RWdg,{our:ourT,their:thT,status:matchStatus,date:match?.date}))
@@ -3624,9 +3659,9 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
           h("div",{style:{flex:1,minWidth:0}},
             h("div",{style:{marginBottom:2}},h(Bdg,{label:tc.lb,color:tc.bg,small:true})),
             cardTitle && h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},cardTitle),
-            h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},"vs "+r.opponent)),
+            h("div",{style:{fontSize:14,fontWeight:700,color:getOpponentColor(r)}},"vs "+r.opponent)),
           h("div",{style:{textAlign:"right",flexShrink:0}},
-            h(ScoreLine,{our:r.ourScore,their:r.theirScore,size:16}),
+            h(ScoreLine,{our:r.ourScore,their:r.theirScore,size:16,opponentColor:r.opponentColor}),
             h("div",{style:{marginTop:3}},h(RWdg,{our:r.ourScore,their:r.theirScore,status:r.matchStatus,date:r.date}))));
       })));
 }
@@ -7234,6 +7269,7 @@ function EditResultModal({result, members, onSave, onClose}) {
   const [fr, setFr] = useState({
     id:          result.id,
     opponent:    result.opponent||"",
+    opponentColor:normalizeOpponentColor(result.opponentColor),
     gameNumber:  result.gameNumber||1,
     formatLabel: result.formatLabel||"",
     formatTime:  parsedFormat.time,
@@ -7256,6 +7292,9 @@ function EditResultModal({result, members, onSave, onClose}) {
       h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"対戦相手"),
       h("input",{value:fr.opponent,onChange:e=>setFr(p=>({...p,opponent:e.target.value})),
         placeholder:"〇〇FC",style:css.inp})),
+    h("div",{style:{marginBottom:16}},
+      h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"対戦相手カラー"),
+      h(OpponentColorPicker,{value:fr.opponentColor,onChange:color=>setFr(p=>({...p,opponentColor:normalizeOpponentColor(color)}))})),
     h("div",{style:{marginBottom:14}},
       h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"試合形式"),
       h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",marginBottom:6}},"時間"),
@@ -7390,10 +7429,10 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
             h(Bdg,{label:tc.lb,color:tc.bg,small:true}),
             r.gameNumber?h("span",{style:{fontSize:10,color:"#bbb",marginLeft:5}},"第"+r.gameNumber+"試合"):"",
             r.formatLabel?h("span",{style:{fontSize:10,color:"#ccc",marginLeft:5}},r.formatLabel):""),
-          h("div",{style:{fontSize:14,fontWeight:700,color:"#1a1a2e"}},"vs "+r.opponent),
+          h("div",{style:{fontSize:14,fontWeight:700,color:getOpponentColor(r)}},"vs "+r.opponent),
           s?.location&&h("div",{style:{fontSize:11,color:"#aaa"}},"📍 "+s.location)),
         h("div",{style:{textAlign:"right",flexShrink:0}},
-          h(ScoreLine,{our:r.ourScore,their:r.theirScore,size:18}),
+          h(ScoreLine,{our:r.ourScore,their:r.theirScore,size:18,opponentColor:r.opponentColor}),
           h("div",{style:{marginTop:3}},h(RWdg,{our:r.ourScore,their:r.theirScore,status:r.matchStatus,date:r.date}))));
     }));
 }
@@ -7588,6 +7627,7 @@ function AddMatchModal({schedule,results,schedules=[],onSave,onClose}) {
   const latestParsedFormat = parseFormatSelection(latestResult?.formatLabel || "");
   const [fr,setFr]=useState({
     opponent:"",
+    opponentColor:DEFAULT_OPPONENT_COLOR,
     gameNumber:initN,
     formatLabel:"",
     formatTime:latestParsedFormat.time||DEFAULT_FORMAT_TIME,
@@ -7629,7 +7669,14 @@ function AddMatchModal({schedule,results,schedules=[],onSave,onClose}) {
       h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"対戦相手"),
       h("input",{value:fr.opponent,onChange:e=>setFr(p=>({...p,opponent:e.target.value})),placeholder:"〇〇FC",style:css.inp}),
       pastOpp.length>0&&h("div",{style:{marginTop:8,display:"flex",flexWrap:"wrap",gap:6}},
-        pastOpp.map(op=>h("button",{key:op,onClick:()=>setFr(p=>({...p,opponent:op})),style:{background:fr.opponent===op?"#1D4ED8":"#F0F4F8",color:fr.opponent===op?"#fff":"#555",border:"none",borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}},op)))),
+        pastOpp.map(op=>{
+          const previous=[...(results||[])].reverse().find(row=>String(row?.opponent||"").trim()===String(op||"").trim());
+          const color=getOpponentColor(previous);
+          return h("button",{key:op,onClick:()=>setFr(p=>({...p,opponent:op,opponentColor:color})),style:{background:fr.opponent===op?color:"#F0F4F8",color:fr.opponent===op?"#fff":"#555",border:"none",borderLeft:"3px solid "+color,borderRadius:20,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}},op);
+        }))),
+    h("div",{style:{marginBottom:16}},
+      h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"対戦相手カラー"),
+      h(OpponentColorPicker,{value:fr.opponentColor,onChange:color=>setFr(p=>({...p,opponentColor:normalizeOpponentColor(color)}))})),
     h("div",{style:{marginBottom:16}},
       h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:8}},"試合形式"),
       h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",marginBottom:6}},"時間"),
@@ -9520,10 +9567,10 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
             h("div",{style:{flex:1,minWidth:0}},
               h("div",{style:{fontSize:11,color:"#64748B",fontWeight:700,marginBottom:2}},
                 r.formatLabel||"試合形式未設定"),
-              h("div",{style:{fontSize:16,fontWeight:900,color:"#0F172A",lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
+              h("div",{style:{fontSize:16,fontWeight:900,color:getOpponentColor(r),lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
                 "vs "+r.opponent),
               h("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
-                h(ScoreLine,{our:r.ourScore,their:r.theirScore,size:20}),
+                h(ScoreLine,{our:r.ourScore,their:r.theirScore,size:20,opponentColor:r.opponentColor}),
                 h(RWdg,{our:r.ourScore,their:r.theirScore,status:r.matchStatus,date:r.date}),
                 (()=>{
                   try{const k=JSON.parse(r.pkKickers);if(Array.isArray(k)&&k.length>0){
@@ -10186,11 +10233,6 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     const scoreText=String(data.ourScore??0)+" – "+String(data.theirScore??0);
     const line=team+"  "+scoreText+"  "+opponentName;
     ctx.save();
-    ctx.fillStyle="rgba(5,12,24,.80)";
-    ctx.fillRect(margin,margin,boardWidth,boardHeight);
-    ctx.fillStyle="#1D4ED8";
-    ctx.fillRect(margin,margin,4*unit,boardHeight);
-    ctx.fillStyle="#ffffff";
     ctx.textBaseline="middle";
     let topFont=18*unit;
     ctx.font="700 "+topFont+"px 'Barlow Condensed', 'Noto Sans JP', sans-serif";
@@ -10199,6 +10241,11 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
       ctx.font="700 "+topFont+"px 'Barlow Condensed', 'Noto Sans JP', sans-serif";
     }
     const boardWidth=Math.min(maxBoardWidth,Math.max(166*unit,ctx.measureText(line).width+24*unit));
+    ctx.fillStyle="rgba(5,12,24,.80)";
+    ctx.fillRect(margin,margin,boardWidth,boardHeight);
+    ctx.fillStyle="#1D4ED8";
+    ctx.fillRect(margin,margin,4*unit,boardHeight);
+    ctx.fillStyle="#ffffff";
     ctx.fillText(line,margin+12*unit,margin+22*unit);
     ctx.fillStyle="#b8c4d5";
     ctx.font="700 "+(14*unit)+"px 'Barlow Condensed', 'Noto Sans JP', sans-serif";
@@ -10547,7 +10594,7 @@ function App() {
     let ok=false;
     try{
       await api("addResult",{result:{
-        scheduleId:fr.scheduleId,date:fr.date,opponent:fr.opponent,
+        scheduleId:fr.scheduleId,date:fr.date,opponent:fr.opponent,opponentColor:normalizeOpponentColor(fr.opponentColor),
         formatLabel:fr.formatLabel||"",gameNumber:fr.gameNumber||1,
         type:fr.type,memo:fr.memo||"",
         matchStatus:fr.matchStatus||"pre",

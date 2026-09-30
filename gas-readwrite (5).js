@@ -43,7 +43,7 @@ const MAPS = {
   },
   result: {
     // 既存列 + 追加列（スケジュールID・種類・YouTube・PK）
-    "ID":"id", "日付":"date", "相手チーム":"opponent",
+    "ID":"id", "日付":"date", "相手チーム":"opponent", "相手カラー":"opponentColor",
     "試合形式":"formatLabel", "第○試合":"gameNumber", "メモ":"memo",
     "スケジュールID":"scheduleId", "種類":"type",
     "YouTubeURL":"youtubeUrl", "前半URL":"youtubeUrl1st", "後半URL":"youtubeUrl2nd", "PK戦URL":"youtubeUrlPk",
@@ -1526,6 +1526,7 @@ function dispatch(req) {
         id:           genId(),
         date:         r.date         || "",
         opponent:     r.opponent     || "",
+        opponentColor:r.opponentColor|| "",
         formatLabel:  r.formatLabel  || "",
         gameNumber:   r.gameNumber   || 1,
         memo:         r.memo         || "",
@@ -2091,6 +2092,7 @@ function dispatch(req) {
 
     // ── 試合結果更新 ─────────────────────────────────────────
     case "updateResult": {
+      ensureSheetColumnsByMap("試合結果", MAPS.result);
       const sh = getSheet("試合結果");
       if (!sh || sh.getLastRow() < 2) return {};
       const headers = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
@@ -2098,7 +2100,7 @@ function dispatch(req) {
       for (let i = 1; i < ids.length; i++) {
         if (String(ids[i][0]).trim() === String(req.result.id).trim()) {
           const row = i + 1;
-          const colMap = {"相手チーム":"opponent","試合形式":"formatLabel","第○試合":"gameNumber"};
+          const colMap = {"相手チーム":"opponent","相手カラー":"opponentColor","試合形式":"formatLabel","第○試合":"gameNumber"};
           for (const [colName, key] of Object.entries(colMap)) {
             const ci = headers.indexOf(colName);
             if (ci >= 0 && req.result[key] !== undefined) {
