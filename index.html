@@ -10106,6 +10106,9 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
   const [cameraState,setCameraState]=useState("idle");
   const [cameraMessage,setCameraMessage]=useState("");
   const [facingMode,setFacingMode]=useState("environment");
+  const [captureQuality,setCaptureQuality]=useState("fhd");
+  const [captureFrameRate,setCaptureFrameRate]=useState("30");
+  const [actualCapture,setActualCapture]=useState(null);
   const [teamName,setTeamName]=useState("塚口AFC");
   const [opponent,setOpponent]=useState("");
   const [ourScore,setOurScore]=useState(0);
@@ -10117,6 +10120,10 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
   const [recordingUsesOverlay,setRecordingUsesOverlay]=useState(false);
   const [savedVideo,setSavedVideo]=useState(null);
   const [selectedResultId,setSelectedResultId]=useState("");
+  const capturePreset=captureQuality==="4k"
+    ? {label:"4K",width:3840,height:2160}
+    : {label:"フルHD",width:1920,height:1080};
+  const requestedFrameRate=Math.max(1,Number(captureFrameRate)||30);
 
   const matchChoices=useMemo(()=>{
     return (results||[]).map(result=>{
@@ -10178,6 +10185,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     streamRef.current=null;
     if(videoRef.current) videoRef.current.srcObject=null;
     setClockRunning(false);
+    setActualCapture(null);
     setCameraState("idle");
     setCameraMessage("");
   };
@@ -10191,14 +10199,18 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     (streamRef.current?.getTracks?.()||[]).forEach(track=>track.stop());
     streamRef.current=null;
     setCameraState("starting");
+    setActualCapture(null);
     setCameraMessage("カメラを起動しています…");
     const videoConstraints={
       facingMode:{ideal:mode},
-      width:{ideal:1920},
-      height:{ideal:1080}
+      width:{ideal:capturePreset.width},
+      height:{ideal:capturePreset.height},
+      aspectRatio:{ideal:16/9},
+      frameRate:{ideal:requestedFrameRate}
     };
     let stream;
     let withAudio=true;
+    let usedRequestedSettings=true;
     try{
       stream=await navigator.mediaDevices.getUserMedia({video:videoConstraints,audio:true});
     }catch(audioError){
@@ -10206,9 +10218,16 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
         stream=await navigator.mediaDevices.getUserMedia({video:videoConstraints,audio:false});
         withAudio=false;
       }catch(error){
-        setCameraState("error");
-        setCameraMessage("カメラを起動できません。Safariのカメラ許可を確認してください。");
-        return;
+        try{
+          /* 端末が希望の4K/60 fpsを扱えなくても、カメラ自体は起動する。 */
+          stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:mode}},audio:false});
+          withAudio=false;
+          usedRequestedSettings=false;
+        }catch(fallbackError){
+          setCameraState("error");
+          setCameraMessage("カメラを起動できません。Safariのカメラ許可を確認してください。");
+          return;
+        }
       }
     }
     streamRef.current=stream;
@@ -10219,8 +10238,14 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     }
     video.srcObject=stream;
     try{await video.play();}catch(e){}
+    const settings=stream.getVideoTracks?.()[0]?.getSettings?.()||{};
+    setActualCapture({
+      width:Number(settings.width)||0,
+      height:Number(settings.height)||0,
+      frameRate:Number(settings.frameRate)||0
+    });
     setCameraState("ready");
-    setCameraMessage(withAudio?"ライブ映像を表示中":"マイクなしでライブ映像を表示中");
+    setCameraMessage((withAudio?"ライブ映像を表示中":"マイクなしでライブ映像を表示中")+(usedRequestedSettings?"（"+capturePreset.label+" / "+requestedFrameRate+" fpsを指定）":"（端末対応の設定で起動）"));
   };
   const drawRecordedOverlay=(ctx,width,height)=>{
     const data=overlayRef.current||{};
@@ -10273,72 +10298,112 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     }
     let outputStream=cameraStream;
     let hasRecordedOverlay=false;
+    let overlayUnavailable=false;
     stopCompositor();
     const canvas=canvasRef.current;
     if(canvas&&typeof canvas.captureStream==="function"&&video.readyState>=2){
-      canvas.width=video.videoWidth||1280;
-      canvas.height=video.videoHeight||720;
-      const ctx=canvas.getContext("2d");
-      if(ctx){
-        const draw=()=>{
-          if(!streamRef.current) return;
-          ctx.drawImage(video,0,0,canvas.width,canvas.height);
-          drawRecordedOverlay(ctx,canvas.width,canvas.height);
-          drawFrameRef.current=requestAnimationFrame(draw);
-        };
-        draw();
-        const composedStream=canvas.captureStream(30);
+      try{
+        canvas.width=video.videoWidth||1280;
+        canvas.height=video.videoHeight||720;
+        const ctx=canvas.getContext("2d");
+        if(!ctx) throw new Error("canvas unavailable");
+        /* 先に1フレーム描画する。iPadで合成ストリームが使えない場合は、
+           録画全体を失敗させずカメラ映像だけの録画へ切り替える。 */
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
+        drawRecordedOverlay(ctx,canvas.width,canvas.height);
+        const composedStream=canvas.captureStream(requestedFrameRate);
         cameraStream.getAudioTracks().forEach(track=>composedStream.addTrack(track));
         outputStream=composedStream;
         captureVideoTracksRef.current=composedStream.getVideoTracks();
         hasRecordedOverlay=true;
+        const draw=()=>{
+          if(!streamRef.current) return;
+          try{
+            ctx.drawImage(video,0,0,canvas.width,canvas.height);
+            drawRecordedOverlay(ctx,canvas.width,canvas.height);
+          }catch(e){}
+          drawFrameRef.current=requestAnimationFrame(draw);
+        };
+        drawFrameRef.current=requestAnimationFrame(draw);
+      }catch(error){
+        stopCompositor();
+        outputStream=cameraStream;
+        overlayUnavailable=true;
       }
+    }else{
+      overlayUnavailable=true;
     }
-    const types=["video/mp4","video/webm;codecs=vp8,opus","video/webm"];
-    const mimeType=types.find(type=>!MediaRecorder.isTypeSupported||MediaRecorder.isTypeSupported(type));
+    const createRecorder=stream=>{
+      const types=["video/mp4;codecs=avc1.42E01E,mp4a.40.2","video/mp4","video/webm;codecs=vp8,opus","video/webm"];
+      const candidates=typeof MediaRecorder.isTypeSupported==="function"
+        ? types.filter(type=>MediaRecorder.isTypeSupported(type))
+        : types;
+      let lastError;
+      for(const mimeType of candidates){
+        try{return new MediaRecorder(stream,{mimeType});}catch(error){lastError=error;}
+      }
+      try{return new MediaRecorder(stream);}catch(error){throw lastError||error;}
+    };
+    const setRecorderHandlers=(recorder,usesOverlay)=>{
+      chunksRef.current=[];
+      recorderRef.current=recorder;
+      recorder.ondataavailable=event=>{
+        if(event.data&&event.data.size>0) chunksRef.current.push(event.data);
+      };
+      recorder.onerror=()=>{
+        setCameraMessage("録画中にエラーが起きました。カメラを閉じて、フルHD / 30 fpsで試してください。");
+        recorderRef.current=null;
+        setRecording(false);
+        stopCompositor();
+      };
+      recorder.onstop=()=>{
+        const parts=chunksRef.current||[];
+        stopCompositor();
+        recorderRef.current=null;
+        setRecording(false);
+        if(!parts.length){
+          setCameraMessage("動画を保存できませんでした。フルHD / 30 fpsで試してください。");
+          return;
+        }
+        const blob=new Blob(parts,{type:recorder.mimeType||parts[0].type||"video/mp4"});
+        const url=URL.createObjectURL(blob);
+        setSavedVideo({url,name:makeFileName(),size:blob.size,hasOverlay:usesOverlay});
+        setCameraMessage("録画を停止しました。下の「動画を保存」から端末へ保存してください。");
+      };
+    };
     let recorder;
     try{
-      recorder=mimeType?new MediaRecorder(outputStream,{mimeType}):new MediaRecorder(outputStream);
+      recorder=createRecorder(outputStream);
+      setRecorderHandlers(recorder,hasRecordedOverlay);
+      recorder.start(1000);
     }catch(error){
-      stopCompositor();
-      setCameraMessage("録画を開始できませんでした。Safariを最新の状態にして試してください。");
-      return;
-    }
-    chunksRef.current=[];
-    recorderRef.current=recorder;
-    recorder.ondataavailable=event=>{
-      if(event.data&&event.data.size>0) chunksRef.current.push(event.data);
-    };
-    recorder.onerror=()=>{
-      setCameraMessage("録画中にエラーが起きました。");
-      setRecording(false);
-      stopCompositor();
-    };
-    recorder.onstop=()=>{
-      const parts=chunksRef.current||[];
-      stopCompositor();
-      recorderRef.current=null;
-      setRecording(false);
-      if(!parts.length){
-        setCameraMessage("動画を保存できませんでした。");
+      /* 合成用Canvasの録画だけが失敗するiPadでは、実カメラの録画へ退避する。 */
+      if(hasRecordedOverlay){
+        stopCompositor();
+        hasRecordedOverlay=false;
+        overlayUnavailable=true;
+        try{
+          recorder=createRecorder(cameraStream);
+          setRecorderHandlers(recorder,false);
+          recorder.start(1000);
+        }catch(fallbackError){
+          recorderRef.current=null;
+          setCameraMessage("録画を開始できませんでした。Safariのカメラ許可を確認し、フルHD / 30 fpsで試してください。");
+          return;
+        }
+      }else{
+        recorderRef.current=null;
+        setCameraMessage("録画を開始できませんでした。Safariのカメラ許可を確認し、フルHD / 30 fpsで試してください。");
         return;
       }
-      const blob=new Blob(parts,{type:recorder.mimeType||parts[0].type||"video/mp4"});
-      const url=URL.createObjectURL(blob);
-      setSavedVideo({url,name:makeFileName(),size:blob.size,hasOverlay:hasRecordedOverlay});
-      setCameraMessage("録画を停止しました。下の「動画を保存」から端末へ保存してください。");
-    };
+    }
     try{
-      recorder.start(1000);
       setSavedVideo(null);
       setRecordingUsesOverlay(hasRecordedOverlay);
       setRecording(true);
       setClockRunning(true);
-      setCameraMessage(hasRecordedOverlay?"スコア表示を含めて録画中":"ライブ表示のまま録画中");
-    }catch(error){
-      stopCompositor();
-      setCameraMessage("録画を開始できませんでした。");
-    }
+      setCameraMessage(hasRecordedOverlay?"スコア表示を含めて録画中":(overlayUnavailable?"スコア合成に対応しないため、今回はカメラ映像のみ録画中":"ライブ表示のまま録画中"));
+    }catch(e){}
   };
   const stopRecording=()=>{
     const recorder=recorderRef.current;
@@ -10358,6 +10423,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     else setTheirScore(value=>Math.max(0,Number(value||0)+delta));
   };
   const buttonStyle={border:"none",borderRadius:10,fontWeight:800,cursor:"pointer",minHeight:42,padding:"0 14px"};
+  const captureSettingsLocked=cameraState==="ready"||cameraState==="starting"||recording;
 
   if(!isAdmin) return h("div",{className:"card",style:{padding:18,color:"#526274"}},"撮影機能は管理者用です。");
   return h("section",{className:"camera-tab",style:{display:"grid",gap:14}},
@@ -10375,6 +10441,28 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
         h("label",{style:{display:"grid",gap:5,fontSize:12,fontWeight:800,color:"#536276"}},"自チーム",h("input",{value:teamName,onInput:e=>setTeamName(e.currentTarget.value),disabled:recording,style:{height:39,boxSizing:"border-box",border:"1px solid #D8E0EA",borderRadius:8,padding:"0 10px",fontWeight:700}})),
         h("label",{style:{display:"grid",gap:5,fontSize:12,fontWeight:800,color:"#536276"}},"対戦相手",h("input",{value:opponent,onInput:e=>setOpponent(e.currentTarget.value),disabled:recording,style:{height:39,boxSizing:"border-box",border:"1px solid #D8E0EA",borderRadius:8,padding:"0 10px",fontWeight:700}}))
+      ),
+      h("div",{style:{paddingTop:2,borderTop:"1px solid #E5EAF0",display:"grid",gap:8}},
+        h("div",{style:{fontSize:12,fontWeight:900,color:"#536276"}},"撮影設定"),
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+          h("label",{style:{display:"grid",gap:5,fontSize:12,fontWeight:800,color:"#536276"}},"解像度",
+            h("select",{value:captureQuality,onChange:e=>setCaptureQuality(e.currentTarget.value),disabled:captureSettingsLocked,style:{width:"100%",height:39,border:"1px solid #D8E0EA",borderRadius:8,background:"#fff",padding:"0 10px",color:"#26364A",opacity:captureSettingsLocked ? .64 : 1}},
+              h("option",{value:"fhd"},"フルHD（1080p）"),
+              h("option",{value:"4k"},"4K（2160p）")
+            )
+          ),
+          h("label",{style:{display:"grid",gap:5,fontSize:12,fontWeight:800,color:"#536276"}},"フレームレート",
+            h("select",{value:captureFrameRate,onChange:e=>setCaptureFrameRate(e.currentTarget.value),disabled:captureSettingsLocked,style:{width:"100%",height:39,border:"1px solid #D8E0EA",borderRadius:8,background:"#fff",padding:"0 10px",color:"#26364A",opacity:captureSettingsLocked ? .64 : 1}},
+              h("option",{value:"30"},"30 fps"),
+              h("option",{value:"60"},"60 fps")
+            )
+          )
+        ),
+        h("div",{style:{fontSize:11,lineHeight:1.55,color:"#69798C"}},
+          actualCapture&&actualCapture.width&&actualCapture.height
+            ? "現在のカメラ: "+actualCapture.width+" × "+actualCapture.height+" / "+(actualCapture.frameRate?Math.round(actualCapture.frameRate)+" fps":"fps未取得")
+            : "カメラ起動前に選択。4K / 60 fpsは端末が対応する場合のみ有効です。"
+        )
       )
     ),
     h("div",{style:{position:"relative",overflow:"hidden",background:"#07111F",borderRadius:14,aspectRatio:"16 / 9",boxShadow:"0 10px 28px rgba(20,35,60,.18)"}},
