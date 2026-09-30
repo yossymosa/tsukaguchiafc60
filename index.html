@@ -10178,33 +10178,31 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
   const drawRecordedOverlay=(ctx,width,height)=>{
     const data=overlayRef.current||{};
     const unit=Math.max(1,width/1440);
-    const margin=32*unit;
-    const scoreWidth=58*unit;
-    const rowHeight=35*unit;
-    const metaHeight=25*unit;
-    const boardWidth=Math.min(width-margin*2,360*unit);
-    const nameWidth=boardWidth-scoreWidth;
+    const margin=26*unit;
+    const boardWidth=Math.min(width-margin*2,330*unit);
+    const boardHeight=58*unit;
+    const team=String(data.teamName||"塚口AFC").slice(0,12);
+    const opponentName=String(data.opponent||"対戦相手").slice(0,12);
+    const scoreText=String(data.ourScore??0)+" – "+String(data.theirScore??0);
+    const line=team+"  "+scoreText+"  "+opponentName;
     ctx.save();
     ctx.fillStyle="rgba(5,12,24,.80)";
-    ctx.fillRect(margin,margin,boardWidth,rowHeight*2+metaHeight);
+    ctx.fillRect(margin,margin,boardWidth,boardHeight);
     ctx.fillStyle="#1D4ED8";
-    ctx.fillRect(margin+nameWidth,margin,scoreWidth,rowHeight*2);
-    ctx.fillStyle="rgba(255,255,255,.18)";
-    ctx.fillRect(margin,margin+rowHeight,nameWidth,1*unit);
+    ctx.fillRect(margin,margin,4*unit,boardHeight);
     ctx.fillStyle="#ffffff";
     ctx.textBaseline="middle";
-    ctx.font="700 "+(18*unit)+"px Arial, sans-serif";
-    ctx.fillText(String(data.teamName||"塚口AFC").slice(0,18),margin+12*unit,margin+rowHeight/2);
-    ctx.fillText(String(data.opponent||"対戦相手").slice(0,18),margin+12*unit,margin+rowHeight*1.5);
-    ctx.font="900 "+(25*unit)+"px Arial, sans-serif";
-    const ourScoreText=String(data.ourScore??0);
-    const theirScoreText=String(data.theirScore??0);
-    ctx.fillText(ourScoreText,margin+nameWidth+(scoreWidth-ctx.measureText(ourScoreText).width)/2,margin+rowHeight/2);
-    ctx.fillText(theirScoreText,margin+nameWidth+(scoreWidth-ctx.measureText(theirScoreText).width)/2,margin+rowHeight*1.5);
+    let topFont=18*unit;
+    ctx.font="700 "+topFont+"px 'Barlow Condensed', 'Noto Sans JP', sans-serif";
+    while(ctx.measureText(line).width>boardWidth-24*unit&&topFont>11*unit){
+      topFont-=1*unit;
+      ctx.font="700 "+topFont+"px 'Barlow Condensed', 'Noto Sans JP', sans-serif";
+    }
+    ctx.fillText(line,margin+12*unit,margin+22*unit);
     ctx.fillStyle="#b8c4d5";
-    ctx.font="800 "+(15*unit)+"px Arial, sans-serif";
+    ctx.font="700 "+(14*unit)+"px 'Barlow Condensed', 'Noto Sans JP', sans-serif";
     const time=String(data.half||"前半")+"  "+formatClock(data.clockSeconds);
-    ctx.fillText(time,margin+12*unit,margin+rowHeight*2+metaHeight/2);
+    ctx.fillText(time,margin+12*unit,margin+44*unit);
     ctx.restore();
   };
   const makeFileName=()=>{
@@ -10336,18 +10334,13 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
       cameraState!=="ready"&&h("div",{style:{position:"absolute",inset:0,display:"grid",placeItems:"center",padding:24,textAlign:"center",color:"#B8C6D8",fontSize:13,fontWeight:700}},cameraState==="starting"?"カメラを起動しています…":"カメラを起動するとここにライブ映像が表示されます"),
       cameraState==="ready"&&h(Fragment,{},
         /* この帯だけを録画映像にも焼き込み、下の操作ボタンは画面上だけに表示する */
-        h("div",{style:{position:"absolute",top:12,left:12,width:"min(260px, calc(100% - 24px))",overflow:"hidden",borderRadius:4,background:"rgba(5,12,24,.80)",color:"#fff",pointerEvents:"none"}},
-          h("div",{style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) 42px",minHeight:70}},
-            h("div",{style:{display:"grid",gridTemplateRows:"1fr 1fr"}},
-              h("div",{style:{display:"flex",alignItems:"center",padding:"0 10px",borderBottom:"1px solid rgba(255,255,255,.18)",fontSize:12,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},teamName||"塚口AFC"),
-              h("div",{style:{display:"flex",alignItems:"center",padding:"0 10px",fontSize:12,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},opponent||"対戦相手")
-            ),
-            h("div",{style:{display:"grid",gridTemplateRows:"1fr 1fr",background:"#1D4ED8",textAlign:"center",fontSize:23,fontWeight:900,lineHeight:"35px"}},
-              h("div",{style:{borderBottom:"1px solid rgba(255,255,255,.20)"}},ourScore),
-              h("div",{},theirScore)
-            )
+        h("div",{style:{position:"absolute",top:10,left:10,width:"min(226px, calc(100% - 20px))",boxSizing:"border-box",minHeight:51,padding:"7px 10px 6px 12px",overflow:"hidden",borderLeft:"3px solid #1D4ED8",background:"rgba(5,12,24,.80)",color:"#fff",fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",pointerEvents:"none"}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:6,minWidth:0,whiteSpace:"nowrap",fontSize:13,fontWeight:700,letterSpacing:".015em",lineHeight:1.2}},
+            h("span",{style:{minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}},teamName||"塚口AFC"),
+            h("span",{style:{flexShrink:0,color:"#8EE0BB",fontSize:15,fontWeight:900,letterSpacing:".05em"}},ourScore," – ",theirScore),
+            h("span",{style:{minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}},opponent||"対戦相手")
           ),
-          h("div",{style:{height:25,display:"flex",alignItems:"center",padding:"0 10px",fontSize:11,fontWeight:900,color:"#C4D0DE",letterSpacing:".03em"}},half,"　",formatClock(clockSeconds))
+          h("div",{style:{marginTop:5,fontSize:11,fontWeight:700,color:"#B8C4D5",letterSpacing:".07em",lineHeight:1}},half,"　",formatClock(clockSeconds))
         ),
         h("div",{style:{position:"absolute",left:10,right:10,bottom:10,display:"grid",gridTemplateColumns:"minmax(0,1fr) 100px minmax(0,1fr)",gap:7,alignItems:"stretch"}},
           h("div",{style:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) 32px",borderRadius:8,overflow:"hidden",background:"rgba(5,12,24,.82)"}},
