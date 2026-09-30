@@ -10104,6 +10104,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
   const captureVideoTracksRef=useRef([]);
   const overlayRef=useRef({});
   const [cameraState,setCameraState]=useState("idle");
+  const [cameraIsOpen,setCameraIsOpen]=useState(false);
   const [cameraMessage,setCameraMessage]=useState("");
   const [facingMode,setFacingMode]=useState("environment");
   const [captureQuality,setCaptureQuality]=useState("fhd");
@@ -10176,6 +10177,11 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     captureVideoTracksRef.current=[];
   };
   const stopCamera=()=>{
+    /* 状態を先に閉じる。iPadでMediaStreamのstopイベントが遅れても、
+       次の「カメラを起動」ボタンへ必ず戻す。 */
+    setCameraIsOpen(false);
+    setRecording(false);
+    setRecordingUsesOverlay(false);
     const recorder=recorderRef.current;
     if(recorder&&recorder.state!=="inactive"){
       try{recorder.stop();}catch(e){}
@@ -10183,6 +10189,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     stopCompositor();
     (streamRef.current?.getTracks?.()||[]).forEach(track=>track.stop());
     streamRef.current=null;
+    recorderRef.current=null;
     if(videoRef.current) videoRef.current.srcObject=null;
     setClockRunning(false);
     setActualCapture(null);
@@ -10198,6 +10205,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     stopCompositor();
     (streamRef.current?.getTracks?.()||[]).forEach(track=>track.stop());
     streamRef.current=null;
+    setCameraIsOpen(false);
     setCameraState("starting");
     setActualCapture(null);
     setCameraMessage("カメラを起動しています…");
@@ -10206,7 +10214,8 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
       width:{ideal:capturePreset.width},
       height:{ideal:capturePreset.height},
       aspectRatio:{ideal:16/9},
-      frameRate:{ideal:requestedFrameRate}
+      /* 選択したfpsを優先する。組み合わせが非対応なら下の安全な設定へ退避する。 */
+      frameRate:{exact:requestedFrameRate}
     };
     let stream;
     let withAudio=true;
@@ -10223,7 +10232,8 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
           stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:mode}},audio:false});
           withAudio=false;
           usedRequestedSettings=false;
-        }catch(fallbackError){
+      }catch(fallbackError){
+          setCameraIsOpen(false);
           setCameraState("error");
           setCameraMessage("カメラを起動できません。Safariのカメラ許可を確認してください。");
           return;
@@ -10238,14 +10248,41 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     }
     video.srcObject=stream;
     try{await video.play();}catch(e){}
-    const settings=stream.getVideoTracks?.()[0]?.getSettings?.()||{};
+    const videoTrack=stream.getVideoTracks?.()[0];
+    let frameRateExact=true;
+    if(videoTrack&&typeof videoTrack.applyConstraints==="function"){
+      try{
+        /* idealだけではiPad Safariが30fpsを維持することがあるため、
+           端末が選択値に対応している場合は明示的に固定する。 */
+        await videoTrack.applyConstraints({frameRate:{exact:requestedFrameRate}});
+      }catch(error){
+        frameRateExact=false;
+        try{await videoTrack.applyConstraints({frameRate:{ideal:requestedFrameRate,max:requestedFrameRate}});}catch(e){}
+      }
+    }
+    const settings=videoTrack?.getSettings?.()||{};
+    const actualFrameRate=Number(settings.frameRate)||0;
     setActualCapture({
       width:Number(settings.width)||0,
       height:Number(settings.height)||0,
-      frameRate:Number(settings.frameRate)||0
+      frameRate:actualFrameRate,
+      requestedFrameRate,
+      frameRateExact:frameRateExact&&(!actualFrameRate||Math.abs(actualFrameRate-requestedFrameRate)<1)
     });
+    videoTrack&&(videoTrack.onended=()=>{
+      if(streamRef.current!==stream) return;
+      streamRef.current=null;
+      setCameraIsOpen(false);
+      setCameraState("idle");
+      setClockRunning(false);
+      setCameraMessage("カメラが閉じられました。もう一度「カメラを起動」を押してください。");
+    });
+    setCameraIsOpen(true);
     setCameraState("ready");
-    setCameraMessage((withAudio?"ライブ映像を表示中":"マイクなしでライブ映像を表示中")+(usedRequestedSettings?"（"+capturePreset.label+" / "+requestedFrameRate+" fpsを指定）":"（端末対応の設定で起動）"));
+    const fpsNotice=actualFrameRate&&Math.abs(actualFrameRate-requestedFrameRate)>=1
+      ? "（実際のfps: "+Math.round(actualFrameRate)+"。この組み合わせでは選択値にできません）"
+      : "（"+capturePreset.label+" / "+requestedFrameRate+" fps）";
+    setCameraMessage((withAudio?"ライブ映像を表示中":"マイクなしでライブ映像を表示中")+(usedRequestedSettings?fpsNotice:"（端末対応の設定で起動）"));
   };
   const drawRecordedOverlay=(ctx,width,height)=>{
     const data=overlayRef.current||{};
@@ -10288,7 +10325,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
   const startRecording=()=>{
     const cameraStream=streamRef.current;
     const video=videoRef.current;
-    if(!cameraStream||!video||cameraState!=="ready"){
+    if(!cameraStream||!video||cameraState!=="ready"||!cameraIsOpen){
       setCameraMessage("先にカメラを起動してください。");
       return;
     }
@@ -10423,7 +10460,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     else setTheirScore(value=>Math.max(0,Number(value||0)+delta));
   };
   const buttonStyle={border:"none",borderRadius:10,fontWeight:800,cursor:"pointer",minHeight:42,padding:"0 14px"};
-  const captureSettingsLocked=cameraState==="ready"||cameraState==="starting"||recording;
+  const captureSettingsLocked=cameraIsOpen||cameraState==="starting"||recording;
 
   if(!isAdmin) return h("div",{className:"card",style:{padding:18,color:"#526274"}},"撮影機能は管理者用です。");
   return h("section",{className:"camera-tab",style:{display:"grid",gap:14}},
@@ -10467,8 +10504,8 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     ),
     h("div",{style:{position:"relative",overflow:"hidden",background:"#07111F",borderRadius:14,aspectRatio:"16 / 9",boxShadow:"0 10px 28px rgba(20,35,60,.18)"}},
       h("video",{ref:videoRef,playsInline:true,muted:true,style:{width:"100%",height:"100%",display:"block",objectFit:"cover",background:"#07111F"}}),
-      cameraState!=="ready"&&h("div",{style:{position:"absolute",inset:0,display:"grid",placeItems:"center",padding:24,textAlign:"center",color:"#B8C6D8",fontSize:13,fontWeight:700}},cameraState==="starting"?"カメラを起動しています…":"カメラを起動するとここにライブ映像が表示されます"),
-      cameraState==="ready"&&h(Fragment,{},
+      !cameraIsOpen&&h("div",{style:{position:"absolute",inset:0,display:"grid",placeItems:"center",padding:24,textAlign:"center",color:"#B8C6D8",fontSize:13,fontWeight:700}},cameraState==="starting"?"カメラを起動しています…":"カメラを起動するとここにライブ映像が表示されます"),
+      cameraIsOpen&&cameraState==="ready"&&h(Fragment,{},
         /* この帯だけを録画映像にも焼き込み、下の操作ボタンは画面上だけに表示する */
         h("div",{style:{position:"absolute",top:10,left:10,width:"fit-content",maxWidth:"calc(100% - 20px)",boxSizing:"border-box",minHeight:51,padding:"7px 10px 6px 12px",overflow:"hidden",borderLeft:"3px solid #1D4ED8",background:"rgba(5,12,24,.80)",color:"#fff",fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",pointerEvents:"none"}},
           h("div",{style:{display:"flex",alignItems:"center",gap:6,minWidth:0,whiteSpace:"nowrap",fontSize:13,fontWeight:700,letterSpacing:".015em",lineHeight:1.2}},
@@ -10500,7 +10537,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     h("canvas",{ref:canvasRef,style:{display:"none"}}),
     h("div",{className:"card",style:{padding:14,display:"grid",gap:12}},
       h("div",{style:{fontSize:12,lineHeight:1.6,color:"#5D6D80"}},"映像上の操作帯を直接タップして、得点・前後半・時計を更新します。保存動画には左上のスコアボードだけが入ります。"),
-      cameraState!=="ready"
+      !cameraIsOpen
         ? h("button",{onClick:()=>startCamera(),disabled:cameraState==="starting",style:{...buttonStyle,background:"#173B75",color:"#fff",fontSize:15}},cameraState==="starting"?"カメラを起動中…":"カメラを起動")
         : h("div",{style:{display:"grid",gridTemplateColumns:recording?"1fr":"1fr 1fr",gap:8}},
             recording
@@ -10510,7 +10547,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
                   h("button",{key:"switch",onClick:()=>{const next=facingMode==="environment"?"user":"environment";setFacingMode(next);startCamera(next);},style:{...buttonStyle,background:"#EEF2F7",color:"#324255"}},"カメラ切替")
                 ]
           ),
-      cameraState==="ready"&&!recording&&h("button",{onClick:stopCamera,style:{...buttonStyle,background:"transparent",color:"#64748B",border:"1px solid #D8E0EA",minHeight:36}},"カメラを閉じる"),
+      cameraIsOpen&&!recording&&h("button",{onClick:stopCamera,style:{...buttonStyle,background:"transparent",color:"#64748B",border:"1px solid #D8E0EA",minHeight:36}},"カメラを閉じる"),
       cameraMessage&&h("div",{style:{fontSize:12,lineHeight:1.55,color:cameraState==="error"?"#B4233B":"#5D6D80"}},cameraMessage),
       savedVideo&&h("div",{style:{padding:12,borderRadius:9,background:"#EFF8F3",display:"grid",gap:7}},
         h("div",{style:{fontSize:12,fontWeight:900,color:"#17633E"}},savedVideo.hasOverlay?"スコア表示入りの動画を作成しました":"動画を作成しました"),
