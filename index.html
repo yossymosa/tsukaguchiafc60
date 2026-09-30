@@ -10046,6 +10046,334 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
             boxShadow:"0 2px 6px rgba(0,0,0,0.18)",display:"block"}})))));
 }
 
+// ── 撮影（管理者向けテスト版）─────────────────────────────────────
+function CameraTab({results=[],schedules=[],isAdmin=false}) {
+  const videoRef=useRef(null);
+  const canvasRef=useRef(null);
+  const streamRef=useRef(null);
+  const recorderRef=useRef(null);
+  const chunksRef=useRef([]);
+  const drawFrameRef=useRef(null);
+  const captureVideoTracksRef=useRef([]);
+  const overlayRef=useRef({});
+  const [cameraState,setCameraState]=useState("idle");
+  const [cameraMessage,setCameraMessage]=useState("");
+  const [facingMode,setFacingMode]=useState("environment");
+  const [teamName,setTeamName]=useState("塚口AFC");
+  const [opponent,setOpponent]=useState("");
+  const [ourScore,setOurScore]=useState(0);
+  const [theirScore,setTheirScore]=useState(0);
+  const [half,setHalf]=useState("前半");
+  const [clockSeconds,setClockSeconds]=useState(0);
+  const [clockRunning,setClockRunning]=useState(false);
+  const [recording,setRecording]=useState(false);
+  const [recordingUsesOverlay,setRecordingUsesOverlay]=useState(false);
+  const [savedVideo,setSavedVideo]=useState(null);
+  const [selectedResultId,setSelectedResultId]=useState("");
+
+  const matchChoices=useMemo(()=>{
+    return (results||[]).map(result=>{
+      const schedule=findLinkedScheduleForResult(result,schedules)||{};
+      const date=String(schedule.date||result.date||"").trim();
+      const opponentName=String(result.opponent||schedule.opponent||"").trim();
+      const title=String(schedule.title||result.competition||result.tournament||"").trim();
+      return {
+        id:String(result.id||"").trim(),
+        opponent:opponentName,
+        label:[date,title,"vs "+(opponentName||"対戦相手未入力")].filter(Boolean).join(" / ")
+      };
+    }).filter(item=>item.id).sort((a,b)=>String(b.label).localeCompare(String(a.label),"ja"));
+  },[results,schedules]);
+  const defaultChoice=matchChoices[0]||null;
+
+  useEffect(()=>{
+    if(selectedResultId||!defaultChoice) return;
+    setSelectedResultId(defaultChoice.id);
+    setOpponent(defaultChoice.opponent);
+  },[defaultChoice?.id]);
+  useEffect(()=>{
+    if(!clockRunning) return;
+    const id=setInterval(()=>setClockSeconds(value=>value+1),1000);
+    return ()=>clearInterval(id);
+  },[clockRunning]);
+  useEffect(()=>()=>{
+    if(drawFrameRef.current) cancelAnimationFrame(drawFrameRef.current);
+    const recorder=recorderRef.current;
+    if(recorder&&recorder.state!=="inactive"){
+      try{recorder.stop();}catch(e){}
+    }
+    (streamRef.current?.getTracks?.()||[]).forEach(track=>track.stop());
+  },[]);
+  useEffect(()=>()=>{
+    if(savedVideo?.url) URL.revokeObjectURL(savedVideo.url);
+  },[savedVideo?.url]);
+
+  overlayRef.current={teamName,opponent,ourScore,theirScore,half,clockSeconds};
+  const formatClock=seconds=>{
+    const value=Math.max(0,Number(seconds)||0);
+    return String(Math.floor(value/60)).padStart(2,"0")+":"+String(value%60).padStart(2,"0");
+  };
+  const stopCompositor=()=>{
+    if(drawFrameRef.current) cancelAnimationFrame(drawFrameRef.current);
+    drawFrameRef.current=null;
+    (captureVideoTracksRef.current||[]).forEach(track=>{
+      try{track.stop();}catch(e){}
+    });
+    captureVideoTracksRef.current=[];
+  };
+  const stopCamera=()=>{
+    const recorder=recorderRef.current;
+    if(recorder&&recorder.state!=="inactive"){
+      try{recorder.stop();}catch(e){}
+    }
+    stopCompositor();
+    (streamRef.current?.getTracks?.()||[]).forEach(track=>track.stop());
+    streamRef.current=null;
+    if(videoRef.current) videoRef.current.srcObject=null;
+    setClockRunning(false);
+    setCameraState("idle");
+    setCameraMessage("");
+  };
+  const startCamera=async(mode=facingMode)=>{
+    if(!navigator.mediaDevices?.getUserMedia){
+      setCameraState("error");
+      setCameraMessage("このブラウザではカメラを使えません。iPadのSafariで開いてください。");
+      return;
+    }
+    stopCompositor();
+    (streamRef.current?.getTracks?.()||[]).forEach(track=>track.stop());
+    streamRef.current=null;
+    setCameraState("starting");
+    setCameraMessage("カメラを起動しています…");
+    const videoConstraints={
+      facingMode:{ideal:mode},
+      width:{ideal:1920},
+      height:{ideal:1080}
+    };
+    let stream;
+    let withAudio=true;
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({video:videoConstraints,audio:true});
+    }catch(audioError){
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({video:videoConstraints,audio:false});
+        withAudio=false;
+      }catch(error){
+        setCameraState("error");
+        setCameraMessage("カメラを起動できません。Safariのカメラ許可を確認してください。");
+        return;
+      }
+    }
+    streamRef.current=stream;
+    const video=videoRef.current;
+    if(!video){
+      stream.getTracks().forEach(track=>track.stop());
+      return;
+    }
+    video.srcObject=stream;
+    try{await video.play();}catch(e){}
+    setCameraState("ready");
+    setCameraMessage(withAudio?"ライブ映像を表示中":"マイクなしでライブ映像を表示中");
+  };
+  const drawRecordedOverlay=(ctx,width,height)=>{
+    const data=overlayRef.current||{};
+    const unit=Math.max(1,width/1440);
+    const margin=32*unit;
+    const barHeight=108*unit;
+    const barWidth=Math.min(width-margin*2,980*unit);
+    ctx.save();
+    ctx.fillStyle="rgba(5,12,24,.80)";
+    ctx.fillRect(margin,margin,barWidth,barHeight);
+    ctx.fillStyle="#ffffff";
+    ctx.textBaseline="middle";
+    ctx.font="700 "+(28*unit)+"px Arial, sans-serif";
+    ctx.fillText(String(data.teamName||"塚口AFC").slice(0,20),margin+28*unit,margin+39*unit);
+    ctx.fillText(String(data.opponent||"対戦相手").slice(0,20),margin+barWidth-28*unit-ctx.measureText(String(data.opponent||"対戦相手").slice(0,20)).width,margin+39*unit);
+    ctx.fillStyle="#8ee0bb";
+    ctx.font="800 "+(46*unit)+"px Arial, sans-serif";
+    const score=String(data.ourScore??0)+"  -  "+String(data.theirScore??0);
+    ctx.fillText(score,margin+(barWidth-ctx.measureText(score).width)/2,margin+42*unit);
+    ctx.fillStyle="#b8c4d5";
+    ctx.font="700 "+(20*unit)+"px Arial, sans-serif";
+    const time=String(data.half||"前半")+"  "+formatClock(data.clockSeconds);
+    ctx.fillText(time,margin+(barWidth-ctx.measureText(time).width)/2,margin+82*unit);
+    ctx.restore();
+  };
+  const makeFileName=()=>{
+    const data=overlayRef.current||{};
+    const clean=value=>String(value||"").replace(/[\\\\/:*?\"<>|]/g,"_").trim()||"対戦相手";
+    const now=new Date();
+    const date=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("");
+    return date+"_"+clean(data.teamName)+"_vs_"+clean(data.opponent)+"_"+String(data.half||"前半")+"_"+formatClock(data.clockSeconds).replace(":","-")+".mp4";
+  };
+  const startRecording=()=>{
+    const cameraStream=streamRef.current;
+    const video=videoRef.current;
+    if(!cameraStream||!video||cameraState!=="ready"){
+      setCameraMessage("先にカメラを起動してください。");
+      return;
+    }
+    if(typeof MediaRecorder==="undefined"){
+      setCameraMessage("このSafariでは録画に対応していません。ライブ表示のみ利用できます。");
+      return;
+    }
+    let outputStream=cameraStream;
+    let hasRecordedOverlay=false;
+    stopCompositor();
+    const canvas=canvasRef.current;
+    if(canvas&&typeof canvas.captureStream==="function"&&video.readyState>=2){
+      canvas.width=video.videoWidth||1280;
+      canvas.height=video.videoHeight||720;
+      const ctx=canvas.getContext("2d");
+      if(ctx){
+        const draw=()=>{
+          if(!streamRef.current) return;
+          ctx.drawImage(video,0,0,canvas.width,canvas.height);
+          drawRecordedOverlay(ctx,canvas.width,canvas.height);
+          drawFrameRef.current=requestAnimationFrame(draw);
+        };
+        draw();
+        const composedStream=canvas.captureStream(30);
+        cameraStream.getAudioTracks().forEach(track=>composedStream.addTrack(track));
+        outputStream=composedStream;
+        captureVideoTracksRef.current=composedStream.getVideoTracks();
+        hasRecordedOverlay=true;
+      }
+    }
+    const types=["video/mp4","video/webm;codecs=vp8,opus","video/webm"];
+    const mimeType=types.find(type=>!MediaRecorder.isTypeSupported||MediaRecorder.isTypeSupported(type));
+    let recorder;
+    try{
+      recorder=mimeType?new MediaRecorder(outputStream,{mimeType}):new MediaRecorder(outputStream);
+    }catch(error){
+      stopCompositor();
+      setCameraMessage("録画を開始できませんでした。Safariを最新の状態にして試してください。");
+      return;
+    }
+    chunksRef.current=[];
+    recorderRef.current=recorder;
+    recorder.ondataavailable=event=>{
+      if(event.data&&event.data.size>0) chunksRef.current.push(event.data);
+    };
+    recorder.onerror=()=>{
+      setCameraMessage("録画中にエラーが起きました。");
+      setRecording(false);
+      stopCompositor();
+    };
+    recorder.onstop=()=>{
+      const parts=chunksRef.current||[];
+      stopCompositor();
+      recorderRef.current=null;
+      setRecording(false);
+      if(!parts.length){
+        setCameraMessage("動画を保存できませんでした。");
+        return;
+      }
+      const blob=new Blob(parts,{type:recorder.mimeType||parts[0].type||"video/mp4"});
+      const url=URL.createObjectURL(blob);
+      setSavedVideo({url,name:makeFileName(),size:blob.size,hasOverlay:hasRecordedOverlay});
+      setCameraMessage("録画を停止しました。下の「動画を保存」から端末へ保存してください。");
+    };
+    try{
+      recorder.start(1000);
+      setSavedVideo(null);
+      setRecordingUsesOverlay(hasRecordedOverlay);
+      setRecording(true);
+      setClockRunning(true);
+      setCameraMessage(hasRecordedOverlay?"スコア表示を含めて録画中":"ライブ表示のまま録画中");
+    }catch(error){
+      stopCompositor();
+      setCameraMessage("録画を開始できませんでした。");
+    }
+  };
+  const stopRecording=()=>{
+    const recorder=recorderRef.current;
+    if(recorder&&recorder.state!=="inactive"){
+      setCameraMessage("動画を保存しています…");
+      recorder.stop();
+    }
+  };
+  const changeMatch=event=>{
+    const id=String(event.currentTarget.value||"");
+    setSelectedResultId(id);
+    const choice=matchChoices.find(item=>item.id===id);
+    if(choice) setOpponent(choice.opponent);
+  };
+  const adjustScore=(side,delta)=>{
+    if(side==="ours") setOurScore(value=>Math.max(0,Number(value||0)+delta));
+    else setTheirScore(value=>Math.max(0,Number(value||0)+delta));
+  };
+  const buttonStyle={border:"none",borderRadius:10,fontWeight:800,cursor:"pointer",minHeight:42,padding:"0 14px"};
+
+  if(!isAdmin) return h("div",{className:"card",style:{padding:18,color:"#526274"}},"撮影機能は管理者用です。");
+  return h("section",{className:"camera-tab",style:{display:"grid",gap:14}},
+    h("div",{className:"card",style:{padding:"16px 16px 14px",display:"grid",gap:12}},
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}},
+        h("div",{},h("div",{style:{fontSize:11,fontWeight:900,letterSpacing:".11em",color:"#3462D8"}},"MATCH CAMERA"),h("div",{style:{fontSize:18,fontWeight:900,color:"#162237",marginTop:3}},"スコア表示つき撮影")),
+        h("span",{style:{fontSize:11,fontWeight:800,padding:"5px 8px",borderRadius:6,background:recording?"#EAF9F1":"#EEF2F7",color:recording?"#157347":"#59677A"}},recording?"● REC":"TEST")),
+      h("div",{style:{fontSize:12,color:"#68778A",lineHeight:1.6}},"iPadのカメラをこの画面で使うテスト版です。映像の上でスコアを操作できます。"),
+      h("label",{style:{display:"grid",gap:5,fontSize:12,fontWeight:800,color:"#536276"}},"試合を選択（任意）",
+        h("select",{value:selectedResultId,onChange:changeMatch,disabled:recording,style:{width:"100%",height:39,border:"1px solid #D8E0EA",borderRadius:8,background:"#fff",padding:"0 10px",color:"#26364A"}},
+          h("option",{value:""},"試合を選ばずに撮影"),
+          matchChoices.map(choice=>h("option",{key:choice.id,value:choice.id},choice.label))
+        )
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        h("label",{style:{display:"grid",gap:5,fontSize:12,fontWeight:800,color:"#536276"}},"自チーム",h("input",{value:teamName,onInput:e=>setTeamName(e.currentTarget.value),disabled:recording,style:{height:39,boxSizing:"border-box",border:"1px solid #D8E0EA",borderRadius:8,padding:"0 10px",fontWeight:700}})),
+        h("label",{style:{display:"grid",gap:5,fontSize:12,fontWeight:800,color:"#536276"}},"対戦相手",h("input",{value:opponent,onInput:e=>setOpponent(e.currentTarget.value),disabled:recording,style:{height:39,boxSizing:"border-box",border:"1px solid #D8E0EA",borderRadius:8,padding:"0 10px",fontWeight:700}}))
+      )
+    ),
+    h("div",{style:{position:"relative",overflow:"hidden",background:"#07111F",borderRadius:14,aspectRatio:"16 / 9",boxShadow:"0 10px 28px rgba(20,35,60,.18)"}},
+      h("video",{ref:videoRef,playsInline:true,muted:true,style:{width:"100%",height:"100%",display:"block",objectFit:"cover",background:"#07111F"}}),
+      cameraState!=="ready"&&h("div",{style:{position:"absolute",inset:0,display:"grid",placeItems:"center",padding:24,textAlign:"center",color:"#B8C6D8",fontSize:13,fontWeight:700}},cameraState==="starting"?"カメラを起動しています…":"カメラを起動するとここにライブ映像が表示されます"),
+      cameraState==="ready"&&h("div",{style:{position:"absolute",top:12,left:12,right:12,minHeight:62,boxSizing:"border-box",padding:"8px 12px",background:"rgba(5,12,24,.80)",color:"#fff",display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,borderRadius:4}},
+        h("div",{style:{fontSize:13,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},teamName||"塚口AFC"),
+        h("div",{style:{textAlign:"center",lineHeight:1}},h("div",{style:{fontSize:25,fontWeight:900,color:"#8EE0BB",letterSpacing:".04em"}},ourScore," - ",theirScore),h("div",{style:{fontSize:10,fontWeight:800,color:"#C4D0DE",marginTop:4}},half,"　",formatClock(clockSeconds))),
+        h("div",{style:{fontSize:13,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textAlign:"right"}},opponent||"対戦相手")
+      ),
+      recording&&h("div",{style:{position:"absolute",right:12,bottom:12,background:"rgba(190,28,48,.93)",color:"#fff",fontSize:11,fontWeight:900,padding:"6px 9px",borderRadius:5}},"● REC",recordingUsesOverlay?"　SCORE ON":"")
+    ),
+    h("canvas",{ref:canvasRef,style:{display:"none"}}),
+    h("div",{className:"card",style:{padding:14,display:"grid",gap:12}},
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        [
+          ["自チーム",ourScore,"ours"],
+          ["対戦相手",theirScore,"theirs"]
+        ].map(([label,score,side])=>h("div",{key:side,style:{border:"1px solid #E0E7EF",borderRadius:10,padding:"10px 8px",textAlign:"center"}},
+          h("div",{style:{fontSize:11,fontWeight:800,color:"#617084",marginBottom:5}},label),
+          h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:12}},
+            h("button",{onClick:()=>adjustScore(side,-1),disabled:recording,style:{...buttonStyle,width:36,minHeight:34,padding:0,background:"#EEF2F7",color:"#324255",fontSize:20}},"−"),
+            h("span",{style:{minWidth:22,fontSize:26,fontWeight:900,color:"#162237"}},score),
+            h("button",{onClick:()=>adjustScore(side,1),disabled:recording,style:{...buttonStyle,width:36,minHeight:34,padding:0,background:"#1D4ED8",color:"#fff",fontSize:20}},"＋")
+          )
+        ))
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}},
+        h("button",{onClick:()=>setHalf(value=>value==="前半"?"後半":"前半"),disabled:recording,style:{...buttonStyle,background:"#EEF2F7",color:"#324255"}},half),
+        h("button",{onClick:()=>setClockRunning(value=>!value),style:{...buttonStyle,background:clockRunning?"#EFF7FF":"#EEF2F7",color:"#2352AD"}},clockRunning?"時計を止める":"時計を動かす"),
+        h("button",{onClick:()=>{setClockRunning(false);setClockSeconds(0);},disabled:recording,style:{...buttonStyle,background:"#EEF2F7",color:"#324255"}},"00:00に戻す")
+      ),
+      cameraState!=="ready"
+        ? h("button",{onClick:()=>startCamera(),disabled:cameraState==="starting",style:{...buttonStyle,background:"#173B75",color:"#fff",fontSize:15}},cameraState==="starting"?"カメラを起動中…":"カメラを起動")
+        : h("div",{style:{display:"grid",gridTemplateColumns:recording?"1fr":"1fr 1fr",gap:8}},
+            recording
+              ? h("button",{onClick:stopRecording,style:{...buttonStyle,background:"#B91C36",color:"#fff",fontSize:15}},"録画を停止")
+              : [
+                  h("button",{key:"record",onClick:startRecording,style:{...buttonStyle,background:"#B91C36",color:"#fff",fontSize:15}},"● 録画を開始"),
+                  h("button",{key:"switch",onClick:()=>{const next=facingMode==="environment"?"user":"environment";setFacingMode(next);startCamera(next);},style:{...buttonStyle,background:"#EEF2F7",color:"#324255"}},"カメラ切替")
+                ]
+          ),
+      cameraState==="ready"&&!recording&&h("button",{onClick:stopCamera,style:{...buttonStyle,background:"transparent",color:"#64748B",border:"1px solid #D8E0EA",minHeight:36}},"カメラを閉じる"),
+      cameraMessage&&h("div",{style:{fontSize:12,lineHeight:1.55,color:cameraState==="error"?"#B4233B":"#5D6D80"}},cameraMessage),
+      savedVideo&&h("div",{style:{padding:12,borderRadius:9,background:"#EFF8F3",display:"grid",gap:7}},
+        h("div",{style:{fontSize:12,fontWeight:900,color:"#17633E"}},savedVideo.hasOverlay?"スコア表示入りの動画を作成しました":"動画を作成しました"),
+        h("div",{style:{fontSize:11,color:"#47705C",overflowWrap:"anywhere"}},savedVideo.name," / ",Math.ceil(savedVideo.size/1024/1024*10)/10," MB"),
+        h("a",{href:savedVideo.url,download:savedVideo.name,style:{display:"inline-flex",alignItems:"center",justifyContent:"center",minHeight:40,borderRadius:8,background:"#17633E",color:"#fff",fontWeight:900,textDecoration:"none"}},"動画を保存")
+      )
+    )
+  );
+}
+
 // ── メインアプリ ───────────────────────────────────────────────
 function App() {
   const [user,setUser]=useState(()=>{
@@ -10468,6 +10796,7 @@ function App() {
     {k:"cal",    l:"日程"},
     {k:"match",  l:"試合"},
     {k:"dash",   l:"成績"},
+    ...(isAdmin?[{k:"camera",l:"撮影"}]:[]),
     {k:"docs",   l:"資料"},
     {k:"settings",l:"設定"},
   ];
@@ -10498,6 +10827,7 @@ function App() {
     cal:{eyebrow:"SCHEDULE",title:"日程",note:"予定・出欠・配車を管理"},
     match:{eyebrow:"MATCH CENTER",title:"試合",note:"大会ごとの記録を確認"},
     dash:{eyebrow:"PERFORMANCE",title:"成績",note:"チームと個人成績を分析"},
+    camera:{eyebrow:"MATCH CAMERA",title:"撮影",note:"スコア表示つきで試合を撮影"},
     member:{eyebrow:"ROSTER",title:"選手",note:"メンバー情報と記録"},
     memo:{eyebrow:"TEAM NOTES",title:"メモ",note:"チーム内のお知らせ"},
     docs:{eyebrow:"DOCUMENTS",title:"資料",note:"共有資料をまとめて管理"},
@@ -10508,6 +10838,7 @@ function App() {
     : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule,onImportFc2Practice:handleImportFc2Practice})
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,favoriteMap:myFavorites,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
+    : tab==="camera" ? h(CameraTab,{results,schedules,isAdmin})
     : tab==="member" ? h(MemberTab,{members,liftings})
     : tab==="memo" ? h(MemoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews})
     : tab==="docs" ? h(InfoTab,{news,isAdmin,user,onAdd:handleAddNews,onDelete:handleDeleteNews,onUpdate:handleUpdateNews,onReorder:handleReorderNewsDocs})
