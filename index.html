@@ -10342,16 +10342,16 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
         ].map(([label,score,side])=>h("div",{key:side,style:{border:"1px solid #E0E7EF",borderRadius:10,padding:"10px 8px",textAlign:"center"}},
           h("div",{style:{fontSize:11,fontWeight:800,color:"#617084",marginBottom:5}},label),
           h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",gap:12}},
-            h("button",{onClick:()=>adjustScore(side,-1),disabled:recording,style:{...buttonStyle,width:36,minHeight:34,padding:0,background:"#EEF2F7",color:"#324255",fontSize:20}},"−"),
+            h("button",{onClick:()=>adjustScore(side,-1),style:{...buttonStyle,width:36,minHeight:34,padding:0,background:"#EEF2F7",color:"#324255",fontSize:20}},"−"),
             h("span",{style:{minWidth:22,fontSize:26,fontWeight:900,color:"#162237"}},score),
-            h("button",{onClick:()=>adjustScore(side,1),disabled:recording,style:{...buttonStyle,width:36,minHeight:34,padding:0,background:"#1D4ED8",color:"#fff",fontSize:20}},"＋")
+            h("button",{onClick:()=>adjustScore(side,1),style:{...buttonStyle,width:36,minHeight:34,padding:0,background:"#1D4ED8",color:"#fff",fontSize:20}},"＋")
           )
         ))
       ),
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}},
-        h("button",{onClick:()=>setHalf(value=>value==="前半"?"後半":"前半"),disabled:recording,style:{...buttonStyle,background:"#EEF2F7",color:"#324255"}},half),
+        h("button",{onClick:()=>setHalf(value=>value==="前半"?"後半":"前半"),style:{...buttonStyle,background:"#EEF2F7",color:"#324255"}},half),
         h("button",{onClick:()=>setClockRunning(value=>!value),style:{...buttonStyle,background:clockRunning?"#EFF7FF":"#EEF2F7",color:"#2352AD"}},clockRunning?"時計を止める":"時計を動かす"),
-        h("button",{onClick:()=>{setClockRunning(false);setClockSeconds(0);},disabled:recording,style:{...buttonStyle,background:"#EEF2F7",color:"#324255"}},"00:00に戻す")
+        h("button",{onClick:()=>{setClockRunning(false);setClockSeconds(0);},style:{...buttonStyle,background:"#EEF2F7",color:"#324255"}},"00:00に戻す")
       ),
       cameraState!=="ready"
         ? h("button",{onClick:()=>startCamera(),disabled:cameraState==="starting",style:{...buttonStyle,background:"#173B75",color:"#fff",fontSize:15}},cameraState==="starting"?"カメラを起動中…":"カメラを起動")
