@@ -10179,7 +10179,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     const data=overlayRef.current||{};
     const unit=Math.max(1,width/1440);
     const margin=26*unit;
-    const boardWidth=Math.min(width-margin*2,330*unit);
+    const maxBoardWidth=Math.min(width-margin*2,330*unit);
     const boardHeight=58*unit;
     const team=String(data.teamName||"塚口AFC").slice(0,12);
     const opponentName=String(data.opponent||"対戦相手").slice(0,12);
@@ -10194,10 +10194,11 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     ctx.textBaseline="middle";
     let topFont=18*unit;
     ctx.font="700 "+topFont+"px 'Barlow Condensed', 'Noto Sans JP', sans-serif";
-    while(ctx.measureText(line).width>boardWidth-24*unit&&topFont>11*unit){
+    while(ctx.measureText(line).width>maxBoardWidth-24*unit&&topFont>11*unit){
       topFont-=1*unit;
       ctx.font="700 "+topFont+"px 'Barlow Condensed', 'Noto Sans JP', sans-serif";
     }
+    const boardWidth=Math.min(maxBoardWidth,Math.max(166*unit,ctx.measureText(line).width+24*unit));
     ctx.fillText(line,margin+12*unit,margin+22*unit);
     ctx.fillStyle="#b8c4d5";
     ctx.font="700 "+(14*unit)+"px 'Barlow Condensed', 'Noto Sans JP', sans-serif";
@@ -10334,7 +10335,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
       cameraState!=="ready"&&h("div",{style:{position:"absolute",inset:0,display:"grid",placeItems:"center",padding:24,textAlign:"center",color:"#B8C6D8",fontSize:13,fontWeight:700}},cameraState==="starting"?"カメラを起動しています…":"カメラを起動するとここにライブ映像が表示されます"),
       cameraState==="ready"&&h(Fragment,{},
         /* この帯だけを録画映像にも焼き込み、下の操作ボタンは画面上だけに表示する */
-        h("div",{style:{position:"absolute",top:10,left:10,width:"min(226px, calc(100% - 20px))",boxSizing:"border-box",minHeight:51,padding:"7px 10px 6px 12px",overflow:"hidden",borderLeft:"3px solid #1D4ED8",background:"rgba(5,12,24,.80)",color:"#fff",fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",pointerEvents:"none"}},
+        h("div",{style:{position:"absolute",top:10,left:10,width:"fit-content",maxWidth:"calc(100% - 20px)",boxSizing:"border-box",minHeight:51,padding:"7px 10px 6px 12px",overflow:"hidden",borderLeft:"3px solid #1D4ED8",background:"rgba(5,12,24,.80)",color:"#fff",fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",pointerEvents:"none"}},
           h("div",{style:{display:"flex",alignItems:"center",gap:6,minWidth:0,whiteSpace:"nowrap",fontSize:13,fontWeight:700,letterSpacing:".015em",lineHeight:1.2}},
             h("span",{style:{minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}},teamName||"塚口AFC"),
             h("span",{style:{flexShrink:0,color:"#8EE0BB",fontSize:15,fontWeight:900,letterSpacing:".05em"}},ourScore," – ",theirScore),
