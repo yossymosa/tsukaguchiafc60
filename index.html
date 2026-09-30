@@ -10179,24 +10179,32 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     const data=overlayRef.current||{};
     const unit=Math.max(1,width/1440);
     const margin=32*unit;
-    const barHeight=108*unit;
-    const barWidth=Math.min(width-margin*2,980*unit);
+    const scoreWidth=58*unit;
+    const rowHeight=35*unit;
+    const metaHeight=25*unit;
+    const boardWidth=Math.min(width-margin*2,360*unit);
+    const nameWidth=boardWidth-scoreWidth;
     ctx.save();
     ctx.fillStyle="rgba(5,12,24,.80)";
-    ctx.fillRect(margin,margin,barWidth,barHeight);
+    ctx.fillRect(margin,margin,boardWidth,rowHeight*2+metaHeight);
+    ctx.fillStyle="#1D4ED8";
+    ctx.fillRect(margin+nameWidth,margin,scoreWidth,rowHeight*2);
+    ctx.fillStyle="rgba(255,255,255,.18)";
+    ctx.fillRect(margin,margin+rowHeight,nameWidth,1*unit);
     ctx.fillStyle="#ffffff";
     ctx.textBaseline="middle";
-    ctx.font="700 "+(28*unit)+"px Arial, sans-serif";
-    ctx.fillText(String(data.teamName||"塚口AFC").slice(0,20),margin+28*unit,margin+39*unit);
-    ctx.fillText(String(data.opponent||"対戦相手").slice(0,20),margin+barWidth-28*unit-ctx.measureText(String(data.opponent||"対戦相手").slice(0,20)).width,margin+39*unit);
-    ctx.fillStyle="#8ee0bb";
-    ctx.font="800 "+(46*unit)+"px Arial, sans-serif";
-    const score=String(data.ourScore??0)+"  -  "+String(data.theirScore??0);
-    ctx.fillText(score,margin+(barWidth-ctx.measureText(score).width)/2,margin+42*unit);
+    ctx.font="700 "+(18*unit)+"px Arial, sans-serif";
+    ctx.fillText(String(data.teamName||"塚口AFC").slice(0,18),margin+12*unit,margin+rowHeight/2);
+    ctx.fillText(String(data.opponent||"対戦相手").slice(0,18),margin+12*unit,margin+rowHeight*1.5);
+    ctx.font="900 "+(25*unit)+"px Arial, sans-serif";
+    const ourScoreText=String(data.ourScore??0);
+    const theirScoreText=String(data.theirScore??0);
+    ctx.fillText(ourScoreText,margin+nameWidth+(scoreWidth-ctx.measureText(ourScoreText).width)/2,margin+rowHeight/2);
+    ctx.fillText(theirScoreText,margin+nameWidth+(scoreWidth-ctx.measureText(theirScoreText).width)/2,margin+rowHeight*1.5);
     ctx.fillStyle="#b8c4d5";
-    ctx.font="700 "+(20*unit)+"px Arial, sans-serif";
+    ctx.font="800 "+(15*unit)+"px Arial, sans-serif";
     const time=String(data.half||"前半")+"  "+formatClock(data.clockSeconds);
-    ctx.fillText(time,margin+(barWidth-ctx.measureText(time).width)/2,margin+82*unit);
+    ctx.fillText(time,margin+12*unit,margin+rowHeight*2+metaHeight/2);
     ctx.restore();
   };
   const makeFileName=()=>{
@@ -10328,10 +10336,18 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
       cameraState!=="ready"&&h("div",{style:{position:"absolute",inset:0,display:"grid",placeItems:"center",padding:24,textAlign:"center",color:"#B8C6D8",fontSize:13,fontWeight:700}},cameraState==="starting"?"カメラを起動しています…":"カメラを起動するとここにライブ映像が表示されます"),
       cameraState==="ready"&&h(Fragment,{},
         /* この帯だけを録画映像にも焼き込み、下の操作ボタンは画面上だけに表示する */
-        h("div",{style:{position:"absolute",top:12,left:12,right:12,minHeight:62,boxSizing:"border-box",padding:"8px 12px",background:"rgba(5,12,24,.80)",color:"#fff",display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,borderRadius:4,pointerEvents:"none"}},
-          h("div",{style:{fontSize:13,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},teamName||"塚口AFC"),
-          h("div",{style:{textAlign:"center",lineHeight:1}},h("div",{style:{fontSize:25,fontWeight:900,color:"#8EE0BB",letterSpacing:".04em"}},ourScore," - ",theirScore),h("div",{style:{fontSize:10,fontWeight:800,color:"#C4D0DE",marginTop:4}},half,"　",formatClock(clockSeconds))),
-          h("div",{style:{fontSize:13,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textAlign:"right"}},opponent||"対戦相手")
+        h("div",{style:{position:"absolute",top:12,left:12,width:"min(260px, calc(100% - 24px))",overflow:"hidden",borderRadius:4,background:"rgba(5,12,24,.80)",color:"#fff",pointerEvents:"none"}},
+          h("div",{style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) 42px",minHeight:70}},
+            h("div",{style:{display:"grid",gridTemplateRows:"1fr 1fr"}},
+              h("div",{style:{display:"flex",alignItems:"center",padding:"0 10px",borderBottom:"1px solid rgba(255,255,255,.18)",fontSize:12,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},teamName||"塚口AFC"),
+              h("div",{style:{display:"flex",alignItems:"center",padding:"0 10px",fontSize:12,fontWeight:900,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},opponent||"対戦相手")
+            ),
+            h("div",{style:{display:"grid",gridTemplateRows:"1fr 1fr",background:"#1D4ED8",textAlign:"center",fontSize:23,fontWeight:900,lineHeight:"35px"}},
+              h("div",{style:{borderBottom:"1px solid rgba(255,255,255,.20)"}},ourScore),
+              h("div",{},theirScore)
+            )
+          ),
+          h("div",{style:{height:25,display:"flex",alignItems:"center",padding:"0 10px",fontSize:11,fontWeight:900,color:"#C4D0DE",letterSpacing:".03em"}},half,"　",formatClock(clockSeconds))
         ),
         h("div",{style:{position:"absolute",left:10,right:10,bottom:10,display:"grid",gridTemplateColumns:"minmax(0,1fr) 100px minmax(0,1fr)",gap:7,alignItems:"stretch"}},
           h("div",{style:{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) 32px",borderRadius:8,overflow:"hidden",background:"rgba(5,12,24,.82)"}},
@@ -10354,7 +10370,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     ),
     h("canvas",{ref:canvasRef,style:{display:"none"}}),
     h("div",{className:"card",style:{padding:14,display:"grid",gap:12}},
-      h("div",{style:{fontSize:12,lineHeight:1.6,color:"#5D6D80"}},"映像の下にある操作帯を直接タップして、得点・前後半・時計を更新します。保存動画には上部のスコア帯だけが入ります。"),
+      h("div",{style:{fontSize:12,lineHeight:1.6,color:"#5D6D80"}},"映像上の操作帯を直接タップして、得点・前後半・時計を更新します。保存動画には左上のスコアボードだけが入ります。"),
       cameraState!=="ready"
         ? h("button",{onClick:()=>startCamera(),disabled:cameraState==="starting",style:{...buttonStyle,background:"#173B75",color:"#fff",fontSize:15}},cameraState==="starting"?"カメラを起動中…":"カメラを起動")
         : h("div",{style:{display:"grid",gridTemplateColumns:recording?"1fr":"1fr 1fr",gap:8}},
