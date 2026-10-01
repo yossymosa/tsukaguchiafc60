@@ -10925,7 +10925,7 @@ function App() {
   const safeSetTab=useCallback((nextTab,slideDirection="")=>{
     const t=String(nextTab||"").trim();
     if(!t){setTabSlideDirection("");return setTab("home");}
-    if(t==="member" || t==="memo"){setTabSlideDirection("");return setTab("home");}
+    if(t==="member" || t==="memo" || t==="camera"){setTabSlideDirection("");return setTab("home");}
     setTabSlideDirection(slideDirection);
     setTab(t);
   },[uiTabVisibility?.member,uiTabVisibility?.memo]);
@@ -10941,7 +10941,7 @@ function App() {
     } catch (e) {}
   },[user,deepLink,schedules,safeSetTab]);
   useEffect(()=>{
-    if(tab==="member" || tab==="memo") setTab("home");
+    if(tab==="member" || tab==="memo" || tab==="camera") setTab("home");
   },[tab]);
 
   // ── ページルーティング ────────────────────────────────────────
@@ -11013,7 +11013,6 @@ function App() {
     {k:"cal",    l:"日程"},
     {k:"match",  l:"試合"},
     {k:"dash",   l:"成績"},
-    ...(isAdmin?[{k:"camera",l:"撮影"}]:[]),
     {k:"docs",   l:"資料"},
     {k:"settings",l:"設定"},
   ];
