@@ -10254,14 +10254,41 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     try{await video.play();}catch(e){}
     const videoTrack=stream.getVideoTracks?.()[0];
     let frameRateExact=true;
+    let qualityFirstFallback=false;
     if(videoTrack&&typeof videoTrack.applyConstraints==="function"){
-      try{
-        /* idealだけではiPad Safariが30fpsを維持することがあるため、
-           端末が選択値に対応している場合は明示的に固定する。 */
-        await videoTrack.applyConstraints({frameRate:{exact:requestedFrameRate}});
-      }catch(error){
-        frameRateExact=false;
-        try{await videoTrack.applyConstraints({frameRate:{ideal:requestedFrameRate,max:requestedFrameRate}});}catch(e){}
+      const before=videoTrack.getSettings?.()||{};
+      const beforeLongEdge=Math.max(Number(before.width)||0,Number(before.height)||0);
+      const beforeShortEdge=Math.min(Number(before.width)||0,Number(before.height)||0);
+      const targetLongEdge=Math.max(capturePreset.width,capturePreset.height);
+      const targetShortEdge=Math.min(capturePreset.width,capturePreset.height);
+      const needsHigherResolution=requestedFrameRate>=60&&beforeLongEdge&&beforeShortEdge&&(beforeLongEdge<targetLongEdge||beforeShortEdge<targetShortEdge);
+      if(needsHigherResolution){
+        try{
+          /* 先にFHD/60を明示指定。できる端末では低解像度の60fpsを避ける。 */
+          await videoTrack.applyConstraints({
+            width:{exact:capturePreset.width},
+            height:{exact:capturePreset.height},
+            frameRate:{exact:requestedFrameRate}
+          });
+        }catch(error){
+          frameRateExact=false;
+          try{
+            /* FHD/60が無理なら、粗い60fpsではなく画質を優先する。 */
+            await videoTrack.applyConstraints({
+              width:{ideal:capturePreset.width},
+              height:{ideal:capturePreset.height},
+              frameRate:{ideal:30,max:30}
+            });
+            qualityFirstFallback=true;
+          }catch(fallbackError){}
+        }
+      }else{
+        try{
+          await videoTrack.applyConstraints({frameRate:{exact:requestedFrameRate}});
+        }catch(error){
+          frameRateExact=false;
+          try{await videoTrack.applyConstraints({frameRate:{ideal:requestedFrameRate,max:requestedFrameRate}});}catch(e){}
+        }
       }
     }
     const settings=videoTrack?.getSettings?.()||{};
@@ -10283,7 +10310,9 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     });
     setCameraIsOpen(true);
     setCameraState("ready");
-    const fpsNotice=actualFrameRate&&Math.abs(actualFrameRate-requestedFrameRate)>=1
+    const fpsNotice=qualityFirstFallback
+      ? "（60fpsでは解像度が下がるため、画質優先で "+Math.round(actualFrameRate||30)+" fps）"
+      : actualFrameRate&&Math.abs(actualFrameRate-requestedFrameRate)>=1
       ? "（実際のfps: "+Math.round(actualFrameRate)+"。この組み合わせでは選択値にできません）"
       : "（"+capturePreset.label+" / "+requestedFrameRate+" fps）";
     setCameraMessage((withAudio?"ライブ映像を表示中":"マイクなしでライブ映像を表示中")+(usedRequestedSettings?fpsNotice:"（端末対応の設定で起動）"));
