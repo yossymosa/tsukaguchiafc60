@@ -1803,6 +1803,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setYoutubeRecordingSyncing(false);
   };
   const youtubeRenameShortcutUrl="shortcuts://run-shortcut?name="+encodeURIComponent("AFC動画一括命名");
+  const youtubeNativeCameraShortcutUrl="shortcuts://run-shortcut?name="+encodeURIComponent("AFC標準カメラ");
   const prepareYoutubeRenameBatch=async()=>{
     if(!isAdmin||youtubeBatchPreparing) return;
     setYoutubeBatchPreparing(true);
@@ -3048,7 +3049,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   ];
   const youtubeInputBlock = isAdmin&&h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
     h("div",{className:"match-section-heading",style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:6}},"VIDEO CAPTURE"),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"「撮影」を押すとカメラを開きます。撮影完了時に動画の実ファイル名と容量を記録するため、名前の変更は不要です。"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"画質を保つため、iPadの標準カメラで撮影してから、この画面で動画を選びます。動画の実ファイル名と容量を記録するため、名前の変更は不要です。"),
     h("input",{ref:youtubeCaptureInputRef,type:"file",accept:"video/*",capture:"environment",onChange:saveYoutubeCapturedVideo,style:{display:"none"}}),
     h("input",{ref:youtubeVideoPickerRef,type:"file",accept:"video/*",onChange:saveYoutubeCapturedVideo,style:{display:"none"}}),
     h("div",{style:{display:"grid",gap:8,marginBottom:12}},
@@ -3064,13 +3065,17 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           linked
             ? h("a",{href:item.url,target:"_blank",rel:"noopener noreferrer",style:{display:"block",textAlign:"center",background:"#fff",border:"1px solid #B8C6D5",borderRadius:6,padding:"8px 10px",color:"#102A43",fontSize:12,fontWeight:800,textDecoration:"none"}},"YouTube動画を開く")
             : h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}},
-                h("button",{onClick:()=>beginYoutubeVideoCapture(item.key,true),disabled:youtubeCaptureSaving,style:{...css.bS,padding:"9px 7px",fontSize:12,opacity:youtubeCaptureSaving?0.6:1,cursor:youtubeCaptureSaving?"wait":"pointer"}},youtubeCaptureSaving&&youtubeCaptureTarget===item.key?"記録中...":"撮影"),
+                h("a",{href:youtubeNativeCameraShortcutUrl,style:{display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center",background:"#173B75",border:"1px solid #173B75",borderRadius:6,padding:"9px 7px",color:"#fff",fontSize:12,fontWeight:800,textDecoration:"none"}},"標準カメラを開く"),
                 h("button",{onClick:()=>beginYoutubeVideoCapture(item.key,false),disabled:youtubeCaptureSaving,style:{...css.bG,padding:"9px 7px",fontSize:12,opacity:youtubeCaptureSaving?0.6:1,cursor:youtubeCaptureSaving?"wait":"pointer"}},"撮影済みを選ぶ")
               )
         );
       })
     ),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"YouTubeへは、ここで撮影・選択した同じ動画をそのままアップロードしてください。処理後に自動でリンクされます。"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"標準カメラで撮影 → この画面に戻る → 「撮影済みを選ぶ」→ 同じ動画をYouTubeへアップロード、の順です。処理後に自動でリンクされます。"),
+    h("details",{style:{marginBottom:12,background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,padding:"0 10px"}},
+      h("summary",{style:{padding:"9px 0",cursor:"pointer",fontSize:11,fontWeight:800,color:"#475569"}},"初回のみ：標準カメラを開く設定"),
+      h("div",{style:{padding:"0 0 10px",fontSize:11,color:"#64748B",lineHeight:1.65}},"iPadの「ショートカット」で新規ショートカットを作り、アクション「Appを開く」から「カメラ」を選んで、名前を「AFC標準カメラ」にしてください。以後は上の「標準カメラを開く」から純正カメラが開きます。")
+    ),
     h("details",{style:{marginBottom:12,background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,padding:"0 10px"}},
       h("summary",{style:{padding:"9px 0",cursor:"pointer",fontSize:11,fontWeight:800,color:"#475569"}},"カメラ連携が使えない場合"),
       h("div",{style:{padding:"0 0 10px",fontSize:11,color:"#64748B",lineHeight:1.65,marginBottom:8}},"撮影済みを選ぶボタンで動画のファイル名を取得できます。旧方式の一括命名もここから利用できます。"),
