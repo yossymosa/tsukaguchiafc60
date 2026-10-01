@@ -10214,25 +10214,17 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     setCameraState("starting");
     setActualCapture(null);
     setCameraMessage("カメラを起動しています…");
-    const requestedQualityConstraints={
-      facingMode:{ideal:mode},
-      /* 60fpsを優先した結果、640pなどへ落ちるのを防ぐ。 */
-      width:{min:capturePreset.width,ideal:capturePreset.width},
-      height:{min:capturePreset.height,ideal:capturePreset.height},
-      aspectRatio:{ideal:16/9}
-    };
     const videoConstraints={
-      ...requestedQualityConstraints,
-      frameRate:{exact:requestedFrameRate}
+      facingMode:{ideal:mode},
+      width:{ideal:capturePreset.width},
+      height:{ideal:capturePreset.height},
+      aspectRatio:{ideal:16/9},
+      frameRate:{ideal:requestedFrameRate}
     };
     const qualityFirstFallbackConstraints={
-      ...requestedQualityConstraints,
-      frameRate:{ideal:Math.min(requestedFrameRate,30),max:30}
-    };
-    const fullHdFallbackConstraints={
       facingMode:{ideal:mode},
-      width:{min:1920,ideal:1920},
-      height:{min:1080,ideal:1080},
+      width:{ideal:capturePreset.width},
+      height:{ideal:capturePreset.height},
       aspectRatio:{ideal:16/9},
       frameRate:{ideal:30,max:30}
     };
@@ -10248,31 +10240,37 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
         withAudio=false;
       }catch(error){
         try{
-          /* 60fpsが無理でも、まずは選択解像度のまま30fpsへ戻す。 */
-          stream=await navigator.mediaDevices.getUserMedia({video:qualityFirstFallbackConstraints,audio:false});
+          stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:mode}},audio:false});
           withAudio=false;
           usedRequestedSettings=false;
-          qualityPreservedFallback=true;
-        }catch(qualityFallbackError){
-          try{
-            /* 4Kが難しい機種でも、荒い低解像度ではなくフルHDを優先する。 */
-            stream=await navigator.mediaDevices.getUserMedia({video:fullHdFallbackConstraints,audio:false});
-            withAudio=false;
-            usedRequestedSettings=false;
-            qualityPreservedFallback=true;
-          }catch(fullHdFallbackError){
-            try{
-              stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:mode}},audio:false});
-              withAudio=false;
-              usedRequestedSettings=false;
-            }catch(fallbackError){
-              setCameraIsOpen(false);
-              setCameraState("error");
-              setCameraMessage("カメラを起動できません。Safariのカメラ許可を確認してください。");
-              return;
-            }
-          }
+        }catch(fallbackError){
+          setCameraIsOpen(false);
+          setCameraState("error");
+          setCameraMessage("カメラを起動できません。Safariのカメラ許可を確認してください。");
+          return;
         }
+      }
+    }
+    /* 60fpsを優先して解像度が下がった場合だけ、画質側を優先して撮り直す。
+       `min` / `exact` 制約はiPadで起動そのものを失敗させることがあるため使わない。 */
+    const initialSettings=stream.getVideoTracks?.()[0]?.getSettings?.()||{};
+    const initialLongEdge=Math.max(Number(initialSettings.width)||0,Number(initialSettings.height)||0);
+    const initialShortEdge=Math.min(Number(initialSettings.width)||0,Number(initialSettings.height)||0);
+    const targetLongEdge=Math.max(capturePreset.width,capturePreset.height);
+    const targetShortEdge=Math.min(capturePreset.width,capturePreset.height);
+    if(requestedFrameRate>=60&&initialLongEdge&&initialShortEdge&&(initialLongEdge<targetLongEdge||initialShortEdge<targetShortEdge)){
+      let qualityStream=null;
+      try{
+        qualityStream=await navigator.mediaDevices.getUserMedia({video:qualityFirstFallbackConstraints,audio:withAudio});
+      }catch(error){
+        try{qualityStream=await navigator.mediaDevices.getUserMedia({video:qualityFirstFallbackConstraints,audio:false});}catch(e){}
+      }
+      if(qualityStream){
+        stream.getTracks().forEach(track=>track.stop());
+        stream=qualityStream;
+        withAudio=stream.getAudioTracks().length>0;
+        usedRequestedSettings=false;
+        qualityPreservedFallback=true;
       }
     }
     streamRef.current=stream;
@@ -10284,25 +10282,13 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
     video.srcObject=stream;
     try{await video.play();}catch(e){}
     const videoTrack=stream.getVideoTracks?.()[0];
-    let frameRateExact=true;
-    if(usedRequestedSettings&&videoTrack&&typeof videoTrack.applyConstraints==="function"){
-      try{
-        /* idealだけではiPad Safariが30fpsを維持することがあるため、
-           端末が選択値に対応している場合は明示的に固定する。 */
-        await videoTrack.applyConstraints({frameRate:{exact:requestedFrameRate}});
-      }catch(error){
-        frameRateExact=false;
-        try{await videoTrack.applyConstraints({frameRate:{ideal:requestedFrameRate,max:requestedFrameRate}});}catch(e){}
-      }
-    }
     const settings=videoTrack?.getSettings?.()||{};
     const actualFrameRate=Number(settings.frameRate)||0;
     setActualCapture({
       width:Number(settings.width)||0,
       height:Number(settings.height)||0,
       frameRate:actualFrameRate,
-      requestedFrameRate,
-      frameRateExact:frameRateExact&&(!actualFrameRate||Math.abs(actualFrameRate-requestedFrameRate)<1)
+      requestedFrameRate
     });
     videoTrack&&(videoTrack.onended=()=>{
       if(streamRef.current!==stream) return;
