@@ -35,6 +35,7 @@ const HEADER_SCHEDULE_TITLE = "\u8a66\u5408\u5206\u985e";
 const COL_YT = "YouTubeURL";
 const COL_YT_1ST = "\u524d\u534aURL";
 const COL_YT_2ND = "\u5f8c\u534aURL";
+const COL_YT_3RD = "3rdURL";
 const COL_YT_PK = "PK\u6226URL";
 const COL_YT_RECORDINGS = "YouTube\u64ae\u5f71\u30d5\u30a1\u30a4\u30eb";
 const COL_YT_DESC = "YouTube\u6982\u8981";
@@ -206,6 +207,7 @@ function syncYouTubePlaylist(req) {
     yt: ensureColumn_(resultSh, resultHeaders, COL_YT),
     yt1st: ensureColumn_(resultSh, resultHeaders, COL_YT_1ST),
     yt2nd: ensureColumn_(resultSh, resultHeaders, COL_YT_2ND),
+    yt3rd: ensureColumn_(resultSh, resultHeaders, COL_YT_3RD),
     ytPk: ensureColumn_(resultSh, resultHeaders, COL_YT_PK),
     recordings: ensureColumn_(resultSh, resultHeaders, COL_YT_RECORDINGS),
   };
@@ -242,7 +244,7 @@ function syncYouTubePlaylist(req) {
     const plan = planKey ? planned[planKey] : null;
     if (!plan || linkedKeys[planKey]) return;
 
-    const targetCol = plan.key === "first" ? col.yt1st : plan.key === "second" ? col.yt2nd : plan.key === "pk" ? col.ytPk : col.yt;
+    const targetCol = plan.key === "first" ? col.yt1st : plan.key === "second" ? col.yt2nd : plan.key === "third" ? col.yt3rd : plan.key === "pk" ? col.ytPk : col.yt;
     const currentUrl = String(resultSh.getRange(plan.row, targetCol).getValue() || "").trim();
     if (currentUrl) {
       linkedKeys[planKey] = true;
@@ -258,7 +260,7 @@ function syncYouTubePlaylist(req) {
     linkedCount++;
     updatesByResult[plan.resultId] = {
       ...(updatesByResult[plan.resultId] || {id: plan.resultId}),
-      [plan.key === "first" ? "youtubeUrl1st" : plan.key === "second" ? "youtubeUrl2nd" : plan.key === "pk" ? "youtubeUrlPk" : "youtubeUrl"]: video.url,
+      [plan.key === "first" ? "youtubeUrl1st" : plan.key === "second" ? "youtubeUrl2nd" : plan.key === "third" ? "youtubeUrl3rd" : plan.key === "pk" ? "youtubeUrlPk" : "youtubeUrl"]: video.url,
     };
   });
 
@@ -276,7 +278,7 @@ function linkYoutubeVideoFromApp_(req) {
   const key = String(req && req.part || "full").trim().toLowerCase();
   const videoUrl = String(req && req.videoUrl || "").trim();
   if (!resultId) throw new Error("試合IDが見つかりません");
-  if (!["full", "first", "second", "pk"].includes(key)) throw new Error("動画の種類が正しくありません");
+  if (!["full", "first", "second", "third", "pk"].includes(key)) throw new Error("動画の種類が正しくありません");
   if (!extractYoutubeVideoIdForMetadata_(videoUrl)) throw new Error("YouTube URLが正しくありません");
 
   const ss = SpreadsheetApp.openById(getSpreadsheetIdForYoutube_());
@@ -297,10 +299,10 @@ function linkYoutubeVideoFromApp_(req) {
   const metadata = buildYoutubeMetadataForRecording_(context, key, videoUrl);
   updateYoutubeMetadataFromApp_({videos: [metadata]});
 
-  const columnName = key === "first" ? COL_YT_1ST : key === "second" ? COL_YT_2ND : key === "pk" ? COL_YT_PK : COL_YT;
+  const columnName = key === "first" ? COL_YT_1ST : key === "second" ? COL_YT_2ND : key === "third" ? COL_YT_3RD : key === "pk" ? COL_YT_PK : COL_YT;
   const column = ensureColumn_(resultSh, headers, columnName);
   resultSh.getRange(row, column).setValue(videoUrl);
-  const urlKey = key === "first" ? "youtubeUrl1st" : key === "second" ? "youtubeUrl2nd" : key === "pk" ? "youtubeUrlPk" : "youtubeUrl";
+  const urlKey = key === "first" ? "youtubeUrl1st" : key === "second" ? "youtubeUrl2nd" : key === "third" ? "youtubeUrl3rd" : key === "pk" ? "youtubeUrlPk" : "youtubeUrl";
   return {updatedResult: {id: resultId, [urlKey]: videoUrl}, metadata: {title: metadata.title, description: metadata.description}};
 }
 
@@ -315,7 +317,7 @@ function loadYoutubeRecordingPlans_(resultSh, headers) {
     if (!resultId) return;
     let recordingFiles = {};
     try { recordingFiles = JSON.parse(String(row[recordingIndex] || "{}")); } catch (e) { recordingFiles = {}; }
-    ["full", "first", "second", "pk"].forEach(key => {
+    ["full", "first", "second", "third", "pk"].forEach(key => {
       const entry = recordingFiles && recordingFiles[key] || {};
       const fileName = String(entry.fileName || "").trim();
       const fileKey = normalizeYoutubeRecordingFileName_(fileName);
@@ -434,9 +436,9 @@ function buildYoutubeResultContext_(resultSh, headers, row, scheduleDetails, goa
 }
 
 function buildYoutubeMetadataForRecording_(context, key, videoUrl) {
-  const half = key === "first" ? "1st" : key === "second" ? "2nd" : key === "pk" ? "PK戦" : "";
+  const half = key === "first" ? "1st" : key === "second" ? "2nd" : key === "third" ? "3rd" : key === "pk" ? "PK戦" : "";
   return {
-    label: key === "first" ? "1st" : key === "second" ? "2nd" : key === "pk" ? "PK" : "通し",
+    label: key === "first" ? "1st" : key === "second" ? "2nd" : key === "third" ? "3rd" : key === "pk" ? "PK" : "試合動画",
     url: videoUrl,
     title: makeYoutubeTitleFromContext_(context, half),
     description: key === "pk" ? makeYoutubePkDescriptionFromContext_(context) : makeYoutubeDescriptionFromContext_(context, half),

@@ -46,7 +46,7 @@ const MAPS = {
     "ID":"id", "日付":"date", "相手チーム":"opponent", "相手カラー":"opponentColor",
     "試合形式":"formatLabel", "第○試合":"gameNumber", "メモ":"memo",
     "スケジュールID":"scheduleId", "種類":"type",
-    "YouTubeURL":"youtubeUrl", "前半URL":"youtubeUrl1st", "後半URL":"youtubeUrl2nd", "PK戦URL":"youtubeUrlPk",
+    "YouTubeURL":"youtubeUrl", "前半URL":"youtubeUrl1st", "後半URL":"youtubeUrl2nd", "3rdURL":"youtubeUrl3rd", "PK戦URL":"youtubeUrlPk",
     "YouTube撮影ファイル":"youtubeRecordingFiles",
     "PK塚口":"pkOur", "PK相手":"pkTheir",
     "PKキッカー":"pkKickers", "PK相手シーケンス":"pkTheirSeq",
@@ -223,7 +223,7 @@ function parseYoutubeRecordingFiles_(value) {
   try { parsed = typeof value === "string" ? JSON.parse(value || "{}") : (value || {}); } catch (e) { parsed = {}; }
   if (!parsed || typeof parsed !== "object") return {};
   const result = {};
-  ["full", "first", "second", "pk"].forEach(key => {
+  ["full", "first", "second", "third", "pk"].forEach(key => {
     const entry = parsed[key];
     const fileName = String(entry && entry.fileName || "").trim();
     if (!fileName) return;
@@ -242,8 +242,15 @@ function makeYoutubeRecordingFileName_(dateKey, resultId, gameNumber, part) {
   const resultPart = String(resultId || "MATCH").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(-10) || "MATCH";
   const gameDigits = String(gameNumber || "").replace(/\D/g, "");
   const gamePart = String(gameDigits || "0").padStart(2, "0").slice(-2);
-  const suffix = {full: "FULL", first: "1ST", second: "2ND", pk: "PK"}[part] || "VIDEO";
+  const suffix = {full: "FULL", first: "1ST", second: "2ND", third: "3RD", pk: "PK"}[part] || "VIDEO";
   return "AFC_" + datePart + "_" + resultPart + "_G" + gamePart + "_" + suffix + ".MOV";
+}
+
+function youtubeRecordingPartsForFormat_(formatLabel) {
+  const raw = String(formatLabel || "").trim();
+  if (/3\s*本|3rd|三本|三本目/i.test(raw)) return ["first", "second", "third"];
+  if (/ハーフ|half|前後半|2\s*本|二本/i.test(raw)) return ["first", "second"];
+  return ["first"];
 }
 
 function addHoursIso(hours) {
@@ -1535,6 +1542,7 @@ function dispatch(req) {
         youtubeUrl:   r.youtubeUrl   || "",
         youtubeUrl1st:r.youtubeUrl1st|| "",
         youtubeUrl2nd:r.youtubeUrl2nd|| "",
+        youtubeUrl3rd:r.youtubeUrl3rd|| "",
         youtubeUrlPk: r.youtubeUrlPk || "",
       };
       appendObject("試合結果", MAPS.result, obj);
@@ -1597,7 +1605,7 @@ function dispatch(req) {
       if (!resultId) throw new Error("試合IDがありません");
       const rawPlans = req.recordingFiles && typeof req.recordingFiles === "object" ? req.recordingFiles : {};
       const recordingFiles = {};
-      ["full", "first", "second", "pk"].forEach(key => {
+      ["full", "first", "second", "third", "pk"].forEach(key => {
         const raw = rawPlans[key];
         if (!raw || typeof raw !== "object") return;
         const fileName = String(raw.fileName || "").trim();
@@ -1646,8 +1654,8 @@ function dispatch(req) {
       const values = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
       const indexOf = name => headers.indexOf(name);
       const idx = {
-        id: indexOf("ID"), date: indexOf("日付"), opponent: indexOf("相手チーム"), gameNumber: indexOf("第○試合"),
-        recordings: indexOf("YouTube撮影ファイル"), full: indexOf("YouTubeURL"), first: indexOf("前半URL"), second: indexOf("後半URL"), pk: indexOf("PK戦URL")
+        id: indexOf("ID"), date: indexOf("日付"), opponent: indexOf("相手チーム"), format: indexOf("試合形式"), gameNumber: indexOf("第○試合"),
+        recordings: indexOf("YouTube撮影ファイル"), full: indexOf("YouTubeURL"), first: indexOf("前半URL"), second: indexOf("後半URL"), third: indexOf("3rdURL"), pk: indexOf("PK戦URL")
       };
       if (idx.id < 0 || idx.date < 0 || idx.recordings < 0) throw new Error("動画命名に必要な列が見つかりません");
       const selectedIndex = values.findIndex(row => String(row[idx.id] || "").trim() === resultId);
@@ -1656,9 +1664,9 @@ function dispatch(req) {
       const dateKey = youtubeRecordingDateKey_(values[selectedIndex][idx.date], tz);
       if (!dateKey) throw new Error("試合日が正しくありません");
 
-      const partOrder = {full: 0, first: 1, second: 2, pk: 3};
-      const partLabel = {full: "通し動画", first: "1st", second: "2nd", pk: "PK戦"};
-      const partColumn = {full: idx.full, first: idx.first, second: idx.second, pk: idx.pk};
+      const partOrder = {full: 0, first: 1, second: 2, third: 3, pk: 4};
+      const partLabel = {full: "試合動画", first: "1st", second: "2nd", third: "3rd", pk: "PK戦"};
+      const partColumn = {full: idx.full, first: idx.first, second: idx.second, third: idx.third, pk: idx.pk};
       const batchItems = [];
       let currentRecordingFiles = {};
 
@@ -1668,18 +1676,20 @@ function dispatch(req) {
         if (!rowResultId) return;
         const recordingFiles = parseYoutubeRecordingFiles_(row[idx.recordings]);
         const hasPlan = Object.keys(recordingFiles).length > 0;
-        const hasLinkedVideo = [idx.full, idx.first, idx.second, idx.pk].some(col => col >= 0 && String(row[col] || "").trim());
+        const hasLinkedVideo = [idx.full, idx.first, idx.second, idx.third, idx.pk].some(col => col >= 0 && String(row[col] || "").trim());
 
-        // 通常は試合ごとに通し動画1本として準備する。前半・後半・PKは画面から必要な分だけ追加する。
+        // 試合形式と同じ本数だけ名前を準備する。
         if (!hasPlan && !hasLinkedVideo) {
-          recordingFiles.full = {
-            fileName: makeYoutubeRecordingFileName_(dateKey, rowResultId, row[idx.gameNumber], "full"),
-            preparedAt: nowIso(),
-          };
+          youtubeRecordingPartsForFormat_(idx.format >= 0 ? row[idx.format] : "").forEach(part => {
+            recordingFiles[part] = {
+              fileName: makeYoutubeRecordingFileName_(dateKey, rowResultId, row[idx.gameNumber], part),
+              preparedAt: nowIso(),
+            };
+          });
           sh.getRange(rowIndex + 2, idx.recordings + 1).setValue(JSON.stringify(recordingFiles));
         }
 
-        ["full", "first", "second", "pk"].forEach(part => {
+        ["full", "first", "second", "third", "pk"].forEach(part => {
           const entry = recordingFiles[part];
           const fileName = String(entry && entry.fileName || "").trim();
           const videoCol = partColumn[part];
@@ -1729,7 +1739,7 @@ function dispatch(req) {
       // 試合詳細（動画・PK・シュート・スタッツなど）を試合結果シートに保存
       ensureSheetColumnsByMap("試合結果", MAPS.result);
       const resultWrites = [
-        ["YouTubeURL", "youtubeUrl"], ["前半URL", "youtubeUrl1st"], ["後半URL", "youtubeUrl2nd"], ["PK戦URL", "youtubeUrlPk"],
+        ["YouTubeURL", "youtubeUrl"], ["前半URL", "youtubeUrl1st"], ["後半URL", "youtubeUrl2nd"], ["3rdURL", "youtubeUrl3rd"], ["PK戦URL", "youtubeUrlPk"],
         ["PK塚口", "pkOur"], ["PK相手", "pkTheir"],
         ["PKキッカー", "pkKickers", true], ["PK相手シーケンス", "pkTheirSeq", true],
         ["塚口シュート", "ourShots"], ["相手シュート", "theirShots"], ["選手別シュート", "shotStats", true],

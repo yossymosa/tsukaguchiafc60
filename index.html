@@ -1600,7 +1600,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       const raw=typeof value==="string"?JSON.parse(value||"{}"):value;
       if(!raw||typeof raw!=="object") return {};
       const next={};
-      ["full","first","second","pk"].forEach(key=>{
+      ["full","first","second","third","pk"].forEach(key=>{
         const item=raw[key];
         const fileName=String(item?.fileName||"").trim();
         if(fileName) next[key]={
@@ -1617,6 +1617,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     full:String(goalDraftInit?.ytUrls?.full || match.youtubeUrl || ""),
     first:String(goalDraftInit?.ytUrls?.first || match.youtubeUrl1st || ""),
     second:String(goalDraftInit?.ytUrls?.second || match.youtubeUrl2nd || ""),
+    third:String(goalDraftInit?.ytUrls?.third || match.youtubeUrl3rd || ""),
     pk:String(goalDraftInit?.ytUrls?.pk || match.youtubeUrlPk || "")
   }));
   const [youtubeRecordingFiles,setYoutubeRecordingFiles]=useState(()=>parseYoutubeRecordingFiles(match.youtubeRecordingFiles));
@@ -1721,7 +1722,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     const matchPart=String(match?.id||"MATCH").replace(/[^A-Za-z0-9]/g,"").toUpperCase().slice(-10)||"MATCH";
     const gameDigits=String(match?.gameNumber||"0").replace(/\D/g,"");
     const gamePart=String(gameDigits||"0").padStart(2,"0").slice(-2);
-    const suffix={full:"FULL",first:"1ST",second:"2ND",pk:"PK"}[key]||"VIDEO";
+    const suffix={full:"FULL",first:"1ST",second:"2ND",third:"3RD",pk:"PK"}[key]||"VIDEO";
     return `AFC_${datePart}_${matchPart}_G${gamePart}_${suffix}.MOV`;
   };
   const prepareYoutubeRecording=async(key)=>{
@@ -2157,6 +2158,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       youtubeUrl:ytUrls.full,
       youtubeUrl1st:ytUrls.first,
       youtubeUrl2nd:ytUrls.second,
+      youtubeUrl3rd:ytUrls.third,
       youtubeUrlPk:ytUrls.pk,
       ourShots:ourShotsTotal,
       theirShots:theirShotsTotal,
@@ -2203,6 +2205,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       youtubeUrl: ytUrls.full,
       youtubeUrl1st: ytUrls.first,
       youtubeUrl2nd: ytUrls.second,
+      youtubeUrl3rd: ytUrls.third,
       youtubeUrlPk: ytUrls.pk
     };
     if (!shouldKeepLegacyShotTotals) {
@@ -2336,6 +2339,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       full:String(draft?.ytUrls?.full || match.youtubeUrl || ""),
       first:String(draft?.ytUrls?.first || match.youtubeUrl1st || ""),
       second:String(draft?.ytUrls?.second || match.youtubeUrl2nd || ""),
+      third:String(draft?.ytUrls?.third || match.youtubeUrl3rd || ""),
       pk:String(draft?.ytUrls?.pk || match.youtubeUrlPk || ""),
     });
     setYoutubeRecordingFiles(parseYoutubeRecordingFiles(match?.youtubeRecordingFiles));
@@ -2377,7 +2381,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setMatchClockSec(Math.max(0, Number(draft?.matchClockSec || 0) || 0));
     clockBaseSecRef.current = 0;
     clockStartMsRef.current = 0;
-  }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.pkOur, match?.pkTheir, match?.pkKickers, match?.pkTheirSeq, match?.formation, match?.formationSlots, match?.substitutions, match?.youtubeUrl, match?.youtubeUrl1st, match?.youtubeUrl2nd, match?.youtubeUrlPk, match?.youtubeRecordingFiles]);
+  }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.pkOur, match?.pkTheir, match?.pkKickers, match?.pkTheirSeq, match?.formation, match?.formationSlots, match?.substitutions, match?.youtubeUrl, match?.youtubeUrl1st, match?.youtubeUrl2nd, match?.youtubeUrl3rd, match?.youtubeUrlPk, match?.youtubeRecordingFiles]);
   useEffect(() => {
     writeShotCache(match?.id, shotByHalf, theirShotsByHalf);
   }, [match?.id, JSON.stringify(shotByHalf), JSON.stringify(theirShotsByHalf)]);
@@ -2684,14 +2688,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const youtubeFullUrl = normalizeYoutubeLink(ytUrls.full || match.youtubeUrl);
   const youtubeFirstUrl = normalizeYoutubeLink(ytUrls.first || match.youtubeUrl1st);
   const youtubeSecondUrl = normalizeYoutubeLink(ytUrls.second || match.youtubeUrl2nd);
+  const youtubeThirdUrl = normalizeYoutubeLink(ytUrls.third || match.youtubeUrl3rd);
   const youtubePkUrl = normalizeYoutubeLink(ytUrls.pk || match.youtubeUrlPk);
   const youtubeCandidates = (visibleHalfOptions.length===1
-    ? [{key:"first",label:"前半",url:youtubeFirstUrl || youtubeFullUrl || youtubeSecondUrl}]
-    : [
-        {key:"full",label:"通し",url:youtubeFullUrl},
-        {key:"first",label:"前半",url:youtubeFirstUrl},
-        {key:"second",label:"後半",url:youtubeSecondUrl},
-      ]).concat((pkOn || youtubePkUrl) ? [{key:"pk",label:"PK",url:youtubePkUrl}] : []);
+    ? [{key:"first",label:"1st",url:youtubeFirstUrl || youtubeFullUrl || youtubeSecondUrl || youtubeThirdUrl}]
+    : visibleHalfOptions.map(half => ({
+        key:half==="1st"?"first":half==="2nd"?"second":"third",
+        label:half,
+        url:half==="1st"?youtubeFirstUrl:half==="2nd"?youtubeSecondUrl:youtubeThirdUrl
+      }))).concat((pkOn || youtubePkUrl) ? [{key:"pk",label:"PK",url:youtubePkUrl}] : []);
   const youtubeSeen = new Set();
   const youtubeLinks = youtubeCandidates.filter(x=>{
     if(!x || !x.url) return false;
@@ -2699,7 +2704,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     youtubeSeen.add(x.url);
     return true;
   });
-  const youtubeKeyLabel = key => key==="first" ? "1st" : key==="second" ? "2nd" : key==="pk" ? "PK" : "FULL";
+  const youtubeKeyLabel = key => key==="first" ? "1st" : key==="second" ? "2nd" : key==="third" ? "3rd" : key==="pk" ? "PK" : "FULL";
   const halfLabelMap = {"1st":"前半","2nd":"後半","3rd":"3本目"};
   const halfTabLabel = half => halfLabelMap[normalizeHalfLabel(half)] || String(half || "");
   const scoreboardCols = ["total", ...visibleHalfOptions];
@@ -3096,10 +3101,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     )
   );
   const youtubeRecordingDefinitions=[
-    {key:"full",label:"通し動画",url:youtubeFullUrl},
-    ...(visibleHalfOptions.includes("1st")?[{key:"first",label:"1st",suffix:"1ST",url:youtubeFirstUrl}]:[]),
-    ...(visibleHalfOptions.includes("2nd")?[{key:"second",label:"2nd",suffix:"2ND",url:youtubeSecondUrl}]:[]),
-    {key:"pk",label:"PK戦",url:youtubePkUrl}
+    ...(visibleHalfOptions.length===1
+      ? [{key:"first",label:"1st",url:youtubeFirstUrl || youtubeFullUrl}]
+      : visibleHalfOptions.map(half => ({
+          key:half==="1st"?"first":half==="2nd"?"second":"third",
+          label:half,
+          suffix:half.toUpperCase(),
+          url:half==="1st"?youtubeFirstUrl:half==="2nd"?youtubeSecondUrl:youtubeThirdUrl
+        }))),
+    ...(pkOn || youtubePkUrl || youtubeRecordingFiles.pk ? [{key:"pk",label:"PK戦",url:youtubePkUrl}] : [])
   ];
   const youtubeInputBlock = isAdmin&&h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
     h("div",{className:"match-section-heading",style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:6}},"VIDEO CAPTURE"),
@@ -9196,7 +9206,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       const raw = typeof value === "string" ? JSON.parse(value || "{}") : value;
       if (!raw || typeof raw !== "object") return {};
       const next = {};
-      ["full","first","second","pk"].forEach(key => {
+      ["full","first","second","third","pk"].forEach(key => {
         const item = raw[key];
         if (!item || typeof item !== "object") return;
         const fileName = String(item.fileName || "").trim();
@@ -9216,18 +9226,14 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   const buildPlans = rows => Object.fromEntries((rows || []).map(row => [
     String(row.id || ""), parseRecordingFiles(row.youtubeRecordingFiles)
   ]));
-  const resultSignature = (results || []).map(row => [row.id,row.youtubeRecordingFiles,row.youtubeUrl,row.youtubeUrl1st,row.youtubeUrl2nd,row.youtubeUrlPk].join("|")).join("¦");
+  const resultSignature = (results || []).map(row => [row.id,row.youtubeRecordingFiles,row.youtubeUrl,row.youtubeUrl1st,row.youtubeUrl2nd,row.youtubeUrl3rd,row.youtubeUrlPk].join("|")).join("¦");
   const [plans,setPlans] = useState(()=>buildPlans(results));
   const [saving,setSaving] = useState("");
   const [savedNotice,setSavedNotice] = useState("");
   const [syncing,setSyncing] = useState(false);
   useEffect(()=>setPlans(buildPlans(results)),[resultSignature]);
 
-  const saveVideo = async (row,key,event) => {
-    // iPadの写真ライブラリでは currentTarget が外れることがあるため target を優先する。
-    const input = event?.target || event?.currentTarget;
-    const file = input?.files && input.files[0];
-    if (input) input.value = "";
+  const saveVideo = async (row,key,file) => {
     if (saving) return;
     if (!file) {
       alert("動画を取得できませんでした。写真ライブラリで動画を選び、選択完了まで待ってからもう一度お試しください。");
@@ -9240,7 +9246,11 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       alert("動画ファイル名を取得できませんでした。");
       return;
     }
-    const current = plans[resultId] || parseRecordingFiles(row.youtubeRecordingFiles);
+    // 以前の「通し動画」など、現在の試合形式に含まれない予約は残さない。
+    // これにより、ハーフの試合を前後半2本で選んだ時に古い通し動画が誤って同期されない。
+    const allowedKeys = new Set([...videoPartsForRow(row).map(part=>part.key), "pk"]);
+    const rawCurrent = plans[resultId] || parseRecordingFiles(row.youtubeRecordingFiles);
+    const current = Object.fromEntries(Object.entries(rawCurrent).filter(([partKey])=>allowedKeys.has(partKey)));
     const next = {...current,[key]:{
       fileName,
       fileSize,
@@ -9267,6 +9277,18 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       setSaving("");
     }
   };
+  const handleVideoPicker = (row,key,event) => {
+    // iPadの写真ライブラリは input と change のどちらか一方しか返さないことがある。
+    // 両方を受けつつ、同一選択を二重に保存しない。
+    const input = event?.currentTarget || event?.target;
+    if (!input || input.__afcPickerHandling) return;
+    const file = input.files && input.files[0];
+    if (!file) return;
+    input.__afcPickerHandling = true;
+    setTimeout(()=>{ try { input.__afcPickerHandling = false; } catch (e) {} }, 0);
+    input.value = "";
+    void saveVideo(row,key,file);
+  };
   const syncScheduleVideos = async () => {
     if (syncing || !results.length) return;
     setSyncing(true);
@@ -9287,15 +9309,21 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
     }
   };
   const videoParts = [
-    {key:"full",label:"試合動画",urlKey:"youtubeUrl"},
-    {key:"first",label:"前半",urlKey:"youtubeUrl1st"},
-    {key:"second",label:"後半",urlKey:"youtubeUrl2nd"},
-    {key:"pk",label:"PK戦",urlKey:"youtubeUrlPk"}
+    {key:"full",label:"試合動画",urlKeys:["youtubeUrl","youtubeUrl1st"]},
+    {key:"first",label:"1st",urlKeys:["youtubeUrl1st"]},
+    {key:"second",label:"2nd",urlKeys:["youtubeUrl2nd"]},
+    {key:"third",label:"3rd",urlKeys:["youtubeUrl3rd"]},
+    {key:"pk",label:"PK戦",urlKeys:["youtubeUrlPk"]}
   ];
+  const videoPartsForRow = row => {
+    const halves = getHalfOptionsByFormatLabel(row?.formatLabel || "");
+    if (halves.length === 1) return [videoParts[1]];
+    return halves.map(half => half === "1st" ? videoParts[1] : half === "2nd" ? videoParts[2] : videoParts[3]);
+  };
   const renderPicker = (row,part,compact=false) => {
     const resultId = String(row?.id || "").trim();
     const plan = plans[resultId]?.[part.key];
-    const linked = String(row?.[part.urlKey] || "").trim();
+    const linked = (part.urlKeys || []).some(key => String(row?.[key] || "").trim());
     const busy = saving === resultId+":"+part.key;
     return h("div",{key:part.key,style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:8,padding:compact?"7px 0":"9px 10px",background:compact?"transparent":"#F8FAFC",border:compact?"none":"1px solid #D8E0E8",borderRadius:compact?0:6}},
       h("div",{style:{minWidth:0}},
@@ -9303,23 +9331,21 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
         plan?.fileName && h("div",{style:{fontSize:10,color:"#64748B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},plan.fileName+(plan.fileSize?" / "+(plan.fileSize/1024/1024).toFixed(1)+" MB":"")),
         savedNotice===resultId+":"+part.key&&!busy&&h("div",{style:{fontSize:10,color:"#15803D",fontWeight:800,marginTop:2}},"動画名を記録しました"),
         linked && h("div",{style:{fontSize:10,color:"#15803D",fontWeight:800,marginTop:2}},"YouTubeリンク済み")),
-      h("label",{style:{position:"relative",overflow:"hidden",display:"inline-flex",alignItems:"center",justifyContent:"center",minHeight:34,padding:"0 10px",border:"1px solid #B8C6D5",borderRadius:6,background:"#fff",color:"#102A43",fontSize:11,fontWeight:800,cursor:busy?"wait":"pointer",opacity:busy?0.65:1,whiteSpace:"nowrap"}},
-        h("input",{type:"file",accept:"video/*,.mov,.mp4,.m4v",onChange:event=>saveVideo(row,part.key,event),disabled:!!saving,ariaLabel:part.label+"を選ぶ",style:{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0,cursor:busy?"wait":"pointer"}}),
-        busy?"記録中...":"動画を選ぶ"));
+      h("div",{style:{minWidth:118,opacity:busy?0.65:1}},
+        busy
+          ? h("div",{style:{minHeight:34,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 10px",border:"1px solid #B8C6D5",borderRadius:6,fontSize:11,fontWeight:800,color:"#64748B"}},"記録中...")
+          : h("input",{type:"file",accept:"video/*,.mov,.mp4,.m4v",onChange:event=>handleVideoPicker(row,part.key,event),onInput:event=>handleVideoPicker(row,part.key,event),disabled:!!saving,ariaLabel:part.label+"の動画を選ぶ",style:{display:"block",width:"100%",maxWidth:150,fontSize:11,color:"#102A43"}})));
   };
 
   if (!isAdmin || !results.length) return null;
   return h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
     h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"DAY VIDEO UPLOAD"),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"この日程の試合ごとに、撮影済み動画を選びます。写真ライブラリから動画を選ぶと、すぐ下にファイル名が出ます。同じファイルをYouTubeへアップロードした後、最後にまとめて反映してください。"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"試合形式に合わせた本数だけ表示します。iPadでは右側の「ファイルを選択」から写真ライブラリを開き、動画を選んでください。選択後、すぐ下に動画名が出ます。"),
     h("div",{style:{display:"grid",gap:8,marginBottom:12}},
       results.map((row,index)=>h("div",{key:row.id||index,style:{padding:"10px",border:"1px solid #D8E0E8",borderRadius:7,background:"#fff"}},
         h("div",{style:{fontSize:12,fontWeight:900,color:"#102A43",marginBottom:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"第"+(row.gameNumber||index+1)+"試合  vs "+(row.opponent||"相手未設定")),
-        renderPicker(row,videoParts[0]),
-        h("details",{style:{marginTop:7}},
-          h("summary",{style:{fontSize:10,fontWeight:800,color:"#64748B",cursor:"pointer"}},"前半・後半・PK戦を別動画にする場合"),
-          h("div",{style:{marginTop:5,padding:"0 9px",border:"1px solid #E2E8F0",borderRadius:6}},videoParts.slice(1).map(part=>renderPicker(row,part,true)))
-        )
+        videoPartsForRow(row).map(part=>renderPicker(row,part)),
+        (plans[String(row.id || "")]?.pk || row.youtubeUrlPk || String(row.pkKickers || "").trim() || Number(row.pkOur || 0) || Number(row.pkTheir || 0)) && renderPicker(row,videoParts[4],true)
       ))
     ),
     h("button",{onClick:syncScheduleVideos,disabled:syncing||!!saving,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:syncing||saving?0.65:1,cursor:syncing||saving?"wait":"pointer"}},syncing?"この日程を反映中...":"この日程を一括反映")
