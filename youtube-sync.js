@@ -262,25 +262,47 @@ function syncYouTubePlaylist(req) {
 }
 
 function fetchRecentOwnedYoutubeVideosForTitleLink_() {
-  if (typeof YouTube === "undefined" || !YouTube.Channels || !YouTube.PlaylistItems || !YouTube.Videos) {
-    throw new Error("YouTube API連携が未設定です。Apps Scriptの「サービス」で YouTube Data API を追加してください");
+  // チャンネル所有者としての認可があれば、アップロード直後の動画も取得できる。
+  try {
+    if (typeof YouTube === "undefined" || !YouTube.Channels || !YouTube.PlaylistItems || !YouTube.Videos) {
+      throw new Error("YouTube拡張サービスが未設定です");
+    }
+    const channelResponse = YouTube.Channels.list("contentDetails", {mine: true, maxResults: 1});
+    const channel = channelResponse && channelResponse.items && channelResponse.items[0];
+    const uploadsPlaylistId = channel && channel.contentDetails && channel.contentDetails.relatedPlaylists && channel.contentDetails.relatedPlaylists.uploads;
+    if (!uploadsPlaylistId) throw new Error("アップロード一覧を取得できません");
+    const playlistResponse = YouTube.PlaylistItems.list("snippet", {playlistId: uploadsPlaylistId, maxResults: 50});
+    const ids = (playlistResponse && playlistResponse.items || [])
+      .map(item => item && item.snippet && item.snippet.resourceId && item.snippet.resourceId.videoId)
+      .filter(Boolean);
+    if (!ids.length) return [];
+    const detailResponse = YouTube.Videos.list("snippet", {id: ids.join(",")});
+    return (detailResponse && detailResponse.items || []).map(item => ({
+      id: String(item.id || ""),
+      url: "https://www.youtube.com/watch?v=" + String(item.id || ""),
+      title: String(item.snippet && item.snippet.title || ""),
+      publishedAt: String(item.snippet && item.snippet.publishedAt || "")
+    })).filter(item => item.id && item.title);
+  } catch (ownerError) {
+    // ブランドチャンネル等でGAS実行アカウントと所有者が異なる場合は、
+    // 従来どおり公開プレイリストをAPIキーで読む。
+    Logger.log("Owner upload-list access unavailable; falling back to configured playlists: " + ownerError);
+    const apiKey = getYoutubeApiKey_();
+    const seen = {};
+    const videos = [];
+    PLAYLIST_URLS.forEach(url => {
+      const playlistId = extractPlaylistId_(url);
+      if (!playlistId) return;
+      fetchPlaylistVideos_(apiKey, playlistId, []).forEach(video => {
+        const key = String(video.url || "").trim();
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        videos.push(video);
+      });
+    });
+    if (!videos.length) throw new Error("YouTube動画を取得できませんでした。設定済みの再生リストに動画が入っているか確認してください");
+    return videos;
   }
-  const channelResponse = YouTube.Channels.list("contentDetails", {mine: true, maxResults: 1});
-  const channel = channelResponse && channelResponse.items && channelResponse.items[0];
-  const uploadsPlaylistId = channel && channel.contentDetails && channel.contentDetails.relatedPlaylists && channel.contentDetails.relatedPlaylists.uploads;
-  if (!uploadsPlaylistId) throw new Error("チームYouTubeチャンネルのアップロード一覧を取得できません。チャンネル所有者アカウントで認可してください");
-  const playlistResponse = YouTube.PlaylistItems.list("snippet", {playlistId: uploadsPlaylistId, maxResults: 50});
-  const ids = (playlistResponse && playlistResponse.items || [])
-    .map(item => item && item.snippet && item.snippet.resourceId && item.snippet.resourceId.videoId)
-    .filter(Boolean);
-  if (!ids.length) return [];
-  const detailResponse = YouTube.Videos.list("snippet", {id: ids.join(",")});
-  return (detailResponse && detailResponse.items || []).map(item => ({
-    id: String(item.id || ""),
-    url: "https://www.youtube.com/watch?v=" + String(item.id || ""),
-    title: String(item.snippet && item.snippet.title || ""),
-    publishedAt: String(item.snippet && item.snippet.publishedAt || "")
-  })).filter(item => item.id && item.title);
 }
 
 // ============================================================
