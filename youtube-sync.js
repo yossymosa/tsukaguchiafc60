@@ -170,6 +170,44 @@ function syncYouTubePlaylist() {
   return {linkedCount: linkedCount, pendingCount: pendingCount, updatedResults: Object.keys(updatesByResult).map(id => updatesByResult[id])};
 }
 
+// ============================================================
+// ファイル名突合が使えない場合の直接リンク。
+// 動画URLを指定して、タイトル・概要欄だけをテンプレートで更新する。
+// status / playlist は更新しないため、YouTube側で付けた既存設定を維持する。
+// ============================================================
+function linkYoutubeVideoFromApp_(req) {
+  const resultId = String(req && req.resultId || "").trim();
+  const key = String(req && req.part || "full").trim().toLowerCase();
+  const videoUrl = String(req && req.videoUrl || "").trim();
+  if (!resultId) throw new Error("試合IDが見つかりません");
+  if (!["full", "first", "second", "pk"].includes(key)) throw new Error("動画の種類が正しくありません");
+  if (!extractYoutubeVideoIdForMetadata_(videoUrl)) throw new Error("YouTube URLが正しくありません");
+
+  const ss = SpreadsheetApp.openById(getSpreadsheetIdForYoutube_());
+  const resultSh = ss.getSheetByName(SHEET_RESULTS);
+  const scheduleSh = ss.getSheetByName(SHEET_SCHEDULES);
+  if (!resultSh || resultSh.getLastRow() < 2) throw new Error("試合結果が見つかりません");
+  const headers = resultSh.getRange(1, 1, 1, resultSh.getLastColumn()).getValues()[0].map(String);
+  const idIndex = headers.indexOf(HEADER_ID);
+  if (idIndex < 0) throw new Error("試合結果のID列が見つかりません");
+  const rows = resultSh.getRange(2, 1, resultSh.getLastRow() - 1, resultSh.getLastColumn()).getValues();
+  const rowIndex = rows.findIndex(row => String(row[idIndex] || "").trim() === resultId);
+  if (rowIndex < 0) throw new Error("対象の試合が見つかりません");
+  const row = rowIndex + 2;
+
+  const scheduleDetails = loadYoutubeScheduleDetails_(scheduleSh);
+  const goalsByResult = loadYoutubeGoalsByResult_(ss.getSheetByName("得点記録"));
+  const context = buildYoutubeResultContext_(resultSh, headers, row, scheduleDetails, goalsByResult);
+  const metadata = buildYoutubeMetadataForRecording_(context, key, videoUrl);
+  updateYoutubeMetadataFromApp_({videos: [metadata]});
+
+  const columnName = key === "first" ? COL_YT_1ST : key === "second" ? COL_YT_2ND : key === "pk" ? COL_YT_PK : COL_YT;
+  const column = ensureColumn_(resultSh, headers, columnName);
+  resultSh.getRange(row, column).setValue(videoUrl);
+  const urlKey = key === "first" ? "youtubeUrl1st" : key === "second" ? "youtubeUrl2nd" : key === "pk" ? "youtubeUrlPk" : "youtubeUrl";
+  return {updatedResult: {id: resultId, [urlKey]: videoUrl}, metadata: {title: metadata.title, description: metadata.description}};
+}
+
 function loadYoutubeRecordingPlans_(resultSh, headers) {
   const idIndex = headers.indexOf(HEADER_ID);
   const recordingIndex = headers.indexOf(COL_YT_RECORDINGS);

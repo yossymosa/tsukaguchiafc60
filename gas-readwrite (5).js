@@ -1571,6 +1571,20 @@ function dispatch(req) {
       return updateYoutubeMetadataFromApp_(req);
     }
 
+    // ── YouTube URLの直接反映（管理者のみ） ────────────────────
+    case "linkYoutubeVideo": {
+      const userId = String(req.userId || "").trim();
+      const operator = getUserById(userId);
+      const operatorRole = String(operator && operator.role || "").trim();
+      if (!operator || !["admin", "super_admin"].includes(operatorRole)) {
+        throw new Error("YouTubeへの反映は管理者のみ実行できます");
+      }
+      if (typeof linkYoutubeVideoFromApp_ !== "function") {
+        throw new Error("YouTube連携スクリプトが見つかりません。youtube-sync.jsも同じGASプロジェクトへ貼り付けてください");
+      }
+      return linkYoutubeVideoFromApp_(req);
+    }
+
     // ── YouTube撮影ファイル名の予約（管理者のみ） ─────────────
     case "saveYoutubeRecordingPlan": {
       const userId = String(req.userId || "").trim();

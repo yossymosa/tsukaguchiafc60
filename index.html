@@ -1622,6 +1622,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const [youtubeRecordingFiles,setYoutubeRecordingFiles]=useState(()=>parseYoutubeRecordingFiles(match.youtubeRecordingFiles));
   const [youtubeRecordingBusy,setYoutubeRecordingBusy]=useState("");
   const [youtubeRecordingSyncing,setYoutubeRecordingSyncing]=useState(false);
+  const [youtubeUrlApplying,setYoutubeUrlApplying]=useState("");
   const [youtubeCaptureTarget,setYoutubeCaptureTarget]=useState("");
   const [youtubeCaptureSaving,setYoutubeCaptureSaving]=useState(false);
   const [youtubeBatchPreparing,setYoutubeBatchPreparing]=useState(false);
@@ -1801,6 +1802,32 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       alert("YouTube同期エラー: "+(e?.message||e));
     }
     setYoutubeRecordingSyncing(false);
+  };
+  const applyYoutubeUrl=async key=>{
+    if(!isAdmin||youtubeUrlApplying) return;
+    const videoUrl=normalizeYoutubeLink(ytUrls[key]);
+    if(!videoUrl){
+      alert("先にYouTube動画のURLを貼り付けてください。");
+      return;
+    }
+    setYoutubeUrlApplying(key);
+    try{
+      const result=await api("linkYoutubeVideo",{
+        userId:String(user?.id||"").trim(),
+        resultId:String(match?.id||"").trim(),
+        part:key,
+        videoUrl
+      });
+      const updated=result?.updatedResult&&typeof result.updatedResult==="object"?result.updatedResult:{};
+      setYtUrls(prev=>({...prev,[key]:videoUrl}));
+      if(typeof onShotSaved==="function") await onShotSaved(updated);
+      else if(typeof onSaved==="function") await onSaved();
+      alert("動画リンク、タイトル、概要欄を反映しました。公開設定・再生リスト・子ども向け設定はYouTube側のままです。");
+    }catch(e){
+      alert("YouTube反映エラー: "+(e?.message||e));
+    }finally{
+      setYoutubeUrlApplying("");
+    }
   };
   const youtubeRenameShortcutUrl="shortcuts://run-shortcut?name="+encodeURIComponent("AFC動画一括命名");
   const youtubeNativeCameraShortcutUrl="shortcuts://run-shortcut?name="+encodeURIComponent("AFC標準カメラ");
@@ -3049,29 +3076,33 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   ];
   const youtubeInputBlock = isAdmin&&h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
     h("div",{className:"match-section-heading",style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:6}},"VIDEO CAPTURE"),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"画質を保つため、iPadの標準カメラで撮影してから、この画面で動画を選びます。動画の実ファイル名と容量を記録するため、名前の変更は不要です。"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"画質を保つため、iPadの標準カメラで撮影します。ファイル名の自動突合がうまくいかない時は、アップロード後のYouTube URLを貼るだけでリンク・タイトル・概要欄を反映できます。YouTubeの公開設定・再生リスト等は変更しません。"),
     h("input",{ref:youtubeCaptureInputRef,type:"file",accept:"video/*",capture:"environment",onChange:saveYoutubeCapturedVideo,style:{display:"none"}}),
     h("input",{ref:youtubeVideoPickerRef,type:"file",accept:"video/*",onChange:saveYoutubeCapturedVideo,style:{display:"none"}}),
     h("div",{style:{display:"grid",gap:8,marginBottom:12}},
       youtubeRecordingDefinitions.map(item=>{
         const plan=youtubeRecordingFiles[item.key];
         const linked=!!item.url;
+        const enteredUrl=String(ytUrls[item.key]||"");
         return h("div",{key:item.key,style:{background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,padding:"10px 11px"}},
           h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:plan?.fileName?6:8}},
             h("div",{style:{fontSize:12,fontWeight:900,color:"#102A43"}},item.label),
             h("div",{style:{fontSize:10,fontWeight:800,color:linked?"#15803D":plan?.capturedAt?"#1D4E89":"#64748B"}},linked?"リンク済み":plan?.capturedAt?"動画を記録済み":"未撮影")),
           plan?.fileName&&h("div",{style:{fontFamily:"monospace",fontSize:10,color:"#334155",wordBreak:"break-all",lineHeight:1.45,marginBottom:8}},
             plan.fileName+(plan.fileSize?" / "+(Number(plan.fileSize)/1024/1024).toFixed(1)+" MB":"")),
-          linked
-            ? h("a",{href:item.url,target:"_blank",rel:"noopener noreferrer",style:{display:"block",textAlign:"center",background:"#fff",border:"1px solid #B8C6D5",borderRadius:6,padding:"8px 10px",color:"#102A43",fontSize:12,fontWeight:800,textDecoration:"none"}},"YouTube動画を開く")
-            : h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}},
+          !linked&&h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:7}},
                 h("a",{href:youtubeNativeCameraShortcutUrl,style:{display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center",background:"#173B75",border:"1px solid #173B75",borderRadius:6,padding:"9px 7px",color:"#fff",fontSize:12,fontWeight:800,textDecoration:"none"}},"標準カメラを開く"),
                 h("button",{onClick:()=>beginYoutubeVideoCapture(item.key,false),disabled:youtubeCaptureSaving,style:{...css.bG,padding:"9px 7px",fontSize:12,opacity:youtubeCaptureSaving?0.6:1,cursor:youtubeCaptureSaving?"wait":"pointer"}},"撮影済みを選ぶ")
-              )
+          ),
+          h("div",{style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:7}},
+            h("input",{type:"url",value:enteredUrl,onInput:e=>setYtUrls(prev=>({...prev,[item.key]:e.currentTarget.value})),placeholder:"YouTube URLを貼り付け",style:{minWidth:0,height:38,boxSizing:"border-box",border:"1px solid #C8D3E0",borderRadius:6,padding:"0 9px",fontSize:11,color:"#26364A"}}),
+            h("button",{onClick:()=>applyYoutubeUrl(item.key),disabled:!!youtubeUrlApplying||!enteredUrl.trim(),style:{...css.bS,padding:"8px 9px",fontSize:11,whiteSpace:"nowrap",opacity:youtubeUrlApplying&&youtubeUrlApplying!==item.key?0.6:(!enteredUrl.trim()?0.5:1),cursor:youtubeUrlApplying?"wait":"pointer"}},youtubeUrlApplying===item.key?"反映中...":"反映")
+          ),
+          linked&&h("a",{href:item.url,target:"_blank",rel:"noopener noreferrer",style:{display:"block",textAlign:"center",marginTop:7,background:"#fff",border:"1px solid #B8C6D5",borderRadius:6,padding:"8px 10px",color:"#102A43",fontSize:12,fontWeight:800,textDecoration:"none"}},"YouTube動画を開く")
         );
       })
     ),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"標準カメラで撮影 → この画面に戻る → 「撮影済みを選ぶ」→ 同じ動画をYouTubeへアップロード、の順です。処理後に自動でリンクされます。"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"確実な手順：標準カメラで撮影 → YouTubeへ手動アップロード → この画面にURLを貼る → 「反映」。タイトル・概要欄だけをテンプレートから更新します。"),
     h("details",{style:{marginBottom:12,background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,padding:"0 10px"}},
       h("summary",{style:{padding:"9px 0",cursor:"pointer",fontSize:11,fontWeight:800,color:"#475569"}},"初回のみ：標準カメラを開く設定"),
       h("div",{style:{padding:"0 0 10px",fontSize:11,color:"#64748B",lineHeight:1.65}},"iPadの「ショートカット」で新規ショートカットを作り、アクション「Appを開く」から「カメラ」を選んで、名前を「AFC標準カメラ」にしてください。以後は上の「標準カメラを開く」から純正カメラが開きます。")
