@@ -1761,13 +1761,12 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     if(input) input.value="";
     if(!file||!key) return;
     setYoutubeCaptureTarget(key);
+    // 本体を読まず、名前だけを記録する。サイズ取得も行わない。
     const fileName=String(file.name||"").trim();
-    const fileSize=Math.max(0,Number(file.size||0)||0);
     if(!fileName){alert("動画ファイル名を取得できませんでした。");return;}
     const current=youtubeRecordingFiles[key]||{};
     const next={...youtubeRecordingFiles,[key]:{
       fileName,
-      fileSize,
       capturedAt:new Date().toISOString(),
       preparedAt:current.preparedAt||new Date().toISOString()
     }};
@@ -1780,8 +1779,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       });
       setYoutubeRecordingFiles(parseYoutubeRecordingFiles(result?.recordingFiles||next));
       setYoutubeBatchReady(null);
-      const sizeLabel=fileSize?" / "+(fileSize/1024/1024).toFixed(1)+" MB":"";
-      alert("動画を記録しました。\n\n"+fileName+sizeLabel+"\n\nYouTubeへは、この動画を名前を変えずにアップロードしてください。");
+      alert("動画名を記録しました。\n\n"+fileName+"\n\nYouTubeへは、この動画を名前を変えずにアップロードしてください。");
     }catch(e){
       alert("動画記録エラー: "+(e?.message||e));
     }finally{
@@ -9240,8 +9238,8 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       return;
     }
     const resultId = String(row?.id || "").trim();
+    // ファイル本体やサイズには触れず、選択済み動画の名前だけを使う。
     const fileName = String(file.name || "").trim();
-    const fileSize = Math.max(0, Number(file.size || 0) || 0);
     if (!resultId || !fileName) {
       alert("動画ファイル名を取得できませんでした。");
       return;
@@ -9253,7 +9251,6 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
     const current = Object.fromEntries(Object.entries(rawCurrent).filter(([partKey])=>allowedKeys.has(partKey)));
     const next = {...current,[key]:{
       fileName,
-      fileSize,
       capturedAt:new Date().toISOString(),
       preparedAt:String(current?.[key]?.preparedAt || new Date().toISOString())
     }};
@@ -9340,7 +9337,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   if (!isAdmin || !results.length) return null;
   return h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
     h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"DAY VIDEO UPLOAD"),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"試合形式に合わせた本数だけ表示します。iPadでは右側の「ファイルを選択」から写真ライブラリを開き、動画を選んでください。選択後、すぐ下に動画名が出ます。"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"試合形式に合わせた本数だけ表示します。iPadでは右側の「ファイルを選択」から写真ライブラリを開きます。動画本体は読み込まず、選択した動画名だけをすぐ記録します。"),
     h("div",{style:{display:"grid",gap:8,marginBottom:12}},
       results.map((row,index)=>h("div",{key:row.id||index,style:{padding:"10px",border:"1px solid #D8E0E8",borderRadius:7,background:"#fff"}},
         h("div",{style:{fontSize:12,fontWeight:900,color:"#102A43",marginBottom:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"第"+(row.gameNumber||index+1)+"試合  vs "+(row.opponent||"相手未設定")),
