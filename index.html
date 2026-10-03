@@ -9229,6 +9229,9 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   const [saving,setSaving] = useState("");
   const [savedNotice,setSavedNotice] = useState("");
   const [syncing,setSyncing] = useState(false);
+  const [pastedNames,setPastedNames] = useState("");
+  const [bulkSaving,setBulkSaving] = useState(false);
+  const [bulkMessage,setBulkMessage] = useState("");
   useEffect(()=>setPlans(buildPlans(results)),[resultSignature]);
 
   const saveVideo = async (row,key,file) => {
@@ -9317,6 +9320,84 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
     if (halves.length === 1) return [videoParts[1]];
     return halves.map(half => half === "1st" ? videoParts[1] : half === "2nd" ? videoParts[2] : videoParts[3]);
   };
+  const hasPkForRow = row => !!(
+    plans[String(row?.id || "")]?.pk || row?.youtubeUrlPk || String(row?.pkKickers || "").trim() ||
+    Number(row?.pkOur || 0) || Number(row?.pkTheir || 0)
+  );
+  const normalizePastedFileName = value => String(value || "")
+    .trim()
+    .replace(/^[\-•・]\s*/, "")
+    .replace(/^['\"]|['\"]$/g, "")
+    .split(/[\\/]/).pop().trim();
+  const getBulkTargets = () => (results || []).flatMap(row => {
+    const resultId = String(row?.id || "").trim();
+    const parts = [...videoPartsForRow(row), ...(hasPkForRow(row) ? [videoParts[4]] : [])];
+    return parts
+      .filter(part => !(part.urlKeys || []).some(key => String(row?.[key] || "").trim()))
+      .filter(part => !plans[resultId]?.[part.key])
+      .map(part => ({row,part,resultId}));
+  });
+  const savePastedNames = async () => {
+    if (bulkSaving || saving) return;
+    const names = String(pastedNames || "").split(/\r?\n/).map(normalizePastedFileName).filter(Boolean);
+    const targets = getBulkTargets();
+    if (!names.length) { alert("動画ファイル名を1行ずつ貼り付けてください。"); return; }
+    if (!targets.length) { alert("動画名を登録できる未設定の動画枠がありません。"); return; }
+    if (names.length > targets.length) {
+      alert("貼り付けた動画名が多すぎます。登録できる枠は"+targets.length+"本です。");
+      return;
+    }
+    const preview = targets.slice(0,names.length).map((target,index) =>
+      "第"+(target.row.gameNumber || "?")+"試合 / "+target.part.label+" ← "+names[index]
+    ).join("\n");
+    if (!confirm("上から順に"+names.length+"本を登録します。\n\n"+preview)) return;
+
+    const previousPlans = plans;
+    const nextPlans = {...plans};
+    const updates = {};
+    targets.slice(0,names.length).forEach((target,index) => {
+      const allowedKeys = new Set([...videoPartsForRow(target.row).map(part=>part.key), "pk"]);
+      const existing = updates[target.resultId] || nextPlans[target.resultId] || parseRecordingFiles(target.row.youtubeRecordingFiles);
+      const current = Object.fromEntries(Object.entries(existing).filter(([partKey])=>allowedKeys.has(partKey)));
+      const next = {...current,[target.part.key]:{
+        fileName:names[index],
+        capturedAt:new Date().toISOString(),
+        preparedAt:String(current?.[target.part.key]?.preparedAt || new Date().toISOString())
+      }};
+      updates[target.resultId] = next;
+      nextPlans[target.resultId] = next;
+    });
+    setPlans(nextPlans);
+    setBulkSaving(true);
+    setBulkMessage("");
+    try {
+      for (const resultId of Object.keys(updates)) {
+        const saved = await api("saveYoutubeRecordingPlan",{
+          userId:String(user?.id || "").trim(), resultId, recordingFiles:updates[resultId]
+        });
+        nextPlans[resultId] = parseRecordingFiles(saved?.recordingFiles || updates[resultId]);
+      }
+      setPlans({...nextPlans});
+      setPastedNames("");
+      setBulkMessage(names.length+"本の動画名を記録しました");
+      await onUpdated?.();
+    } catch (e) {
+      setPlans(previousPlans);
+      alert("動画名の記録に失敗しました。\n"+(e?.message || e));
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+  const pasteFromClipboard = async () => {
+    try {
+      if (!navigator.clipboard?.readText) throw new Error("クリップボードを読み取れません");
+      const text = await navigator.clipboard.readText();
+      if (!String(text || "").trim()) throw new Error("クリップボードに動画名がありません");
+      setPastedNames(text);
+    } catch (e) {
+      alert("貼り付け欄を長押しして、動画名を貼り付けてください。\n"+(e?.message || ""));
+    }
+  };
   const renderPicker = (row,part,compact=false) => {
     const resultId = String(row?.id || "").trim();
     const plan = plans[resultId]?.[part.key];
@@ -9331,7 +9412,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       h("div",{style:{minWidth:118,opacity:busy?0.65:1}},
         busy
           ? h("div",{style:{minHeight:34,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 10px",border:"1px solid #B8C6D5",borderRadius:6,fontSize:11,fontWeight:800,color:"#64748B"}},"記録中...")
-          : h("input",{type:"file",accept:"video/*,.mov,.mp4,.m4v",onChange:event=>handleVideoPicker(row,part.key,event),onInput:event=>handleVideoPicker(row,part.key,event),disabled:!!saving,ariaLabel:part.label+"の動画を選ぶ",style:{display:"block",width:"100%",maxWidth:150,fontSize:11,color:"#102A43"}})));
+          : h("input",{type:"file",accept:"video/*,.mov,.mp4,.m4v",onChange:event=>handleVideoPicker(row,part.key,event),onInput:event=>handleVideoPicker(row,part.key,event),disabled:!!saving||bulkSaving,ariaLabel:part.label+"の動画を選ぶ",style:{display:"block",width:"100%",maxWidth:150,fontSize:11,color:"#102A43"}})));
   };
 
   if (!isAdmin || !results.length) return null;
@@ -9342,10 +9423,20 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       results.map((row,index)=>h("div",{key:row.id||index,style:{padding:"10px",border:"1px solid #D8E0E8",borderRadius:7,background:"#fff"}},
         h("div",{style:{fontSize:12,fontWeight:900,color:"#102A43",marginBottom:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"第"+(row.gameNumber||index+1)+"試合  vs "+(row.opponent||"相手未設定")),
         videoPartsForRow(row).map(part=>renderPicker(row,part)),
-        (plans[String(row.id || "")]?.pk || row.youtubeUrlPk || String(row.pkKickers || "").trim() || Number(row.pkOur || 0) || Number(row.pkTheir || 0)) && renderPicker(row,videoParts[4],true)
+        hasPkForRow(row) && renderPicker(row,videoParts[4],true)
       ))
     ),
-    h("button",{onClick:syncScheduleVideos,disabled:syncing||!!saving,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:syncing||saving?0.65:1,cursor:syncing||saving?"wait":"pointer"}},syncing?"この日程を反映中...":"この日程を一括反映")
+    h("details",{style:{marginBottom:12,background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:7,padding:"0 10px"}},
+      h("summary",{style:{padding:"10px 0",cursor:"pointer",fontSize:11,fontWeight:900,color:"#102A43"}},"重い動画用：動画名だけをまとめて貼り付け"),
+      h("div",{style:{padding:"0 0 10px",fontSize:11,color:"#64748B",lineHeight:1.55}},"写真ライブラリで動画本体を読み込まず、動画名を改行ごとに貼り付けます。上から「第1試合 1st → 2nd → 3rd → 第2試合…」の順に自動で割り当てます。"),
+      h("textarea",{value:pastedNames,onInput:e=>setPastedNames(e.currentTarget.value),placeholder:"IMG_0001.MOV\nIMG_0002.MOV",style:{width:"100%",minHeight:82,boxSizing:"border-box",resize:"vertical",border:"1px solid #C8D3E0",borderRadius:6,padding:9,fontFamily:"monospace",fontSize:11,color:"#26364A",marginBottom:8}}),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}},
+        h("button",{onClick:pasteFromClipboard,disabled:bulkSaving,style:{...css.bG,padding:"9px 6px",fontSize:11,opacity:bulkSaving?0.6:1}},"クリップボードから貼付"),
+        h("button",{onClick:savePastedNames,disabled:bulkSaving||!String(pastedNames || "").trim(),style:{...css.bS,padding:"9px 6px",fontSize:11,opacity:bulkSaving||!String(pastedNames || "").trim()?0.6:1}},bulkSaving?"記録中...":"この順で記録")
+      ),
+      bulkMessage&&h("div",{style:{fontSize:11,fontWeight:800,color:"#15803D",paddingTop:8}},bulkMessage)
+    ),
+    h("button",{onClick:syncScheduleVideos,disabled:syncing||!!saving||bulkSaving,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:syncing||saving||bulkSaving?0.65:1,cursor:syncing||saving||bulkSaving?"wait":"pointer"}},syncing?"この日程を反映中...":"この日程を一括反映")
   );
 }
 
