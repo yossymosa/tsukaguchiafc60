@@ -1659,6 +1659,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const youtubeCaptureInputRef = useRef(null);
   const youtubeVideoPickerRef = useRef(null);
   const youtubeCaptureTargetRef = useRef("");
+  const goalInputPointerRef = useRef(null);
   const [matchClockSec,setMatchClockSec]=useState(()=>Math.max(0, Number(goalDraftInit?.matchClockSec || 0) || 0));
   const [clockRunning,setClockRunning]=useState(false);
   const clockBaseSecRef = useRef(0);
@@ -2487,11 +2488,36 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     });
   };
   const openAddOurGoal = () => {
+    // 得点発生から入力までのタイムラグを見込み、試合中は自動で20秒戻す。
+    if (clockRunning) applyClockToGoalDraft("our", -20);
     setModal("our");
   };
   const openAddTheirGoal = () => {
+    if (clockRunning) applyClockToGoalDraft("their", -20);
     setModal("their");
   };
+  // スクロール開始を「得点入力」タップと誤認しないよう、指を離した時にだけ開く。
+  const beginGoalInputPress = (team,event) => {
+    goalInputPointerRef.current = {
+      team,
+      pointerId:event?.pointerId,
+      x:Number(event?.clientX || 0),
+      y:Number(event?.clientY || 0)
+    };
+  };
+  const finishGoalInputPress = (team,event) => {
+    const start = goalInputPointerRef.current;
+    goalInputPointerRef.current = null;
+    if (!start || start.team !== team || (start.pointerId !== undefined && event?.pointerId !== start.pointerId)) return;
+    const dx = Number(event?.clientX || 0) - start.x;
+    const dy = Number(event?.clientY || 0) - start.y;
+    if (Math.hypot(dx,dy) > 12) return;
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (team === "our") openAddOurGoal();
+    else openAddTheirGoal();
+  };
+  const clearGoalInputPress = () => { goalInputPointerRef.current = null; };
   const openAddSub = () => {
     const firstHalf = visibleHalfOptions[0] || "1st";
     const baseSec = getClockSecNow();
@@ -2834,8 +2860,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           h("span",{style:{color:"#64748B"}},match.opponent||"相手")
         ),
         isAdmin&&h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}},
-          h("button",{type:"button",onPointerDown:e=>{e.preventDefault();e.stopPropagation();openAddOurGoal();},style:{background:"#102A43",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:"pointer",touchAction:"manipulation"}},"得点を入力"),
-          h("button",{type:"button",onPointerDown:e=>{e.preventDefault();e.stopPropagation();openAddTheirGoal();},style:{background:"#475569",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:"pointer",touchAction:"manipulation"}},"失点を入力")
+          h("button",{type:"button",onPointerDown:e=>beginGoalInputPress("our",e),onPointerUp:e=>finishGoalInputPress("our",e),onPointerCancel:clearGoalInputPress,onPointerLeave:clearGoalInputPress,onClick:e=>{if(e.detail===0)openAddOurGoal();},style:{background:"#102A43",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:"pointer",touchAction:"manipulation"}},"得点を入力"),
+          h("button",{type:"button",onPointerDown:e=>beginGoalInputPress("their",e),onPointerUp:e=>finishGoalInputPress("their",e),onPointerCancel:clearGoalInputPress,onPointerLeave:clearGoalInputPress,onClick:e=>{if(e.detail===0)openAddTheirGoal();},style:{background:"#475569",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:"pointer",touchAction:"manipulation"}},"失点を入力")
         )
       )
     ),
@@ -9290,6 +9316,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
 
 // ── その日の試合まとめページ ─────────────────────────────────────
 function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users=[],initialTab="",onGoToMatch,onAdd,onEdit,onDelete,onDeleteSchedule,onBack,onHome,onSaveMvp,onYoutubeUpdated}) {
+  const dayPageRef = useRef(null);
   const isEventDay = normalizeType(schedule.type) === "event";
   const isPracticeDay = normalizeType(schedule.type) === "practice";
   const isFiveGradeAccompanyDay = normalizeType(schedule.type) === "five_accompany";
@@ -9409,6 +9436,26 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     setDayTab(resolveDayTab(initialTab));
   },[schedule.id,isSimpleDay,initialTab]);
   useEffect(()=>{
+    // カレンダーから開いた時に、前の画面のスクロール位置を引き継がない。
+    const moveToTop = () => {
+      scrollAppTop();
+      const root = dayPageRef.current;
+      try {
+        root && (root.scrollTop = 0);
+        if (root && typeof root.scrollTo === "function") root.scrollTo(0,0);
+      } catch (e) {}
+    };
+    moveToTop();
+    const frameA = requestAnimationFrame(moveToTop);
+    const frameB = requestAnimationFrame(()=>requestAnimationFrame(moveToTop));
+    const timer = setTimeout(moveToTop,90);
+    return ()=>{
+      cancelAnimationFrame(frameA);
+      cancelAnimationFrame(frameB);
+      clearTimeout(timer);
+    };
+  },[schedule.id]);
+  useEffect(()=>{
     setSchForm(buildEditScheduleForm(schedule));
   },[schedule.id]);
   const saveEditSch=async()=>{
@@ -9521,7 +9568,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
     }
   };
 
-  return h("div",{className:"page detail-page"},
+  return h("div",{className:"page detail-page",ref:dayPageRef},
     editSchSaving&&h(Loader,{msg:"更新中..."}),
     // HP用テンプレモーダル
     hpModal&&h(Modal,{title:"📋 HP用テンプレ",onClose:()=>setHpModal(false)},
@@ -10900,7 +10947,11 @@ function App() {
   const goToDay  =(s,dayTab="")  =>{
     scrollAppTop();
     setPage({type:"dayDetail",schedule:s,dayTab:dayTab||""});
-    setTimeout(scrollAppTop,0);
+    requestAnimationFrame(()=>{
+      scrollAppTop();
+      requestAnimationFrame(scrollAppTop);
+    });
+    setTimeout(scrollAppTop,90);
   };
   const openDashTab = (nextTab) => {
     setDashInitialTab(nextTab || "result");
