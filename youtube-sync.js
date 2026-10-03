@@ -2,7 +2,7 @@
 // YouTube recording-file sync
 // - App-generated AFC_ recording filenames are the only matching key.
 // - Does NOT create schedules/results or inspect historical title text.
-// - Updates the matched video's existing title/description template, then links it.
+// - Updates the matched video's title/description and shared YouTube settings, then links it.
 // ============================================================
 
 const YOUTUBE_API_KEY = ""; // Optional. If empty, Script Property YOUTUBE_API_KEY is used.
@@ -11,6 +11,14 @@ const PLAYLIST_URLS = [
   "https://www.youtube.com/playlist?list=PLLo2VVDM0WelHQk4YEdf-dvejZLkVbJ2N",
 ];
 const YOUTUBE_SYNC_TIMEZONE = "Asia/Tokyo";
+// YouTubeへ反映する共通の公開設定。動画URLを直接反映する場合も、
+// ファイル名で一括同期する場合も同じ設定を適用する。
+const YOUTUBE_TARGET_PRIVACY_STATUS = "unlisted";
+const YOUTUBE_TARGET_MADE_FOR_KIDS = false;
+const YOUTUBE_TARGET_PLAYLIST_TITLE = "26年度　塚口AFCjr　60期生　試合動画　（4年生）";
+const YOUTUBE_TARGET_PLAYLIST_DESCRIPTION = "塚口AFCジュニア 60期生（4年生）の試合動画";
+let youtubeTargetPlaylistIdCache_ = "";
+let youtubeTargetPlaylistVideoIdsCache_ = null;
 
 const SHEET_RESULTS = "\u8a66\u5408\u7d50\u679c";
 const SHEET_SCHEDULES = "\u30b9\u30b1\u30b8\u30e5\u30fc\u30eb";
@@ -44,7 +52,7 @@ const LABEL_CONCEDE = "\u5931\u70b9";
 // Apps Script プロジェクトでのみ実行できる。
 // ============================================================
 function updateYoutubeMetadataFromApp_(req) {
-  if (typeof YouTube === "undefined" || !YouTube.Videos) {
+  if (typeof YouTube === "undefined" || !YouTube.Videos || !YouTube.Playlists || !YouTube.PlaylistItems) {
     throw new Error("YouTube API連携が未設定です。Apps Scriptの「サービス」で YouTube Data API を追加し、Google Cloud 側でも YouTube Data API v3 を有効にしてください");
   }
 
@@ -69,7 +77,8 @@ function updateYoutubeMetadataFromApp_(req) {
 
     try {
       // snippetを丸ごと更新するため、既存のカテゴリ・タグ・言語は保持する。
-      const lookup = YouTube.Videos.list("snippet", {id: videoId, maxResults: 1});
+      // statusはチーム共通の運用に統一する（限定公開・子ども向けではない）。
+      const lookup = YouTube.Videos.list("snippet,status", {id: videoId, maxResults: 1});
       const current = lookup && lookup.items && lookup.items[0];
       if (!current || !current.snippet) {
         throw new Error("対象動画が見つかりません。チャンネル所有者のGoogleアカウントで認可されているか確認してください");
@@ -83,7 +92,18 @@ function updateYoutubeMetadataFromApp_(req) {
       if (Array.isArray(currentSnippet.tags)) snippet.tags = currentSnippet.tags.slice();
       if (currentSnippet.defaultLanguage) snippet.defaultLanguage = String(currentSnippet.defaultLanguage);
 
-      YouTube.Videos.update({id: videoId, snippet: snippet}, "snippet");
+      const currentStatus = current.status || {};
+      const status = {
+        privacyStatus: YOUTUBE_TARGET_PRIVACY_STATUS,
+        selfDeclaredMadeForKids: YOUTUBE_TARGET_MADE_FOR_KIDS,
+      };
+      // YouTube上で既に設定している、公開統計・埋め込み・ライセンスは維持する。
+      ["license", "embeddable", "publicStatsViewable"].forEach(key => {
+        if (Object.prototype.hasOwnProperty.call(currentStatus, key)) status[key] = currentStatus[key];
+      });
+
+      YouTube.Videos.update({id: videoId, snippet: snippet, status: status}, "snippet,status");
+      addVideoToTargetYoutubePlaylist_(videoId);
       updatedVideos.push({videoId: videoId, title: title, label: String(raw && raw.label || "")});
     } catch (err) {
       const message = String(err && err.message || err || "不明なエラー");
@@ -92,6 +112,69 @@ function updateYoutubeMetadataFromApp_(req) {
   });
 
   return {updatedCount: updatedVideos.length, updatedVideos: updatedVideos};
+}
+
+// 指定名のプレイリストを使う。まだなければ一度だけ作成する。
+function getTargetYoutubePlaylistId_() {
+  if (youtubeTargetPlaylistIdCache_) return youtubeTargetPlaylistIdCache_;
+  let pageToken = "";
+  do {
+    const args = {
+      mine: true,
+      maxResults: 50,
+    };
+    if (pageToken) args.pageToken = pageToken;
+    const response = YouTube.Playlists.list("snippet", args);
+    const found = (response && response.items || []).find(item =>
+      String(item && item.snippet && item.snippet.title || "").trim() === YOUTUBE_TARGET_PLAYLIST_TITLE
+    );
+    if (found && found.id) {
+      youtubeTargetPlaylistIdCache_ = String(found.id);
+      return youtubeTargetPlaylistIdCache_;
+    }
+    pageToken = String(response && response.nextPageToken || "");
+  } while (pageToken);
+
+  const created = YouTube.Playlists.insert({
+    snippet: {
+      title: YOUTUBE_TARGET_PLAYLIST_TITLE,
+      description: YOUTUBE_TARGET_PLAYLIST_DESCRIPTION,
+    },
+    status: {privacyStatus: YOUTUBE_TARGET_PRIVACY_STATUS},
+  }, "snippet,status");
+  if (!created || !created.id) throw new Error("試合動画プレイリストを作成できませんでした");
+  youtubeTargetPlaylistIdCache_ = String(created.id);
+  return youtubeTargetPlaylistIdCache_;
+}
+
+function addVideoToTargetYoutubePlaylist_(videoId) {
+  const playlistId = getTargetYoutubePlaylistId_();
+  if (youtubeTargetPlaylistVideoIdsCache_ === null) {
+    youtubeTargetPlaylistVideoIdsCache_ = {};
+    let pageToken = "";
+    do {
+      const args = {
+        playlistId: playlistId,
+        maxResults: 50,
+      };
+      if (pageToken) args.pageToken = pageToken;
+      const response = YouTube.PlaylistItems.list("snippet", args);
+      (response && response.items || []).forEach(item => {
+        const id = String(item && item.snippet && item.snippet.resourceId && item.snippet.resourceId.videoId || "");
+        if (id) youtubeTargetPlaylistVideoIdsCache_[id] = true;
+      });
+      pageToken = String(response && response.nextPageToken || "");
+    } while (pageToken);
+  }
+  if (youtubeTargetPlaylistVideoIdsCache_[videoId]) return;
+
+  YouTube.PlaylistItems.insert({
+    snippet: {
+      playlistId: playlistId,
+      resourceId: {kind: "youtube#video", videoId: videoId},
+    },
+  }, "snippet");
+  youtubeTargetPlaylistVideoIdsCache_[videoId] = true;
 }
 
 function extractYoutubeVideoIdForMetadata_(value) {

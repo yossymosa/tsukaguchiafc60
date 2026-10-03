@@ -1823,7 +1823,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       setYtUrls(prev=>({...prev,[key]:videoUrl}));
       if(typeof onShotSaved==="function") await onShotSaved(updated);
       else if(typeof onSaved==="function") await onSaved();
-      alert("動画リンク、タイトル、概要欄を反映しました。公開設定・再生リスト・子ども向け設定はYouTube側のままです。");
+      alert("動画リンクとYouTube設定を反映しました。タイトル・概要欄、限定公開、子ども向けではない設定、試合動画プレイリストへの追加が完了しています。");
     }catch(e){
       alert("YouTube反映エラー: "+(e?.message||e));
     }finally{
@@ -3077,11 +3077,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   ];
   const youtubeInputBlock = isAdmin&&h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,border:"1px solid #D8E0E8",boxShadow:"none"}},
     h("div",{className:"match-section-heading",style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:6}},"VIDEO CAPTURE"),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"画質を保つため、iPadの標準カメラで撮影します。「撮影済みを選ぶ」は動画名・容量を記録するだけで、タイトルは変わりません。YouTubeへ上げた後にURLを貼って「反映」を押すと、タイトル・概要欄まで更新されます。公開設定・再生リスト等は変更しません。"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"画質を保つため、iPadの標準カメラで撮影します。「撮影済みを選ぶ」は動画名・容量を記録するだけで、タイトルは変わりません。反映時にタイトル・概要欄と、限定公開・子ども向けではない設定・試合動画プレイリストへの追加をまとめて行います。"),
     h("div",{style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:10,marginBottom:12,padding:"10px 11px",borderRadius:7,background:"#EEF4FF",border:"1px solid #C8D8F5"}},
       h("div",{},
         h("div",{style:{fontSize:12,fontWeight:900,color:"#173B75",marginBottom:2}},"全試合をまとめて反映"),
-        h("div",{style:{fontSize:10,lineHeight:1.45,color:"#526B91"}},"登録済みの動画ファイル名を、チャンネルの最新アップロードから全試合まとめて照合します。タイトル・概要欄・動画リンクも一括更新します。")
+        h("div",{style:{fontSize:10,lineHeight:1.45,color:"#526B91"}},"登録済みの動画ファイル名を、チャンネルの最新アップロードから全試合まとめて照合します。タイトル・概要欄・動画リンクに加え、限定公開・子ども向けではない設定・試合動画プレイリストも一括更新します。")
       ),
       h("button",{onClick:syncYoutubeRecordingFiles,disabled:youtubeRecordingSyncing||loading,style:{...css.bS,padding:"9px 10px",fontSize:11,whiteSpace:"nowrap",opacity:youtubeRecordingSyncing||loading?0.65:1,cursor:youtubeRecordingSyncing||loading?"wait":"pointer"}},youtubeRecordingSyncing?"確認中...":"一括反映")
     ),
@@ -3111,7 +3111,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         );
       })
     ),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"確実な手順：標準カメラで撮影 → YouTubeへ手動アップロード → この画面にURLを貼る → 「反映」。タイトル・概要欄だけをテンプレートから更新します。"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"確実な手順：標準カメラで撮影 → YouTubeへ手動アップロード → この画面にURLを貼る → 「反映」。タイトル・概要欄と、限定公開・子ども向けではない設定・試合動画プレイリストへの追加をまとめて行います。"),
     h("details",{style:{marginBottom:12,background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,padding:"0 10px"}},
       h("summary",{style:{padding:"9px 0",cursor:"pointer",fontSize:11,fontWeight:800,color:"#475569"}},"初回のみ：標準カメラを開く設定"),
       h("div",{style:{padding:"0 0 10px",fontSize:11,color:"#64748B",lineHeight:1.65}},"iPadの「ショートカット」で新規ショートカットを作り、アクション「Appを開く」から「カメラ」を選んで、名前を「AFC標準カメラ」にしてください。以後は上の「標準カメラを開く」から純正カメラが開きます。")
