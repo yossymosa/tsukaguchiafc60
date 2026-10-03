@@ -1,8 +1,8 @@
 // ============================================================
-// YouTube recording-file sync
-// - App-generated AFC_ recording filenames are the only matching key.
-// - Does NOT create schedules/results or inspect historical title text.
-// - Updates the matched video's title/description and shared YouTube settings, then links it.
+// YouTube title sync
+// - YouTubeのタイトルから既存の試合結果だけを特定してリンクする。
+// - 動画ファイルをアプリで選択・読み込みしない。
+// - YouTube上で入力したタイトル・概要欄・公開設定は変更しない。
 // ============================================================
 
 const YOUTUBE_API_KEY = ""; // Optional. If empty, Script Property YOUTUBE_API_KEY is used.
@@ -216,57 +216,71 @@ function syncYouTubePlaylist(req) {
       .map(id => String(id || "").trim())
       .filter(Boolean)
   );
-  const allPlanned = loadYoutubeRecordingPlans_(resultSh, resultHeaders);
-  // 日程画面から呼ばれた場合は、その日程で指定された試合だけを対象にする。
-  // 時間トリガー等でIDを渡さない従来の呼び出しは全件同期のまま維持する。
-  const planned = {};
-  Object.keys(allPlanned).forEach(key => {
-    const plan = allPlanned[key];
-    if (!requestedResultIds.size || requestedResultIds.has(String(plan && plan.resultId || ""))) {
-      planned[key] = plan;
-    }
-  });
-  const plannedKeys = Object.keys(planned);
-  if (!plannedKeys.length) return {linkedCount: 0, pendingCount: 0, updatedResults: []};
+  const scheduleTitles = loadScheduleTitles_(scheduleSh);
+  const allResults = loadResults_(resultSh, resultHeaders, scheduleTitles);
+  // 日程画面から呼ばれた場合は、その日程の試合だけを対象にする。
+  const results = requestedResultIds.size
+    ? allResults.filter(result => requestedResultIds.has(String(result.id || "")))
+    : allResults;
+  if (!results.length) return {linkedCount: 0, pendingCount: 0, titleMatchedCount: 0, unmatchedCount: 0, updatedResults: []};
 
-  const scheduleDetails = loadYoutubeScheduleDetails_(scheduleSh);
-  const goalsByResult = loadYoutubeGoalsByResult_(ss.getSheetByName("得点記録"));
-  const recentVideos = fetchRecentOwnedYoutubeVideosWithFiles_();
-  const linkedKeys = {};
+  const recentVideos = fetchRecentOwnedYoutubeVideosForTitleLink_();
   const updatesByResult = {};
   let linkedCount = 0;
-
+  let titleMatchedCount = 0;
+  let unmatchedCount = 0;
   recentVideos.forEach(video => {
-    const fileKey = normalizeYoutubeRecordingFileName_(video.fileName);
-    const exactPlanKey = youtubeRecordingPlanKey_(fileKey, video.fileSize);
-    const fallbackPlanKey = youtubeRecordingPlanKey_(fileKey, 0);
-    const planKey = planned[exactPlanKey] ? exactPlanKey : (planned[fallbackPlanKey] ? fallbackPlanKey : "");
-    const plan = planKey ? planned[planKey] : null;
-    if (!plan || linkedKeys[planKey]) return;
+    const parsed = parseTitle_(video.title);
+    if (!parsed) return;
+    // 日程画面からの実行では、その日以外の最新動画は未照合数に含めない。
+    const isSameTargetDate = results.some(row => normalizeDate_(row.date) === normalizeDate_(parsed.date));
+    if (!isSameTargetDate) return;
+    const result = findResult_(results, parsed);
+    // 同じ日・相手でも大会や試合番号が足りず特定できないタイトルは、誤リンクしない。
+    if (!result) { unmatchedCount++; return; }
+    titleMatchedCount++;
 
-    const targetCol = plan.key === "first" ? col.yt1st : plan.key === "second" ? col.yt2nd : plan.key === "third" ? col.yt3rd : plan.key === "pk" ? col.ytPk : col.yt;
-    const currentUrl = String(resultSh.getRange(plan.row, targetCol).getValue() || "").trim();
-    if (currentUrl) {
-      linkedKeys[planKey] = true;
-      return;
-    }
-
-    const context = buildYoutubeResultContext_(resultSh, resultHeaders, plan.row, scheduleDetails, goalsByResult);
-    const metadata = buildYoutubeMetadataForRecording_(context, plan.key, video.url);
-    // YouTube側のタイトル・概要欄が更新できた動画だけをアプリへリンクする。
-    updateYoutubeMetadataFromApp_({videos: [metadata]});
-    resultSh.getRange(plan.row, targetCol).setValue(video.url);
-    linkedKeys[planKey] = true;
+    const part = parsed.half === "1st" ? "first" : parsed.half === "2nd" ? "second" : parsed.half === "3rd" ? "third" : parsed.half === HALF_PK ? "pk" : "full";
+    const targetCol = part === "first" ? col.yt1st : part === "second" ? col.yt2nd : part === "third" ? col.yt3rd : part === "pk" ? col.ytPk : col.yt;
+    const currentUrl = String(resultSh.getRange(result.row, targetCol).getValue() || "").trim();
+    if (currentUrl) return;
+    resultSh.getRange(result.row, targetCol).setValue(video.url);
     linkedCount++;
-    updatesByResult[plan.resultId] = {
-      ...(updatesByResult[plan.resultId] || {id: plan.resultId}),
-      [plan.key === "first" ? "youtubeUrl1st" : plan.key === "second" ? "youtubeUrl2nd" : plan.key === "third" ? "youtubeUrl3rd" : plan.key === "pk" ? "youtubeUrlPk" : "youtubeUrl"]: video.url,
+    updatesByResult[result.id] = {
+      ...(updatesByResult[result.id] || {id: result.id}),
+      [part === "first" ? "youtubeUrl1st" : part === "second" ? "youtubeUrl2nd" : part === "third" ? "youtubeUrl3rd" : part === "pk" ? "youtubeUrlPk" : "youtubeUrl"]: video.url,
     };
   });
+  Logger.log("YouTube title sync: linked=" + linkedCount + ", matched=" + titleMatchedCount + ", unmatched=" + unmatchedCount);
+  return {
+    linkedCount: linkedCount,
+    pendingCount: unmatchedCount,
+    titleMatchedCount: titleMatchedCount,
+    unmatchedCount: unmatchedCount,
+    updatedResults: Object.keys(updatesByResult).map(id => updatesByResult[id])
+  };
+}
 
-  const pendingCount = plannedKeys.filter(key => !linkedKeys[key]).length;
-  Logger.log("YouTube recording sync: linked=" + linkedCount + ", pending=" + pendingCount);
-  return {linkedCount: linkedCount, pendingCount: pendingCount, updatedResults: Object.keys(updatesByResult).map(id => updatesByResult[id])};
+function fetchRecentOwnedYoutubeVideosForTitleLink_() {
+  if (typeof YouTube === "undefined" || !YouTube.Channels || !YouTube.PlaylistItems || !YouTube.Videos) {
+    throw new Error("YouTube API連携が未設定です。Apps Scriptの「サービス」で YouTube Data API を追加してください");
+  }
+  const channelResponse = YouTube.Channels.list("contentDetails", {mine: true, maxResults: 1});
+  const channel = channelResponse && channelResponse.items && channelResponse.items[0];
+  const uploadsPlaylistId = channel && channel.contentDetails && channel.contentDetails.relatedPlaylists && channel.contentDetails.relatedPlaylists.uploads;
+  if (!uploadsPlaylistId) throw new Error("チームYouTubeチャンネルのアップロード一覧を取得できません。チャンネル所有者アカウントで認可してください");
+  const playlistResponse = YouTube.PlaylistItems.list("snippet", {playlistId: uploadsPlaylistId, maxResults: 50});
+  const ids = (playlistResponse && playlistResponse.items || [])
+    .map(item => item && item.snippet && item.snippet.resourceId && item.snippet.resourceId.videoId)
+    .filter(Boolean);
+  if (!ids.length) return [];
+  const detailResponse = YouTube.Videos.list("snippet", {id: ids.join(",")});
+  return (detailResponse && detailResponse.items || []).map(item => ({
+    id: String(item.id || ""),
+    url: "https://www.youtube.com/watch?v=" + String(item.id || ""),
+    title: String(item.snippet && item.snippet.title || ""),
+    publishedAt: String(item.snippet && item.snippet.publishedAt || "")
+  })).filter(item => item.id && item.title);
 }
 
 // ============================================================
@@ -665,12 +679,15 @@ function extractOpponent_(text) {
 }
 
 function cleanOpponent_(name) {
-  return String(name || "")
-    .replace(/\s+/g, " ")
-    .replace(/(?:PK\s*戦|ＰＫ\s*戦|penalty\s*shootout)\s*$/i, "")
-    .replace(/(?:前半|後半|1st|2nd|3rd|第\d+試合|\d+本目|TM|トレマ)\s*$/i, "")
-    .replace(/(?:公式戦|カップ戦|練習試合|トレマ|TM)\s*$/i, "")
-    .trim();
+  let value = String(name || "").replace(/\s+/g, " ").trim();
+  // テンプレの「相手 公式戦 第1試合 1st」のように、末尾の情報が複数並んでも全て除く。
+  const suffix = /(?:PK\s*戦|ＰＫ\s*戦|penalty\s*shootout|前半|後半|1st|2nd|3rd|第\s*\d+\s*試合|\d+\s*本目|TM|トレマ|公式戦|カップ戦|練習試合|トレーニングマッチ)\s*$/i;
+  let previous = "";
+  while (value && value !== previous) {
+    previous = value;
+    value = value.replace(suffix, "").trim();
+  }
+  return value;
 }
 
 function extractGameNumber_(text) {

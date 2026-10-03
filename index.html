@@ -9299,9 +9299,10 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
         resultIds:(results || []).map(row=>String(row?.id || "").trim()).filter(Boolean)
       });
       const linked = Number(response?.linkedCount || 0);
-      const pending = Number(response?.pendingCount || 0);
+      const matched = Number(response?.titleMatchedCount || 0);
+      const unmatched = Number(response?.unmatchedCount ?? response?.pendingCount ?? 0);
       await onUpdated?.();
-      alert("この日程のYouTube反映が完了しました。\nリンク: "+linked+"件\n処理待ち: "+pending+"件");
+      alert("この日程のYouTubeタイトル照合が完了しました。\nリンク作成: "+linked+"件\nタイトル一致: "+matched+"件\n未照合: "+unmatched+"件");
     } catch (e) {
       alert("YouTube同期エラー: "+(e?.message || e));
     } finally {
@@ -9416,6 +9417,13 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   };
 
   if (!isAdmin || !results.length) return null;
+  // iPadの写真ライブラリでは動画本体の取り込み待ちが発生するため、通常運用はタイトル照合に戻す。
+  const showFileNameFlow = false;
+  if (!showFileNameFlow) return h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
+    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"YOUTUBE TITLE SYNC"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"YouTubeへ動画をアップロードして、テンプレどおりにタイトルを入力した後に押してください。動画ファイルはアプリで選びません。タイトルの日付・大会名・対戦相手・第○試合・1st/2nd/3rd/PKから、この日程の試合へ安全にリンクを作ります。"),
+    h("button",{onClick:syncScheduleVideos,disabled:syncing,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:syncing?0.65:1,cursor:syncing?"wait":"pointer"}},syncing?"タイトルを照合中...":"YouTubeタイトルからリンクを作成")
+  );
   return h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
     h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"DAY VIDEO UPLOAD"),
     h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"試合形式に合わせた本数だけ表示します。iPadでは右側の「ファイルを選択」から写真ライブラリを開きます。動画本体は読み込まず、選択した動画名だけをすぐ記録します。"),
