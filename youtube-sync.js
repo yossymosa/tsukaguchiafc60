@@ -196,7 +196,7 @@ function extractYoutubeVideoIdForMetadata_(value) {
   return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : "";
 }
 
-function syncYouTubePlaylist() {
+function syncYouTubePlaylist(req) {
   const ss = SpreadsheetApp.openById(getSpreadsheetIdForYoutube_());
   const resultSh = ss.getSheetByName(SHEET_RESULTS);
   const scheduleSh = ss.getSheetByName(SHEET_SCHEDULES);
@@ -209,7 +209,21 @@ function syncYouTubePlaylist() {
     ytPk: ensureColumn_(resultSh, resultHeaders, COL_YT_PK),
     recordings: ensureColumn_(resultSh, resultHeaders, COL_YT_RECORDINGS),
   };
-  const planned = loadYoutubeRecordingPlans_(resultSh, resultHeaders);
+  const requestedResultIds = new Set(
+    (Array.isArray(req && req.resultIds) ? req.resultIds : [])
+      .map(id => String(id || "").trim())
+      .filter(Boolean)
+  );
+  const allPlanned = loadYoutubeRecordingPlans_(resultSh, resultHeaders);
+  // 日程画面から呼ばれた場合は、その日程で指定された試合だけを対象にする。
+  // 時間トリガー等でIDを渡さない従来の呼び出しは全件同期のまま維持する。
+  const planned = {};
+  Object.keys(allPlanned).forEach(key => {
+    const plan = allPlanned[key];
+    if (!requestedResultIds.size || requestedResultIds.has(String(plan && plan.resultId || ""))) {
+      planned[key] = plan;
+    }
+  });
   const plannedKeys = Object.keys(planned);
   if (!plannedKeys.length) return {linkedCount: 0, pendingCount: 0, updatedResults: []};
 
@@ -255,8 +269,7 @@ function syncYouTubePlaylist() {
 
 // ============================================================
 // ファイル名突合が使えない場合の直接リンク。
-// 動画URLを指定して、タイトル・概要欄だけをテンプレートで更新する。
-// status / playlist は更新しないため、YouTube側で付けた既存設定を維持する。
+// 動画URLを指定して、タイトル・概要欄とチーム共通のYouTube設定を反映する。
 // ============================================================
 function linkYoutubeVideoFromApp_(req) {
   const resultId = String(req && req.resultId || "").trim();

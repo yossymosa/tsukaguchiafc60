@@ -1718,7 +1718,7 @@ function dispatch(req) {
       if (typeof syncYouTubePlaylist !== "function") {
         throw new Error("YouTube連携スクリプトが見つかりません。youtube-sync.jsも同じGASプロジェクトへ貼り付けてください");
       }
-      return syncYouTubePlaylist();
+      return syncYouTubePlaylist(req);
     }
 
     // ── 得点記録一括保存 ─────────────────────────────────────
