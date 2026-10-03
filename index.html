@@ -9219,14 +9219,20 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   const resultSignature = (results || []).map(row => [row.id,row.youtubeRecordingFiles,row.youtubeUrl,row.youtubeUrl1st,row.youtubeUrl2nd,row.youtubeUrlPk].join("|")).join("¦");
   const [plans,setPlans] = useState(()=>buildPlans(results));
   const [saving,setSaving] = useState("");
+  const [savedNotice,setSavedNotice] = useState("");
   const [syncing,setSyncing] = useState(false);
   useEffect(()=>setPlans(buildPlans(results)),[resultSignature]);
 
   const saveVideo = async (row,key,event) => {
-    const input = event?.currentTarget;
+    // iPadの写真ライブラリでは currentTarget が外れることがあるため target を優先する。
+    const input = event?.target || event?.currentTarget;
     const file = input?.files && input.files[0];
     if (input) input.value = "";
-    if (!file || saving) return;
+    if (saving) return;
+    if (!file) {
+      alert("動画を取得できませんでした。写真ライブラリで動画を選び、選択完了まで待ってからもう一度お試しください。");
+      return;
+    }
     const resultId = String(row?.id || "").trim();
     const fileName = String(file.name || "").trim();
     const fileSize = Math.max(0, Number(file.size || 0) || 0);
@@ -9241,6 +9247,9 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       capturedAt:new Date().toISOString(),
       preparedAt:String(current?.[key]?.preparedAt || new Date().toISOString())
     }};
+    // 通信完了前にも選んだファイル名を表示し、iPad上で選択結果を確認できるようにする。
+    setPlans(prev=>({...prev,[resultId]:next}));
+    setSavedNotice(resultId+":"+key);
     setSaving(resultId+":"+key);
     try {
       const saved = await api("saveYoutubeRecordingPlan",{
@@ -9251,6 +9260,8 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       setPlans(prev=>({...prev,[resultId]:parseRecordingFiles(saved?.recordingFiles || next)}));
       await onUpdated?.();
     } catch (e) {
+      setPlans(prev=>({...prev,[resultId]:current}));
+      setSavedNotice("");
       alert("動画の記録に失敗しました。\n"+(e?.message || e));
     } finally {
       setSaving("");
@@ -9290,16 +9301,17 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       h("div",{style:{minWidth:0}},
         h("div",{style:{fontSize:compact?11:12,fontWeight:800,color:"#334155",marginBottom:plan?.fileName?2:0}},part.label),
         plan?.fileName && h("div",{style:{fontSize:10,color:"#64748B",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},plan.fileName+(plan.fileSize?" / "+(plan.fileSize/1024/1024).toFixed(1)+" MB":"")),
+        savedNotice===resultId+":"+part.key&&!busy&&h("div",{style:{fontSize:10,color:"#15803D",fontWeight:800,marginTop:2}},"動画名を記録しました"),
         linked && h("div",{style:{fontSize:10,color:"#15803D",fontWeight:800,marginTop:2}},"YouTubeリンク済み")),
       h("label",{style:{position:"relative",overflow:"hidden",display:"inline-flex",alignItems:"center",justifyContent:"center",minHeight:34,padding:"0 10px",border:"1px solid #B8C6D5",borderRadius:6,background:"#fff",color:"#102A43",fontSize:11,fontWeight:800,cursor:busy?"wait":"pointer",opacity:busy?0.65:1,whiteSpace:"nowrap"}},
-        h("input",{type:"file",accept:"video/*",onChange:event=>saveVideo(row,part.key,event),disabled:!!saving,style:{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0,cursor:busy?"wait":"pointer"}}),
+        h("input",{type:"file",accept:"video/*,.mov,.mp4,.m4v",onChange:event=>saveVideo(row,part.key,event),disabled:!!saving,ariaLabel:part.label+"を選ぶ",style:{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0,cursor:busy?"wait":"pointer"}}),
         busy?"記録中...":"動画を選ぶ"));
   };
 
   if (!isAdmin || !results.length) return null;
   return h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
     h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"DAY VIDEO UPLOAD"),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"この日程の試合ごとに、撮影済み動画を選びます。同じファイルをYouTubeへアップロードした後、最後にまとめて反映してください。"),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"この日程の試合ごとに、撮影済み動画を選びます。写真ライブラリから動画を選ぶと、すぐ下にファイル名が出ます。同じファイルをYouTubeへアップロードした後、最後にまとめて反映してください。"),
     h("div",{style:{display:"grid",gap:8,marginBottom:12}},
       results.map((row,index)=>h("div",{key:row.id||index,style:{padding:"10px",border:"1px solid #D8E0E8",borderRadius:7,background:"#fff"}},
         h("div",{style:{fontSize:12,fontWeight:900,color:"#102A43",marginBottom:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"第"+(row.gameNumber||index+1)+"試合  vs "+(row.opponent||"相手未設定")),
