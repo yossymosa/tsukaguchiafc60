@@ -11,9 +11,10 @@
 <title>⚽ 塚口AFC</title>
 <link rel="manifest" href="/manifest.json"/>
 <link rel="icon" href="/icon-512.png" type="image/png"/>
-<link rel="apple-touch-icon" href="/icon-512.png"/>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Noto+Sans+JP:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/preact@10.19.3/dist/preact.umd.js"></script>
+  <link rel="apple-touch-icon" href="/icon-512.png"/>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Noto+Sans+JP:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/preact@10.19.3/dist/preact.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/preact@10.19.3/hooks/dist/hooks.umd.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -109,6 +110,13 @@ const { useState, useEffect, useCallback, useMemo, useRef } = preactHooks;
 // 2. 発行された /exec URL をここへ貼り替える
 // 3. index.html を GitHub に push して Vercel を更新
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxzBjKMnfiiJBsys6k3Cvn4mTC9FBlNsSdVC-RGpDVSrB5tDY6y4C62qqJxh1tE2HVo/exec";
+// OAuth クライアントIDは公開識別子であり、シークレットではない。
+// 動画データとOAuthトークンは端末から直接Google/YouTubeへ送る。
+const YOUTUBE_OAUTH_CLIENT_ID = "1092477758800-55afm8oo376ef96890a5mdblcq489sv8.apps.googleusercontent.com";
+const YOUTUBE_OAUTH_SCOPE = "https://www.googleapis.com/auth/youtube";
+const YOUTUBE_TARGET_PLAYLIST_TITLE = "26年度　塚口AFCjr　60期生　試合動画　（4年生）";
+const YOUTUBE_TARGET_PLAYLIST_DESCRIPTION = "塚口AFCジュニア 60期生（4年生）の試合動画";
+const YOUTUBE_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
 // ================================================================
 
 const HOME_LINKS = [
@@ -340,6 +348,152 @@ async function api(action,body={}) {
     if(timer) clearTimeout(timer);
   }
 }
+
+// ── YouTube 直接アップロード ─────────────────────────────────────
+// 端末→YouTubeへ直接送るため、GASに大きな動画を渡さない。
+const waitForGoogleIdentityServices = async (timeoutMs=12000) => {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (window.google?.accounts?.oauth2?.initTokenClient) return;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  throw new Error("Google認証の読み込みに失敗しました。通信を確認して画面を開き直してください。");
+};
+const requestYouTubeAccessToken = async () => {
+  if (!YOUTUBE_OAUTH_CLIENT_ID) throw new Error("YouTube接続用のクライアントIDが設定されていません。");
+  await waitForGoogleIdentityServices();
+  return new Promise((resolve,reject)=>{
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id:YOUTUBE_OAUTH_CLIENT_ID,
+      scope:YOUTUBE_OAUTH_SCOPE,
+      callback:response=>{
+        if (response?.error) {
+          reject(new Error("Google認証を完了できませんでした: "+String(response.error)));
+          return;
+        }
+        if (!response?.access_token) {
+          reject(new Error("YouTubeを操作するための認証情報を取得できませんでした。"));
+          return;
+        }
+        resolve(String(response.access_token));
+      }
+    });
+    client.requestAccessToken({prompt:"select_account consent"});
+  });
+};
+const readYouTubeError = async response => {
+  let detail = "";
+  try {
+    const body = await response.json();
+    detail = String(body?.error?.message || body?.error?.errors?.[0]?.message || "").trim();
+  } catch (e) {
+    try { detail = String(await response.text() || "").trim(); } catch (ignore) {}
+  }
+  return detail ? " ("+detail+")" : "";
+};
+const youtubeApiJson = async (url,accessToken,options={}) => {
+  const headers = {
+    Authorization:"Bearer "+accessToken,
+    Accept:"application/json",
+    ...(options.headers || {})
+  };
+  const response = await fetch(url,{...options,headers});
+  if (!response.ok) throw new Error("YouTube APIエラー "+response.status+await readYouTubeError(response));
+  const text = await response.text();
+  try { return text ? JSON.parse(text) : {}; } catch (e) { return {}; }
+};
+const getYouTubeChannelForUpload = async accessToken => {
+  const data = await youtubeApiJson("https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true&maxResults=1",accessToken);
+  const channel = data?.items?.[0];
+  if (!channel?.id) {
+    throw new Error("YouTubeチャンネルを取得できません。チームYouTubeチャンネルを所有・管理しているGoogleアカウントで接続してください。");
+  }
+  return {
+    id:String(channel.id),
+    title:String(channel?.snippet?.title || "YouTubeチャンネル"),
+    uploadsPlaylistId:String(channel?.contentDetails?.relatedPlaylists?.uploads || "")
+  };
+};
+const getOrCreateTargetYouTubePlaylist = async accessToken => {
+  let pageToken = "";
+  do {
+    const query = new URLSearchParams({part:"snippet,status",mine:"true",maxResults:"50"});
+    if (pageToken) query.set("pageToken",pageToken);
+    const data = await youtubeApiJson("https://www.googleapis.com/youtube/v3/playlists?"+query.toString(),accessToken);
+    const found = (data?.items || []).find(item=>String(item?.snippet?.title || "").trim()===YOUTUBE_TARGET_PLAYLIST_TITLE);
+    if (found?.id) return {id:String(found.id),title:String(found?.snippet?.title || YOUTUBE_TARGET_PLAYLIST_TITLE),created:false};
+    pageToken = String(data?.nextPageToken || "");
+  } while (pageToken);
+
+  const created = await youtubeApiJson("https://www.googleapis.com/youtube/v3/playlists?part=snippet,status",accessToken,{
+    method:"POST",
+    headers:{"Content-Type":"application/json; charset=UTF-8"},
+    body:JSON.stringify({
+      snippet:{title:YOUTUBE_TARGET_PLAYLIST_TITLE,description:YOUTUBE_TARGET_PLAYLIST_DESCRIPTION},
+      status:{privacyStatus:"unlisted"}
+    })
+  });
+  if (!created?.id) throw new Error("試合動画の再生リストを作成できませんでした。");
+  return {id:String(created.id),title:YOUTUBE_TARGET_PLAYLIST_TITLE,created:true};
+};
+const beginYouTubeResumableUpload = async ({accessToken,file,title,description}) => {
+  if (!file || !Number(file.size)) throw new Error("空の動画はアップロードできません。");
+  const endpoint = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
+  const response = await fetch(endpoint,{
+    method:"POST",
+    headers:{
+      Authorization:"Bearer "+accessToken,
+      "Content-Type":"application/json; charset=UTF-8",
+      "X-Upload-Content-Length":String(file.size),
+      "X-Upload-Content-Type":String(file.type || "video/*")
+    },
+    body:JSON.stringify({
+      snippet:{title:String(title || "").slice(0,100),description:String(description || "").slice(0,5000),categoryId:"17"},
+      status:{privacyStatus:"unlisted",selfDeclaredMadeForKids:false}
+    })
+  });
+  if (!response.ok) throw new Error("YouTubeアップロードを開始できませんでした。"+await readYouTubeError(response));
+  const uploadUrl = response.headers.get("location");
+  if (!uploadUrl) throw new Error("YouTubeからアップロード先を受け取れませんでした。");
+  return uploadUrl;
+};
+const uploadFileToYouTube = async ({accessToken,file,title,description,onProgress}) => {
+  const uploadUrl = await beginYouTubeResumableUpload({accessToken,file,title,description});
+  const total = Number(file.size || 0);
+  let offset = 0;
+  while (offset < total) {
+    const end = Math.min(offset + YOUTUBE_UPLOAD_CHUNK_BYTES,total) - 1;
+    const response = await fetch(uploadUrl,{
+      method:"PUT",
+      headers:{
+        Authorization:"Bearer "+accessToken,
+        "Content-Type":String(file.type || "video/*"),
+        "Content-Range":"bytes "+offset+"-"+end+"/"+total
+      },
+      body:file.slice(offset,end+1)
+    });
+    if (response.status === 308) {
+      const range = String(response.headers.get("range") || "");
+      const matched = range.match(/-(\d+)$/);
+      offset = matched ? Number(matched[1])+1 : end+1;
+      onProgress?.(Math.min(offset,total),total);
+      continue;
+    }
+    if (!response.ok) throw new Error("YouTubeへ動画を送信できませんでした。"+await readYouTubeError(response));
+    const video = await response.json();
+    if (!video?.id) throw new Error("YouTube動画IDを取得できませんでした。");
+    onProgress?.(total,total);
+    return video;
+  }
+  throw new Error("YouTubeアップロードが完了しませんでした。");
+};
+const addVideoToYouTubePlaylist = async ({accessToken,playlistId,videoId}) => {
+  return youtubeApiJson("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet",accessToken,{
+    method:"POST",
+    headers:{"Content-Type":"application/json; charset=UTF-8"},
+    body:JSON.stringify({snippet:{playlistId:String(playlistId),resourceId:{kind:"youtube#video",videoId:String(videoId)}}})
+  });
+};
 function readFileAsDataUrl(file){
   return new Promise((resolve,reject)=>{
     const reader=new FileReader();
@@ -9229,7 +9383,7 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate,onReorder}) {
 }
 
 // ── 日程単位のYouTube動画登録 ───────────────────────────────────
-function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
+function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onUpdated}) {
   const parseRecordingFiles = value => {
     try {
       const raw = typeof value === "string" ? JSON.parse(value || "{}") : value;
@@ -9262,7 +9416,12 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   const [syncing,setSyncing] = useState(false);
   const [syncMessage,setSyncMessage] = useState("");
   const [sharePlans,setSharePlans] = useState({});
-  const [sharing,setSharing] = useState(false);
+  const [youtubeConnecting,setYoutubeConnecting] = useState(false);
+  const [youtubeAccessToken,setYoutubeAccessToken] = useState("");
+  const [youtubeChannel,setYoutubeChannel] = useState(null);
+  const [youtubePlaylist,setYoutubePlaylist] = useState(null);
+  const [uploading,setUploading] = useState(false);
+  const [uploadStates,setUploadStates] = useState({});
   const [shareMessage,setShareMessage] = useState("");
   const [shareError,setShareError] = useState("");
   const [pastedNames,setPastedNames] = useState("");
@@ -9363,12 +9522,17 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
     try { if (input) input.value = ""; } catch (e) {}
     if (!target || !file) return;
     setSharePlans(current => ({...current,[target.slotKey]:{...target,file}}));
+    setUploadStates(current => {
+      const next = {...current};
+      delete next[target.slotKey];
+      return next;
+    });
     shareTargetRef.current = null;
     setShareMessage("");
     setShareError("");
   };
   const chooseShareSlot = target => {
-    if (sharing) return;
+    if (uploading) return;
     shareTargetRef.current = target;
     shareInputRef.current?.click();
   };
@@ -9378,35 +9542,34 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       delete next[slotKey];
       return next;
     });
+    setUploadStates(current => {
+      const next = {...current};
+      delete next[slotKey];
+      return next;
+    });
     setShareMessage("");
     setShareError("");
   };
-  const shareVideosToYouTube = async () => {
-    const selected = getSelectedShareVideos();
-    if (sharing || !selected.length) return;
-    if (!navigator.share) {
-      setShareError("この端末では共有機能を使えません。iPadのSafariまたはホーム画面に追加したアプリからお試しください。");
-      return;
-    }
-    const shareData = {files:selected.map(item=>item.file),title:"塚口AFC 試合動画"};
-    if (navigator.canShare && !navigator.canShare(shareData)) {
-      setShareError("この端末では選択した動画をまとめて共有できません。動画を1本ずつ選んでお試しください。");
-      return;
-    }
-    setSharing(true);
+  const connectYouTubeForDirectUpload = async () => {
+    if (youtubeConnecting || uploading) return;
+    setYoutubeConnecting(true);
     setShareMessage("");
     setShareError("");
     try {
-      await navigator.share(shareData);
-      setShareMessage(selected.length+"本を共有シートへ渡しました。YouTubeを選び、各動画のタイトルをテンプレどおりにしてアップロードしてください。アプリへ戻って下の照合でリンク済みになれば完了です。");
+      const accessToken = await requestYouTubeAccessToken();
+      const channel = await getYouTubeChannelForUpload(accessToken);
+      const playlist = await getOrCreateTargetYouTubePlaylist(accessToken);
+      setYoutubeAccessToken(accessToken);
+      setYoutubeChannel(channel);
+      setYoutubePlaylist(playlist);
+      setShareMessage("YouTubeに接続しました。投稿先: "+channel.title+" / 再生リスト: "+playlist.title);
     } catch (e) {
-      if (String(e?.name || "") === "AbortError") {
-        setShareMessage("共有を中止しました。");
-      } else {
-        setShareError("YouTubeへの共有を開始できませんでした。"+(e?.message ? " "+e.message : ""));
-      }
+      setYoutubeAccessToken("");
+      setYoutubeChannel(null);
+      setYoutubePlaylist(null);
+      setShareError("YouTubeへ接続できませんでした。"+(e?.message ? " "+e.message : ""));
     } finally {
-      setSharing(false);
+      setYoutubeConnecting(false);
     }
   };
   const videoParts = [
@@ -9439,6 +9602,72 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   const getSelectedShareVideos = () => shareSlotsForSchedule()
     .map(slot => ({...slot,file:sharePlans[slot.slotKey]?.file}))
     .filter(slot => !!slot.file);
+  const getYoutubeTemplateForSlot = slot => {
+    const part = String(slot?.part?.key || "");
+    const half = part === "pk" ? "PK戦" : String(slot?.part?.label || "試合動画");
+    return {
+      title:makeYtTitle(slot.row,schedule,half),
+      description:part === "pk" ? makeYtPkDesc(slot.row) : makeYtDesc(slot.row,members,half)
+    };
+  };
+  const uploadSelectedVideosDirectly = async () => {
+    const selected = getSelectedShareVideos().filter(slot => uploadStates[slot.slotKey]?.phase !== "done");
+    if (uploading || !selected.length) return;
+    if (!youtubeAccessToken || !youtubeChannel) {
+      setShareError("先に「YouTubeを接続」を押して、チームのYouTubeチャンネルを選んでください。");
+      return;
+    }
+    setUploading(true);
+    setShareMessage("");
+    setShareError("");
+    try {
+      let playlist = youtubePlaylist;
+      if (!playlist?.id) {
+        playlist = await getOrCreateTargetYouTubePlaylist(youtubeAccessToken);
+        setYoutubePlaylist(playlist);
+      }
+      let completed = 0;
+      for (const slot of selected) {
+        const template = getYoutubeTemplateForSlot(slot);
+        setUploadStates(current => ({...current,[slot.slotKey]:{phase:"uploading",progress:0,message:"アップロードを開始しています"}}));
+        try {
+          const video = await uploadFileToYouTube({
+            accessToken:youtubeAccessToken,
+            file:slot.file,
+            title:template.title,
+            description:template.description,
+            onProgress:(sent,total)=>{
+              const progress = total ? Math.min(100,Math.round(sent / total * 100)) : 0;
+              setUploadStates(current => ({...current,[slot.slotKey]:{phase:"uploading",progress,message:"YouTubeへ送信中"}}));
+            }
+          });
+          const videoId = String(video.id || "");
+          const videoUrl = "https://www.youtube.com/watch?v="+videoId;
+          setUploadStates(current => ({...current,[slot.slotKey]:{phase:"playlist",progress:100,message:"再生リストへ追加しています"}}));
+          await addVideoToYouTubePlaylist({accessToken:youtubeAccessToken,playlistId:playlist.id,videoId});
+          await api("saveYoutubeUploadLink",{
+            userId:String(user?.id || "").trim(),
+            resultId:String(slot.resultId || "").trim(),
+            part:String(slot.part?.key || ""),
+            videoUrl
+          });
+          const privacy = String(video?.status?.privacyStatus || "unlisted");
+          const privacyLabel = privacy === "unlisted" ? "限定公開" : privacy === "private" ? "非公開" : privacy === "public" ? "公開" : privacy;
+          setUploadStates(current => ({...current,[slot.slotKey]:{phase:"done",progress:100,message:"アップロード完了（"+privacyLabel+"）",videoUrl}}));
+          completed++;
+        } catch (e) {
+          const message = String(e?.message || e || "不明なエラー");
+          setUploadStates(current => ({...current,[slot.slotKey]:{phase:"error",progress:0,message}}));
+        }
+      }
+      await onUpdated?.();
+      setShareMessage(completed+"本をアップロードし、試合の動画リンクへ反映しました。失敗した枠だけ選び直して再実行できます。");
+    } catch (e) {
+      setShareError("アップロードを開始できませんでした。"+(e?.message ? " "+e.message : ""));
+    } finally {
+      setUploading(false);
+    }
+  };
   const normalizePastedFileName = value => String(value || "")
     .trim()
     .replace(/^[\-•・]\s*/, "")
@@ -9535,13 +9764,24 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   const showFileNameFlow = false;
   const shareSlots = shareSlotsForSchedule();
   const selectedShareVideos = getSelectedShareVideos();
+  const pendingShareVideos = selectedShareVideos.filter(slot => uploadStates[slot.slotKey]?.phase !== "done");
   if (!showFileNameFlow) return h(Fragment,{},
     h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:10,border:"1px solid #D8E0E8"}},
-      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"YOUTUBE UPLOAD"),
-      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"試合ごとの枠に動画を1本ずつ割り当ててから、選んだ分をまとめてiPadの共有シートからYouTubeへ渡します。動画本体を渡すため、選択時に準備表示が出るのは正常です。"),
+      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"YOUTUBE DIRECT UPLOAD"),
+      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"YouTubeアプリを開かず、この画面から直接アップロードします。タイトル・概要欄はYouTubeテンプレを自動使用し、限定公開・子ども向けではない・試合動画再生リストへの追加まで行います。アップロード中はこの画面を開いたままにしてください。"),
+      h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"9px 10px",background:youtubeChannel?"#F0FDF4":"#F8FAFC",border:"1px solid "+(youtubeChannel?"#BBF7D0":"#D8E0E8"),borderRadius:7,marginBottom:9}},
+        h("div",{style:{minWidth:0}},
+          h("div",{style:{fontSize:11,fontWeight:900,color:youtubeChannel?"#166534":"#334155",marginBottom:youtubeChannel?2:0}},youtubeChannel?"接続先: "+youtubeChannel.title:"YouTubeへの接続が必要です"),
+          youtubePlaylist && h("div",{style:{fontSize:10,color:"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"再生リスト: "+youtubePlaylist.title)
+        ),
+        h("button",{onClick:connectYouTubeForDirectUpload,disabled:youtubeConnecting||uploading,style:{...css.bW,padding:"8px 9px",fontSize:10,whiteSpace:"nowrap",opacity:youtubeConnecting||uploading?0.65:1,cursor:youtubeConnecting||uploading?"wait":"pointer"}},youtubeConnecting?"接続中...":youtubeChannel?"接続し直す":"YouTubeを接続")
+      ),
+      h("div",{style:{marginBottom:10,padding:"8px 9px",borderLeft:"3px solid #B45309",background:"#FFFBEB",fontSize:10,lineHeight:1.55,color:"#92400E"}},"GoogleのYouTube APIが未監査の場合、Google仕様で動画が非公開になることがあります。その場合も画面には実際の公開状態を表示します。"),
       h("input",{ref:shareInputRef,type:"file",accept:"video/*,.mov,.mp4,.m4v",onChange:chooseVideoForShare,style:{display:"none"}}),
       h("div",{style:{display:"grid",gap:8,marginBottom:10}},shareSlots.map(slot=>{
         const selected = sharePlans[slot.slotKey]?.file;
+        const uploadState = uploadStates[slot.slotKey];
+        const statusColor = uploadState?.phase === "done" ? "#15803D" : uploadState?.phase === "error" ? "#B91C1C" : "#1D4E89";
         return h("div",{key:slot.slotKey,style:{padding:"10px",border:"1px solid #D8E0E8",borderRadius:7,background:selected?"#F8FBFF":"#F8FAFC"}},
           h("div",{style:{display:"flex",alignItems:"baseline",gap:6,minWidth:0,marginBottom:6}},
             h("div",{style:{fontSize:12,fontWeight:900,color:"#102A43",whiteSpace:"nowrap"}},slot.gameLabel),
@@ -9550,21 +9790,16 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
           h("div",{style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:8}},
             h("div",{style:{minWidth:0,fontSize:selected?10:11,color:selected?"#475569":"#94A3B8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},selected?selected.name:"動画を選択してください"),
             h("div",{style:{display:"flex",alignItems:"center",gap:7}},
-              selected && h("button",{onClick:()=>removeShareFile(slot.slotKey),disabled:sharing,style:{border:0,background:"transparent",color:"#64748B",fontSize:10,fontWeight:800,padding:0,cursor:"pointer"}},"解除"),
-              h("button",{onClick:()=>chooseShareSlot(slot),disabled:sharing,style:{...css.bW,padding:"7px 9px",fontSize:10,opacity:sharing?0.65:1,cursor:sharing?"wait":"pointer"}},selected?"選び直す":"動画を選ぶ")
+              selected && h("button",{onClick:()=>removeShareFile(slot.slotKey),disabled:uploading,style:{border:0,background:"transparent",color:"#64748B",fontSize:10,fontWeight:800,padding:0,cursor:"pointer"}},"解除"),
+              h("button",{onClick:()=>chooseShareSlot(slot),disabled:uploading,style:{...css.bW,padding:"7px 9px",fontSize:10,opacity:uploading?0.65:1,cursor:uploading?"wait":"pointer"}},selected?"選び直す":"動画を選ぶ")
             )
-          )
+          ),
+          uploadState && h("div",{style:{marginTop:6,fontSize:10,fontWeight:800,color:statusColor,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},uploadState.message+(uploadState.phase==="uploading"?" "+uploadState.progress+"%":""))
         );
       })),
-      h("button",{onClick:shareVideosToYouTube,disabled:sharing||!selectedShareVideos.length,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:sharing||!selectedShareVideos.length?0.55:1,cursor:sharing||!selectedShareVideos.length?"wait":"pointer"}},sharing?"共有シートを開いています...":"選んだ "+selectedShareVideos.length+" 本をYouTubeにアップロード（共有）"),
+      h("button",{onClick:uploadSelectedVideosDirectly,disabled:uploading||!youtubeAccessToken||!pendingShareVideos.length,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:uploading||!youtubeAccessToken||!pendingShareVideos.length?0.55:1,cursor:uploading||!youtubeAccessToken||!pendingShareVideos.length?"wait":"pointer"}},uploading?"YouTubeへアップロード中...":!youtubeAccessToken?"先にYouTubeを接続":"テンプレで "+pendingShareVideos.length+" 本をアップロード"),
       shareMessage && h("div",{style:{marginTop:9,padding:"8px 9px",borderLeft:"3px solid #15803D",background:"#F0FDF4",fontSize:10,lineHeight:1.6,color:"#166534",fontWeight:700}},shareMessage),
       shareError && h("div",{style:{marginTop:9,padding:"8px 9px",borderLeft:"3px solid #B45309",background:"#FFFBEB",fontSize:10,lineHeight:1.6,color:"#92400E",fontWeight:700}},shareError)
-    ),
-    h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
-      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"UPLOAD COMPLETE CHECK"),
-      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"YouTubeでアップロード完了後に押してください。タイトルの日付・大会名・対戦相手・第○試合・1st/2nd/3rd/PKを照合し、試合へ動画リンクを作成します。リンクが作成できた動画を、このアプリ上のアップロード完了として表示します。"),
-      h("button",{onClick:syncScheduleVideos,disabled:syncing,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:syncing?0.65:1,cursor:syncing?"wait":"pointer"}},syncing?"アップロードを確認中...":"アップロード完了を確認してリンク作成"),
-      syncMessage && h("div",{style:{marginTop:9,padding:"8px 9px",borderLeft:"3px solid "+(syncMessage.startsWith("照合完了")?"#15803D":"#B45309"),background:syncMessage.startsWith("照合完了")?"#F0FDF4":"#FFFBEB",fontSize:10,lineHeight:1.6,color:syncMessage.startsWith("照合完了")?"#166534":"#92400E",fontWeight:700}},syncMessage)
     )
   );
   return h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
@@ -10022,7 +10257,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
             background:"#1D4E89",color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}},
             "YouTubeテンプレ")
       ),
-      dayTab==="matches"&&h(ScheduleYoutubeVideoPanel,{schedule,results:dayR,user,isAdmin,onUpdated:onYoutubeUpdated}),
+      dayTab==="matches"&&h(ScheduleYoutubeVideoPanel,{schedule,results:dayR,members,user,isAdmin,onUpdated:onYoutubeUpdated}),
       // 5年帯同は試合記録だけを残し、勝敗・個人成績へは集計しない。
       dayTab==="matches"&&dayR.length>0&&isFiveGradeAccompanyDay&&h("div",{style:{background:"#F5F3FF",borderRadius:8,padding:"12px 14px",marginBottom:14,border:"1px solid #DDD6FE"}},
         h("div",{style:{fontSize:13,fontWeight:900,color:"#5B21B6",marginBottom:3}},"5年帯同の試合記録"),

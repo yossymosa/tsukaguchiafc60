@@ -1593,6 +1593,39 @@ function dispatch(req) {
       return linkYoutubeVideoFromApp_(req);
     }
 
+    // ── アプリからのYouTube直接アップロード後にURLだけを保存（管理者のみ） ──
+    // 動画本体とOAuth認証はブラウザ→YouTubeへ直接送信する。
+    case "saveYoutubeUploadLink": {
+      const userId = String(req.userId || "").trim();
+      const operator = getUserById(userId);
+      const operatorRole = String(operator && operator.role || "").trim();
+      if (!operator || !["admin", "super_admin"].includes(operatorRole)) {
+        throw new Error("YouTube動画リンクの保存は管理者のみ実行できます");
+      }
+      const resultId = String(req.resultId || "").trim();
+      const part = String(req.part || "").trim().toLowerCase();
+      const videoUrl = String(req.videoUrl || "").trim();
+      if (!resultId) throw new Error("試合IDがありません");
+      if (!["full", "first", "second", "third", "pk"].includes(part)) throw new Error("動画の種類が正しくありません");
+      if (!/^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(videoUrl)) {
+        throw new Error("YouTube動画URLが正しくありません");
+      }
+      ensureSheetColumnsByMap("試合結果", MAPS.result);
+      const sh = getSheet("試合結果");
+      if (!sh || sh.getLastRow() < 2) throw new Error("試合結果が見つかりません");
+      const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+      const idCol = headers.indexOf("ID") + 1;
+      const urlColumnName = part === "first" ? "前半URL" : part === "second" ? "後半URL" : part === "third" ? "3rdURL" : part === "pk" ? "PK戦URL" : "YouTubeURL";
+      const urlCol = headers.indexOf(urlColumnName) + 1;
+      if (!idCol || !urlCol) throw new Error("動画リンクの保存列が見つかりません");
+      const ids = sh.getRange(2, idCol, sh.getLastRow() - 1, 1).getValues();
+      const rowIndex = ids.findIndex(row => String(row[0] || "").trim() === resultId);
+      if (rowIndex < 0) throw new Error("対象の試合が見つかりません");
+      sh.getRange(rowIndex + 2, urlCol).setValue(videoUrl);
+      const urlKey = part === "first" ? "youtubeUrl1st" : part === "second" ? "youtubeUrl2nd" : part === "third" ? "youtubeUrl3rd" : part === "pk" ? "youtubeUrlPk" : "youtubeUrl";
+      return {updatedResult: {id: resultId, [urlKey]: videoUrl}};
+    }
+
     // ── YouTube撮影ファイル名の予約（管理者のみ） ─────────────
     case "saveYoutubeRecordingPlan": {
       const userId = String(req.userId || "").trim();
