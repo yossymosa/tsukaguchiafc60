@@ -9260,9 +9260,15 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   const [saving,setSaving] = useState("");
   const [savedNotice,setSavedNotice] = useState("");
   const [syncing,setSyncing] = useState(false);
+  const [syncMessage,setSyncMessage] = useState("");
+  const [shareFiles,setShareFiles] = useState([]);
+  const [sharing,setSharing] = useState(false);
+  const [shareMessage,setShareMessage] = useState("");
+  const [shareError,setShareError] = useState("");
   const [pastedNames,setPastedNames] = useState("");
   const [bulkSaving,setBulkSaving] = useState(false);
   const [bulkMessage,setBulkMessage] = useState("");
+  const shareInputRef = useRef(null);
   useEffect(()=>setPlans(buildPlans(results)),[resultSignature]);
 
   const saveVideo = async (row,key,file) => {
@@ -9333,11 +9339,70 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
       const matched = Number(response?.titleMatchedCount || 0);
       const unmatched = Number(response?.unmatchedCount ?? response?.pendingCount ?? 0);
       await onUpdated?.();
+      const message = "照合完了：リンク作成 "+linked+"件 / タイトル一致 "+matched+"件 / 未照合 "+unmatched+"件";
+      setSyncMessage(message);
       alert("この日程のYouTubeタイトル照合が完了しました。\nリンク作成: "+linked+"件\nタイトル一致: "+matched+"件\n未照合: "+unmatched+"件");
     } catch (e) {
+      const message = "照合エラー："+(e?.message || e);
+      setSyncMessage(message);
       alert("YouTube同期エラー: "+(e?.message || e));
     } finally {
       setSyncing(false);
+    }
+  };
+  const isVideoFile = file => {
+    const type = String(file?.type || "").toLowerCase();
+    const name = String(file?.name || "");
+    return type.startsWith("video/") || /\.(mov|mp4|m4v|avi|mpeg|mpg|webm)$/i.test(name);
+  };
+  const fileKey = file => [String(file?.name || ""), Number(file?.size || 0), Number(file?.lastModified || 0)].join("|");
+  const chooseVideosForShare = event => {
+    const input = event?.target;
+    const picked = Array.from(input?.files || []).filter(isVideoFile);
+    try { if (input) input.value = ""; } catch (e) {}
+    if (!picked.length) return;
+    setShareFiles(current => {
+      const seen = new Set((current || []).map(fileKey));
+      return [...current, ...picked.filter(file => {
+        const key = fileKey(file);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })];
+    });
+    setShareMessage("");
+    setShareError("");
+  };
+  const removeShareFile = key => {
+    setShareFiles(current => (current || []).filter(file => fileKey(file) !== key));
+    setShareMessage("");
+    setShareError("");
+  };
+  const shareVideosToYouTube = async () => {
+    if (sharing || !shareFiles.length) return;
+    if (!navigator.share) {
+      setShareError("この端末では共有機能を使えません。iPadのSafariまたはホーム画面に追加したアプリからお試しください。");
+      return;
+    }
+    const shareData = {files:shareFiles,title:"塚口AFC 試合動画"};
+    if (navigator.canShare && !navigator.canShare(shareData)) {
+      setShareError("この端末では選択した動画をまとめて共有できません。動画を1本ずつ選んでお試しください。");
+      return;
+    }
+    setSharing(true);
+    setShareMessage("");
+    setShareError("");
+    try {
+      await navigator.share(shareData);
+      setShareMessage(shareFiles.length+"本を共有シートへ渡しました。YouTubeを選び、各動画のタイトルをテンプレどおりにしてアップロードしてください。アプリへ戻って下の照合でリンク済みになれば完了です。");
+    } catch (e) {
+      if (String(e?.name || "") === "AbortError") {
+        setShareMessage("共有を中止しました。");
+      } else {
+        setShareError("YouTubeへの共有を開始できませんでした。"+(e?.message ? " "+e.message : ""));
+      }
+    } finally {
+      setSharing(false);
     }
   };
   const videoParts = [
@@ -9448,12 +9513,31 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   };
 
   if (!isAdmin || !results.length) return null;
-  // iPadの写真ライブラリでは動画本体の取り込み待ちが発生するため、通常運用はタイトル照合に戻す。
+  // iPadの写真ライブラリでは動画本体の取り込み待ちが発生するため、通常運用は共有シートからYouTubeへ渡す。
   const showFileNameFlow = false;
-  if (!showFileNameFlow) return h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
-    h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"YOUTUBE TITLE SYNC"),
-    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"YouTubeへ動画をアップロードして、テンプレどおりにタイトルを入力した後に押してください。動画ファイルはアプリで選びません。タイトルの日付・大会名・対戦相手・第○試合・1st/2nd/3rd/PKから、この日程の試合へ安全にリンクを作ります。"),
-    h("button",{onClick:syncScheduleVideos,disabled:syncing,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:syncing?0.65:1,cursor:syncing?"wait":"pointer"}},syncing?"タイトルを照合中...":"YouTubeタイトルからリンクを作成")
+  if (!showFileNameFlow) return h(Fragment,{},
+    h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:10,border:"1px solid #D8E0E8"}},
+      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"YOUTUBE UPLOAD"),
+      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"この日の動画をまとめて選び、iPadの共有シートからYouTubeへ渡します。動画本体を渡すため、選択時に準備表示が出るのは正常です。"),
+      h("input",{ref:shareInputRef,type:"file",accept:"video/*,.mov,.mp4,.m4v",multiple:true,onChange:chooseVideosForShare,style:{display:"none"}}),
+      h("button",{onClick:()=>shareInputRef.current?.click(),disabled:sharing,style:{...css.bW,width:"100%",padding:11,fontSize:12,marginBottom:shareFiles.length?9:0,opacity:sharing?0.65:1,cursor:sharing?"wait":"pointer"}},"動画を追加（複数選択可）"),
+      shareFiles.length>0 && h("div",{style:{border:"1px solid #D8E0E8",borderRadius:6,marginBottom:9,overflow:"hidden"}},
+        h("div",{style:{padding:"8px 10px",background:"#F8FAFC",fontSize:11,fontWeight:900,color:"#102A43"}},"選択中の動画 "+shareFiles.length+"本"),
+        h("div",{style:{maxHeight:144,overflowY:"auto"}},shareFiles.map((file,index)=>h("div",{key:fileKey(file)+":"+index,style:{display:"flex",alignItems:"center",gap:7,padding:"8px 10px",borderTop:index?"1px solid #E8EDF2":"none"}},
+          h("div",{style:{flex:1,minWidth:0,fontSize:10,color:"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},file.name),
+          h("button",{onClick:()=>removeShareFile(fileKey(file)),disabled:sharing,style:{border:0,background:"transparent",color:"#64748B",fontSize:11,fontWeight:900,padding:"2px 0",cursor:"pointer"}},"削除")
+        )))
+      ),
+      h("button",{onClick:shareVideosToYouTube,disabled:sharing||!shareFiles.length,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:sharing||!shareFiles.length?0.55:1,cursor:sharing||!shareFiles.length?"wait":"pointer"}},sharing?"共有シートを開いています...":"YouTubeにアップロード（共有）"),
+      shareMessage && h("div",{style:{marginTop:9,padding:"8px 9px",borderLeft:"3px solid #15803D",background:"#F0FDF4",fontSize:10,lineHeight:1.6,color:"#166534",fontWeight:700}},shareMessage),
+      shareError && h("div",{style:{marginTop:9,padding:"8px 9px",borderLeft:"3px solid #B45309",background:"#FFFBEB",fontSize:10,lineHeight:1.6,color:"#92400E",fontWeight:700}},shareError)
+    ),
+    h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
+      h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"UPLOAD COMPLETE CHECK"),
+      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"YouTubeでアップロード完了後に押してください。タイトルの日付・大会名・対戦相手・第○試合・1st/2nd/3rd/PKを照合し、試合へ動画リンクを作成します。リンクが作成できた動画を、このアプリ上のアップロード完了として表示します。"),
+      h("button",{onClick:syncScheduleVideos,disabled:syncing,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:syncing?0.65:1,cursor:syncing?"wait":"pointer"}},syncing?"アップロードを確認中...":"アップロード完了を確認してリンク作成"),
+      syncMessage && h("div",{style:{marginTop:9,padding:"8px 9px",borderLeft:"3px solid "+(syncMessage.startsWith("照合完了")?"#15803D":"#B45309"),background:syncMessage.startsWith("照合完了")?"#F0FDF4":"#FFFBEB",fontSize:10,lineHeight:1.6,color:syncMessage.startsWith("照合完了")?"#166534":"#92400E",fontWeight:700}},syncMessage)
+    )
   );
   return h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
     h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"DAY VIDEO UPLOAD"),
