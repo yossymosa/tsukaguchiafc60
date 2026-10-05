@@ -392,7 +392,10 @@ const readYouTubeError = async response => {
   let detail = "";
   try {
     const body = await response.json();
-    detail = String(body?.error?.message || body?.error?.errors?.[0]?.message || "").trim();
+    const apiError = body?.error || {};
+    const reason = String(apiError?.errors?.[0]?.reason || "").trim();
+    const message = String(apiError?.message || apiError?.errors?.[0]?.message || "").trim();
+    detail = [reason && "原因: "+reason,message].filter(Boolean).join(" / ");
   } catch (e) {
     try { detail = String(await response.text() || "").trim(); } catch (ignore) {}
   }
@@ -9711,7 +9714,13 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
         }
       }
       await onUpdated?.();
-      setShareMessage(completed+"本を "+YOUTUBE_TARGET_CHANNEL_HANDLE+" へアップロードし、試合の動画リンクへ反映しました。失敗した枠だけ選び直して再実行できます。");
+      const failed = selected.length-completed;
+      if (completed) {
+        setShareMessage(completed+"本を "+YOUTUBE_TARGET_CHANNEL_HANDLE+" へアップロードし、試合の動画リンクへ反映しました。失敗した枠だけ選び直して再実行できます。");
+      }
+      if (failed) {
+        setShareError(failed+"本をアップロードできませんでした。各試合枠の赤いエラー詳細を確認してください。");
+      }
     } catch (e) {
       setShareError("アップロードを開始できませんでした。"+(e?.message ? " "+e.message : ""));
     } finally {
@@ -9846,7 +9855,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
               h("button",{onClick:()=>chooseShareSlot(slot),disabled:uploading,style:{...css.bW,padding:"7px 9px",fontSize:10,opacity:uploading?0.65:1,cursor:uploading?"wait":"pointer"}},selected?"選び直す":savedVideoUrl?"差し替える":"動画を選ぶ")
             )
           ),
-          uploadState && h("div",{style:{marginTop:6,fontSize:10,fontWeight:800,color:statusColor,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},uploadState.message+(uploadState.phase==="uploading"?" "+uploadState.progress+"%":"")),
+          uploadState && h("div",{style:{marginTop:6,fontSize:10,fontWeight:800,color:statusColor,whiteSpace:uploadState.phase==="error"?"normal":"nowrap",overflow:uploadState.phase==="error"?"visible":"hidden",textOverflow:uploadState.phase==="error"?"clip":"ellipsis",wordBreak:uploadState.phase==="error"?"break-word":"normal",lineHeight:uploadState.phase==="error"?1.5:undefined}},uploadState.message+(uploadState.phase==="uploading"?" "+uploadState.progress+"%":"")),
           visibleVideoUrl && h("a",{href:visibleVideoUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",marginTop:7,fontSize:10,fontWeight:900,color:"#166534",textDecoration:"none"}},"✓ YouTubeに保存済み　開く ↗")
         );
       })),
