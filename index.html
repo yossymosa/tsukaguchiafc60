@@ -114,6 +114,9 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbxtkFGO6FDC1F7EueVnCLko
 // 動画データとOAuthトークンは端末から直接Google/YouTubeへ送る。
 const YOUTUBE_OAUTH_CLIENT_ID = "1092477758800-55afm8oo376ef96890a5mdblcq489sv8.apps.googleusercontent.com";
 const YOUTUBE_OAUTH_SCOPE = "https://www.googleapis.com/auth/youtube";
+// アップロード先はチームのBrandチャンネルに固定する。個人チャンネルへの誤投稿を防ぐ。
+const YOUTUBE_TARGET_CHANNEL_HANDLE = "@AFC.jr_60";
+const YOUTUBE_TARGET_CHANNEL_LABEL = "塚口AFC Jr 60期生";
 const YOUTUBE_TARGET_PLAYLIST_TITLE = "26年度　塚口AFCjr　60期生　試合動画　（4年生）";
 const YOUTUBE_TARGET_PLAYLIST_DESCRIPTION = "塚口AFCジュニア 60期生（4年生）の試合動画";
 const YOUTUBE_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
@@ -408,9 +411,25 @@ const getYouTubeChannelForUpload = async accessToken => {
   if (!channel?.id) {
     throw new Error("YouTubeチャンネルを取得できません。チームYouTubeチャンネルを所有・管理しているGoogleアカウントで接続してください。");
   }
+  // YouTube APIの動画保存先はOAuthトークンに紐づくチャンネルで決まり、
+  // アップロード時に別のチャンネルIDを指定して切り替えることはできない。
+  // 先にハンドルからチームチャンネルのIDを取得し、接続先が一致する時だけ続行する。
+  const targetHandle = String(YOUTUBE_TARGET_CHANNEL_HANDLE || "").replace(/^@/,"").trim();
+  if (!targetHandle) throw new Error("チームYouTubeチャンネルの設定がありません。");
+  const targetQuery = new URLSearchParams({part:"snippet",forHandle:targetHandle});
+  const targetData = await youtubeApiJson("https://www.googleapis.com/youtube/v3/channels?"+targetQuery.toString(),accessToken);
+  const targetChannel = targetData?.items?.[0];
+  if (!targetChannel?.id) {
+    throw new Error("保存先のチームチャンネル "+YOUTUBE_TARGET_CHANNEL_HANDLE+" を確認できません。設定を見直してください。");
+  }
+  if (String(channel.id) !== String(targetChannel.id)) {
+    const currentTitle = String(channel?.snippet?.title || "現在のチャンネル");
+    throw new Error("接続先が「"+currentTitle+"」になっています。YouTubeで "+YOUTUBE_TARGET_CHANNEL_HANDLE+" へチャンネルを切り替えてから、もう一度「YouTubeを接続」を押してください。個人チャンネルにはアップロードしません。");
+  }
   return {
     id:String(channel.id),
-    title:String(channel?.snippet?.title || "YouTubeチャンネル"),
+    title:String(channel?.snippet?.title || YOUTUBE_TARGET_CHANNEL_LABEL),
+    handle:YOUTUBE_TARGET_CHANNEL_HANDLE,
     uploadsPlaylistId:String(channel?.contentDetails?.relatedPlaylists?.uploads || "")
   };
 };
@@ -9562,7 +9581,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
       setYoutubeAccessToken(accessToken);
       setYoutubeChannel(channel);
       setYoutubePlaylist(playlist);
-      setShareMessage("YouTubeに接続しました。投稿先: "+channel.title+" / 再生リスト: "+playlist.title);
+      setShareMessage("YouTubeに接続しました。保存先: "+YOUTUBE_TARGET_CHANNEL_HANDLE+"（"+channel.title+"） / 再生リスト: "+playlist.title);
     } catch (e) {
       setYoutubeAccessToken("");
       setYoutubeChannel(null);
@@ -9602,6 +9621,14 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
   const getSelectedShareVideos = () => shareSlotsForSchedule()
     .map(slot => ({...slot,file:sharePlans[slot.slotKey]?.file}))
     .filter(slot => !!slot.file);
+  const getSavedYoutubeUrl = (row,part) => {
+    const keys = Array.isArray(part?.urlKeys) ? part.urlKeys : [];
+    for (const key of keys) {
+      const url = String(row?.[key] || "").trim();
+      if (url) return url;
+    }
+    return "";
+  };
   const getYoutubeTemplateForSlot = slot => {
     const part = String(slot?.part?.key || "");
     const half = part === "pk" ? "PK戦" : String(slot?.part?.label || "試合動画");
@@ -9768,10 +9795,10 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
   if (!showFileNameFlow) return h(Fragment,{},
     h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:10,border:"1px solid #D8E0E8"}},
       h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"YOUTUBE DIRECT UPLOAD"),
-      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"YouTubeアプリを開かず、この画面から直接アップロードします。タイトル・概要欄はYouTubeテンプレを自動使用し、限定公開・子ども向けではない・試合動画再生リストへの追加まで行います。アップロード中はこの画面を開いたままにしてください。"),
+      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"YouTubeアプリを開かず、この画面から直接アップロードします。保存先は "+YOUTUBE_TARGET_CHANNEL_HANDLE+" に固定され、個人チャンネルには投稿しません。タイトル・概要欄はYouTubeテンプレを自動使用し、限定公開・子ども向けではない・試合動画再生リストへの追加まで行います。アップロード中はこの画面を開いたままにしてください。"),
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"9px 10px",background:youtubeChannel?"#F0FDF4":"#F8FAFC",border:"1px solid "+(youtubeChannel?"#BBF7D0":"#D8E0E8"),borderRadius:7,marginBottom:9}},
         h("div",{style:{minWidth:0}},
-          h("div",{style:{fontSize:11,fontWeight:900,color:youtubeChannel?"#166534":"#334155",marginBottom:youtubeChannel?2:0}},youtubeChannel?"接続先: "+youtubeChannel.title:"YouTubeへの接続が必要です"),
+          h("div",{style:{fontSize:11,fontWeight:900,color:youtubeChannel?"#166534":"#334155",marginBottom:youtubeChannel?2:0}},youtubeChannel?"保存先: "+YOUTUBE_TARGET_CHANNEL_HANDLE+"（"+youtubeChannel.title+"）":"保存先: "+YOUTUBE_TARGET_CHANNEL_HANDLE),
           youtubePlaylist && h("div",{style:{fontSize:10,color:"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"再生リスト: "+youtubePlaylist.title)
         ),
         h("button",{onClick:connectYouTubeForDirectUpload,disabled:youtubeConnecting||uploading,style:{...css.bW,padding:"8px 9px",fontSize:10,whiteSpace:"nowrap",opacity:youtubeConnecting||uploading?0.65:1,cursor:youtubeConnecting||uploading?"wait":"pointer"}},youtubeConnecting?"接続中...":youtubeChannel?"接続し直す":"YouTubeを接続")
@@ -9781,6 +9808,8 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
       h("div",{style:{display:"grid",gap:8,marginBottom:10}},shareSlots.map(slot=>{
         const selected = sharePlans[slot.slotKey]?.file;
         const uploadState = uploadStates[slot.slotKey];
+        const savedVideoUrl = getSavedYoutubeUrl(slot.row,slot.part);
+        const visibleVideoUrl = uploadState?.videoUrl || savedVideoUrl;
         const statusColor = uploadState?.phase === "done" ? "#15803D" : uploadState?.phase === "error" ? "#B91C1C" : "#1D4E89";
         return h("div",{key:slot.slotKey,style:{padding:"10px",border:"1px solid #D8E0E8",borderRadius:7,background:selected?"#F8FBFF":"#F8FAFC"}},
           h("div",{style:{display:"flex",alignItems:"baseline",gap:6,minWidth:0,marginBottom:6}},
@@ -9791,10 +9820,11 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
             h("div",{style:{minWidth:0,fontSize:selected?10:11,color:selected?"#475569":"#94A3B8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},selected?selected.name:"動画を選択してください"),
             h("div",{style:{display:"flex",alignItems:"center",gap:7}},
               selected && h("button",{onClick:()=>removeShareFile(slot.slotKey),disabled:uploading,style:{border:0,background:"transparent",color:"#64748B",fontSize:10,fontWeight:800,padding:0,cursor:"pointer"}},"解除"),
-              h("button",{onClick:()=>chooseShareSlot(slot),disabled:uploading,style:{...css.bW,padding:"7px 9px",fontSize:10,opacity:uploading?0.65:1,cursor:uploading?"wait":"pointer"}},selected?"選び直す":"動画を選ぶ")
+              h("button",{onClick:()=>chooseShareSlot(slot),disabled:uploading,style:{...css.bW,padding:"7px 9px",fontSize:10,opacity:uploading?0.65:1,cursor:uploading?"wait":"pointer"}},selected?"選び直す":savedVideoUrl?"差し替える":"動画を選ぶ")
             )
           ),
-          uploadState && h("div",{style:{marginTop:6,fontSize:10,fontWeight:800,color:statusColor,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},uploadState.message+(uploadState.phase==="uploading"?" "+uploadState.progress+"%":""))
+          uploadState && h("div",{style:{marginTop:6,fontSize:10,fontWeight:800,color:statusColor,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},uploadState.message+(uploadState.phase==="uploading"?" "+uploadState.progress+"%":"")),
+          visibleVideoUrl && h("a",{href:visibleVideoUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",marginTop:7,fontSize:10,fontWeight:900,color:"#166534",textDecoration:"none"}},"✓ YouTubeに保存済み　開く ↗")
         );
       })),
       h("button",{onClick:uploadSelectedVideosDirectly,disabled:uploading||!youtubeAccessToken||!pendingShareVideos.length,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:uploading||!youtubeAccessToken||!pendingShareVideos.length?0.55:1,cursor:uploading||!youtubeAccessToken||!pendingShareVideos.length?"wait":"pointer"}},uploading?"YouTubeへアップロード中...":!youtubeAccessToken?"先にYouTubeを接続":"テンプレで "+pendingShareVideos.length+" 本をアップロード"),
