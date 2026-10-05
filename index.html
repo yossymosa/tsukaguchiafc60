@@ -9261,7 +9261,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   const [savedNotice,setSavedNotice] = useState("");
   const [syncing,setSyncing] = useState(false);
   const [syncMessage,setSyncMessage] = useState("");
-  const [shareFiles,setShareFiles] = useState([]);
+  const [sharePlans,setSharePlans] = useState({});
   const [sharing,setSharing] = useState(false);
   const [shareMessage,setShareMessage] = useState("");
   const [shareError,setShareError] = useState("");
@@ -9269,6 +9269,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   const [bulkSaving,setBulkSaving] = useState(false);
   const [bulkMessage,setBulkMessage] = useState("");
   const shareInputRef = useRef(null);
+  const shareTargetRef = useRef(null);
   useEffect(()=>setPlans(buildPlans(results)),[resultSignature]);
 
   const saveVideo = async (row,key,file) => {
@@ -9355,36 +9356,39 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
     const name = String(file?.name || "");
     return type.startsWith("video/") || /\.(mov|mp4|m4v|avi|mpeg|mpg|webm)$/i.test(name);
   };
-  const fileKey = file => [String(file?.name || ""), Number(file?.size || 0), Number(file?.lastModified || 0)].join("|");
-  const chooseVideosForShare = event => {
+  const chooseVideoForShare = event => {
     const input = event?.target;
-    const picked = Array.from(input?.files || []).filter(isVideoFile);
+    const target = shareTargetRef.current;
+    const file = Array.from(input?.files || []).find(isVideoFile);
     try { if (input) input.value = ""; } catch (e) {}
-    if (!picked.length) return;
-    setShareFiles(current => {
-      const seen = new Set((current || []).map(fileKey));
-      return [...current, ...picked.filter(file => {
-        const key = fileKey(file);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })];
+    if (!target || !file) return;
+    setSharePlans(current => ({...current,[target.slotKey]:{...target,file}}));
+    shareTargetRef.current = null;
+    setShareMessage("");
+    setShareError("");
+  };
+  const chooseShareSlot = target => {
+    if (sharing) return;
+    shareTargetRef.current = target;
+    shareInputRef.current?.click();
+  };
+  const removeShareFile = slotKey => {
+    setSharePlans(current => {
+      const next = {...current};
+      delete next[slotKey];
+      return next;
     });
     setShareMessage("");
     setShareError("");
   };
-  const removeShareFile = key => {
-    setShareFiles(current => (current || []).filter(file => fileKey(file) !== key));
-    setShareMessage("");
-    setShareError("");
-  };
   const shareVideosToYouTube = async () => {
-    if (sharing || !shareFiles.length) return;
+    const selected = getSelectedShareVideos();
+    if (sharing || !selected.length) return;
     if (!navigator.share) {
       setShareError("この端末では共有機能を使えません。iPadのSafariまたはホーム画面に追加したアプリからお試しください。");
       return;
     }
-    const shareData = {files:shareFiles,title:"塚口AFC 試合動画"};
+    const shareData = {files:selected.map(item=>item.file),title:"塚口AFC 試合動画"};
     if (navigator.canShare && !navigator.canShare(shareData)) {
       setShareError("この端末では選択した動画をまとめて共有できません。動画を1本ずつ選んでお試しください。");
       return;
@@ -9394,7 +9398,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
     setShareError("");
     try {
       await navigator.share(shareData);
-      setShareMessage(shareFiles.length+"本を共有シートへ渡しました。YouTubeを選び、各動画のタイトルをテンプレどおりにしてアップロードしてください。アプリへ戻って下の照合でリンク済みになれば完了です。");
+      setShareMessage(selected.length+"本を共有シートへ渡しました。YouTubeを選び、各動画のタイトルをテンプレどおりにしてアップロードしてください。アプリへ戻って下の照合でリンク済みになれば完了です。");
     } catch (e) {
       if (String(e?.name || "") === "AbortError") {
         setShareMessage("共有を中止しました。");
@@ -9421,6 +9425,20 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
     plans[String(row?.id || "")]?.pk || row?.youtubeUrlPk || String(row?.pkKickers || "").trim() ||
     Number(row?.pkOur || 0) || Number(row?.pkTheir || 0)
   );
+  const shareSlotsForSchedule = () => (results || []).flatMap((row,index) => {
+    const parts = [...videoPartsForRow(row), ...(hasPkForRow(row) ? [videoParts[4]] : [])];
+    return parts.map(part => ({
+      slotKey:String(row?.id || "")+":"+part.key,
+      resultId:String(row?.id || ""),
+      row,
+      part,
+      gameLabel:"第"+(row?.gameNumber || index+1)+"試合",
+      opponent:String(row?.opponent || "相手未設定")
+    }));
+  });
+  const getSelectedShareVideos = () => shareSlotsForSchedule()
+    .map(slot => ({...slot,file:sharePlans[slot.slotKey]?.file}))
+    .filter(slot => !!slot.file);
   const normalizePastedFileName = value => String(value || "")
     .trim()
     .replace(/^[\-•・]\s*/, "")
@@ -9515,20 +9533,30 @@ function ScheduleYoutubeVideoPanel({schedule,results,user,isAdmin,onUpdated}) {
   if (!isAdmin || !results.length) return null;
   // iPadの写真ライブラリでは動画本体の取り込み待ちが発生するため、通常運用は共有シートからYouTubeへ渡す。
   const showFileNameFlow = false;
+  const shareSlots = shareSlotsForSchedule();
+  const selectedShareVideos = getSelectedShareVideos();
   if (!showFileNameFlow) return h(Fragment,{},
     h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:10,border:"1px solid #D8E0E8"}},
       h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"YOUTUBE UPLOAD"),
-      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"この日の動画をまとめて選び、iPadの共有シートからYouTubeへ渡します。動画本体を渡すため、選択時に準備表示が出るのは正常です。"),
-      h("input",{ref:shareInputRef,type:"file",accept:"video/*,.mov,.mp4,.m4v",multiple:true,onChange:chooseVideosForShare,style:{display:"none"}}),
-      h("button",{onClick:()=>shareInputRef.current?.click(),disabled:sharing,style:{...css.bW,width:"100%",padding:11,fontSize:12,marginBottom:shareFiles.length?9:0,opacity:sharing?0.65:1,cursor:sharing?"wait":"pointer"}},"動画を追加（複数選択可）"),
-      shareFiles.length>0 && h("div",{style:{border:"1px solid #D8E0E8",borderRadius:6,marginBottom:9,overflow:"hidden"}},
-        h("div",{style:{padding:"8px 10px",background:"#F8FAFC",fontSize:11,fontWeight:900,color:"#102A43"}},"選択中の動画 "+shareFiles.length+"本"),
-        h("div",{style:{maxHeight:144,overflowY:"auto"}},shareFiles.map((file,index)=>h("div",{key:fileKey(file)+":"+index,style:{display:"flex",alignItems:"center",gap:7,padding:"8px 10px",borderTop:index?"1px solid #E8EDF2":"none"}},
-          h("div",{style:{flex:1,minWidth:0,fontSize:10,color:"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},file.name),
-          h("button",{onClick:()=>removeShareFile(fileKey(file)),disabled:sharing,style:{border:0,background:"transparent",color:"#64748B",fontSize:11,fontWeight:900,padding:"2px 0",cursor:"pointer"}},"削除")
-        )))
-      ),
-      h("button",{onClick:shareVideosToYouTube,disabled:sharing||!shareFiles.length,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:sharing||!shareFiles.length?0.55:1,cursor:sharing||!shareFiles.length?"wait":"pointer"}},sharing?"共有シートを開いています...":"YouTubeにアップロード（共有）"),
+      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"試合ごとの枠に動画を1本ずつ割り当ててから、選んだ分をまとめてiPadの共有シートからYouTubeへ渡します。動画本体を渡すため、選択時に準備表示が出るのは正常です。"),
+      h("input",{ref:shareInputRef,type:"file",accept:"video/*,.mov,.mp4,.m4v",onChange:chooseVideoForShare,style:{display:"none"}}),
+      h("div",{style:{display:"grid",gap:8,marginBottom:10}},shareSlots.map(slot=>{
+        const selected = sharePlans[slot.slotKey]?.file;
+        return h("div",{key:slot.slotKey,style:{padding:"10px",border:"1px solid #D8E0E8",borderRadius:7,background:selected?"#F8FBFF":"#F8FAFC"}},
+          h("div",{style:{display:"flex",alignItems:"baseline",gap:6,minWidth:0,marginBottom:6}},
+            h("div",{style:{fontSize:12,fontWeight:900,color:"#102A43",whiteSpace:"nowrap"}},slot.gameLabel),
+            h("div",{style:{fontSize:10,color:"#64748B",minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"vs "+slot.opponent+" / "+slot.part.label)
+          ),
+          h("div",{style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:8}},
+            h("div",{style:{minWidth:0,fontSize:selected?10:11,color:selected?"#475569":"#94A3B8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},selected?selected.name:"動画を選択してください"),
+            h("div",{style:{display:"flex",alignItems:"center",gap:7}},
+              selected && h("button",{onClick:()=>removeShareFile(slot.slotKey),disabled:sharing,style:{border:0,background:"transparent",color:"#64748B",fontSize:10,fontWeight:800,padding:0,cursor:"pointer"}},"解除"),
+              h("button",{onClick:()=>chooseShareSlot(slot),disabled:sharing,style:{...css.bW,padding:"7px 9px",fontSize:10,opacity:sharing?0.65:1,cursor:sharing?"wait":"pointer"}},selected?"選び直す":"動画を選ぶ")
+            )
+          )
+        );
+      })),
+      h("button",{onClick:shareVideosToYouTube,disabled:sharing||!selectedShareVideos.length,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:sharing||!selectedShareVideos.length?0.55:1,cursor:sharing||!selectedShareVideos.length?"wait":"pointer"}},sharing?"共有シートを開いています...":"選んだ "+selectedShareVideos.length+" 本をYouTubeにアップロード（共有）"),
       shareMessage && h("div",{style:{marginTop:9,padding:"8px 9px",borderLeft:"3px solid #15803D",background:"#F0FDF4",fontSize:10,lineHeight:1.6,color:"#166534",fontWeight:700}},shareMessage),
       shareError && h("div",{style:{marginTop:9,padding:"8px 9px",borderLeft:"3px solid #B45309",background:"#FFFBEB",fontSize:10,lineHeight:1.6,color:"#92400E",fontWeight:700}},shareError)
     ),
