@@ -9598,7 +9598,9 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
     setShareMessage("");
     setShareError("");
     try {
-      await establishYouTubeConnection({prompt:"select_account",announce:true});
+      // 接続し直しは古い個人チャンネルのOAuth許可を再利用させず、
+      // アカウント／ブランドチャンネルを選び直せる認証画面を必ず出す。
+      await establishYouTubeConnection({prompt:"select_account consent",announce:true});
     } catch (e) {
       setYoutubeAccessToken("");
       setYoutubeTokenExpiresAt(0);
