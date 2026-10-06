@@ -9664,15 +9664,15 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
     setShareMessage("");
     setShareError("");
     try {
-      // 初回だけ認証画面が必要。以後は「アップロード」クリック時に
-      // 同じGoogleログインの許可済みトークンを自動で取り直す。
+      // 初回・再接続時は「アップロード」クリックからアカウント選択を開く。
+      // 静かな再認証だと、Brandチャンネルではなく個人チャンネルへ戻ることがあるため。
       const tokenIsFresh = !!youtubeAccessToken && Number(youtubeTokenExpiresAt || 0) > Date.now()+30000;
       let accessToken = youtubeAccessToken;
       let channel = youtubeChannel;
       let playlist = youtubePlaylist;
       if (!tokenIsFresh || !channel) {
-        setShareMessage("YouTubeへの接続を確認しています...");
-        const connected = await establishYouTubeConnection({prompt:"",announce:false});
+        setShareMessage("YouTubeのチャンネルを選択しています...");
+        const connected = await establishYouTubeConnection({prompt:"select_account",announce:false});
         accessToken = connected.accessToken;
         channel = connected.channel;
         playlist = connected.playlist;
