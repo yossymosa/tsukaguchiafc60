@@ -2351,7 +2351,9 @@ function previewFc2Schedule(url, year, month, mode) {
   const html = decodeFc2Html(response);
   const targetYear = Number(year) || new Date().getFullYear();
   const targetMonth = Number(month) || (new Date().getMonth() + 1);
-  const rows = extractFc2Rows(html, targetYear, targetMonth)
+  // FC2の月別ページには前年分の同月が併記されることがある。
+  // HTML内の年度見出しも読んで、行ごとの実際の年を保持する。
+  const rows = extractFc2Rows(html, targetYear, targetMonth, targetUrl)
     .filter(r => isFc2RequestedMonth(r, targetYear, targetMonth))
     .filter(r => includesFourthGrade(r.grade))
     .filter(r => matchesFc2ImportMode(r, mode));
@@ -2419,17 +2421,33 @@ function syncFc2Schedules(req, mode) {
   ensureSheetColumnsByMap("スケジュール", MAPS.schedule);
   const existingByKey = {};
   sheetToObjects("スケジュール", MAPS.schedule).forEach(schedule => {
-    existingByKey[fc2ScheduleIdentity(schedule)] = true;
+    existingByKey[fc2ScheduleIdentity(schedule)] = schedule;
   });
 
   let inserted = 0;
+  let updated = 0;
   let unchanged = 0;
+  let attached = 0;
+  let attachmentFallbackLinks = 0;
   selectedItems.forEach(item => {
     const identity = fc2ScheduleIdentity(item);
-    if (existingByKey[identity]) {
+    const existing = existingByKey[identity];
+    if (existing) {
+      // 予定だけ先に取り込んでいた場合にも、あとからHP添付を補完できる。
+      if (!String(existing.pdfUrl || "").trim() && (item.attachments || []).length) {
+        const imported = importFc2ScheduleAttachments(item);
+        if (imported.entries.length) {
+          saveScheduleAttachmentEntries(existing.id, imported.entries);
+          attached += imported.attached;
+          attachmentFallbackLinks += imported.fallbackLinks;
+          updated++;
+          return;
+        }
+      }
       unchanged++;
       return;
     }
+    const imported = importFc2ScheduleAttachments(item);
     appendObject("スケジュール", MAPS.schedule, {
       id: genId(),
       date: item.date || "",
@@ -2438,12 +2456,17 @@ function syncFc2Schedules(req, mode) {
       type: item.type || "practice",
       timeLabel: item.parsedTime || item.timeLabel || "",
       note: buildFc2ScheduleNote(item),
+      pdfUrl: serializePdfEntries(imported.entries, "url"),
+      pdfName: serializePdfEntries(imported.entries, "name"),
     });
-    existingByKey[identity] = true;
+    // 同じ候補が続いた場合に添付の再処理をしないため、ダミーでも資料あり扱いにする。
+    existingByKey[identity] = { pdfUrl: "imported" };
+    attached += imported.attached;
+    attachmentFallbackLinks += imported.fallbackLinks;
     inserted++;
   });
 
-  return { inserted, updated: 0, unchanged, items: preview.items || [] };
+  return { inserted, updated, unchanged, attached, attachmentFallbackLinks, items: preview.items || [] };
 }
 
 function fc2ScheduleIdentity(item) {
@@ -2458,6 +2481,103 @@ function buildFc2ScheduleNote(item) {
     .filter(Boolean)
     .filter((value, index, values) => values.indexOf(value) === index)
     .join("\n");
+}
+
+function serializePdfEntries(entries, key) {
+  const values = (entries || []).map(item => String((item || {})[key] || "").trim()).filter(Boolean);
+  if (!values.length) return "";
+  return values.length === 1 ? values[0] : JSON.stringify(values);
+}
+
+function getFc2ScheduleAttachmentFolder() {
+  const folderId = String(PropertiesService.getScriptProperties().getProperty("SCHEDULE_PDF_FOLDER_ID") || "").trim();
+  if (folderId) {
+    try { return DriveApp.getFolderById(folderId); } catch (e) {}
+  }
+  return DriveApp.getRootFolder();
+}
+
+function importFc2ScheduleAttachments(item) {
+  const attachments = Array.isArray(item && item.attachments) ? item.attachments : [];
+  if (!attachments.length) return { entries: [], attached: 0, fallbackLinks: 0 };
+
+  const folder = getFc2ScheduleAttachmentFolder();
+  const entries = [];
+  let attached = 0;
+  let fallbackLinks = 0;
+  attachments.forEach(attachment => {
+    const sourceUrl = String(attachment && attachment.url || "").trim();
+    const sourceName = String(attachment && attachment.name || "資料").trim();
+    if (!sourceUrl) return;
+    try {
+      const response = UrlFetchApp.fetch(sourceUrl, {
+        muteHttpExceptions: true,
+        followRedirects: true,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; GoogleAppsScript)" }
+      });
+      const code = response.getResponseCode();
+      if (code < 200 || code >= 300) throw new Error("HTTP " + code);
+      const mimeType = String(response.getHeaders()["Content-Type"] || response.getBlob().getContentType() || "").split(";")[0].trim();
+      const storedName = fc2AttachmentStoredName(item, sourceName, sourceUrl);
+      const blob = response.getBlob().copyBlob().setName(storedName);
+      const file = folder.createFile(blob);
+      try {
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (sharingError) {
+        // 組織の共有ポリシーで公開リンクにできない場合も、管理者のDriveには保存する。
+      }
+      entries.push({
+        url: "https://drive.google.com/file/d/" + file.getId() + "/view?usp=sharing",
+        name: file.getName()
+      });
+      attached++;
+    } catch (e) {
+      // ダウンロードをブロックする資料は、元サイトへのリンクとして残す。
+      entries.push({ url: sourceUrl, name: sourceName });
+      fallbackLinks++;
+    }
+  });
+  return { entries: dedupeFc2AttachmentEntries(entries), attached, fallbackLinks };
+}
+
+function fc2AttachmentStoredName(item, name, sourceUrl) {
+  const fallback = String(sourceUrl || "").split(/[?#]/)[0].split("/").pop() || "schedule-file";
+  const raw = String(name || fallback).replace(/[\\/:*?\"<>|]+/g, "_").trim() || fallback;
+  const date = String(item && item.date || "").trim();
+  const title = String(item && item.title || "schedule").replace(/[\\/:*?\"<>|]+/g, "_").trim();
+  return [date, title, raw].filter(Boolean).join("_").slice(0, 180);
+}
+
+function dedupeFc2AttachmentEntries(entries) {
+  const seen = {};
+  return (entries || []).filter(entry => {
+    const url = String(entry && entry.url || "").trim();
+    if (!url || seen[url]) return false;
+    seen[url] = true;
+    return true;
+  });
+}
+
+function saveScheduleAttachmentEntries(scheduleId, entries) {
+  const id = String(scheduleId || "").trim();
+  if (!id || !(entries || []).length) return;
+  const sh = getSheet("スケジュール");
+  if (!sh || sh.getLastRow() < 2) return;
+  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  const idCol = headers.indexOf("ID") + 1;
+  const pdfUrlCol = headers.indexOf("PDFURL") + 1;
+  const pdfNameCol = headers.indexOf("PDF名") + 1;
+  if (!idCol || !pdfUrlCol || !pdfNameCol) return;
+  const ids = sh.getRange(2, idCol, sh.getLastRow() - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (String(ids[i][0] || "").trim() !== id) continue;
+    const row = i + 2;
+    const current = parsePdfEntries(sh.getRange(row, pdfUrlCol).getValue(), sh.getRange(row, pdfNameCol).getValue());
+    const next = dedupeFc2AttachmentEntries(current.concat(entries));
+    sh.getRange(row, pdfUrlCol).setValue(serializePdfEntries(next, "url"));
+    sh.getRange(row, pdfNameCol).setValue(serializePdfEntries(next, "name"));
+    return;
+  }
 }
 
 function decodeFc2Html(response) {
@@ -2535,31 +2655,59 @@ function extractHtmlTitle(html) {
   return m ? cleanHtmlText(m[1]) : "";
 }
 
-function extractFc2Rows(html, year, month) {
+function extractFc2Rows(html, year, month, sourceUrl) {
+  const source = String(html || "");
   const rows = [];
+  const fallbackYear = Number(year) || new Date().getFullYear();
+  // 年見出しが存在するページでは、年を特定できない行を対象年扱いにしない。
+  // これにより、同一ページに残った前年同月の表を混ぜない。
+  const hasYearMarkers = hasFc2YearMarker(source);
+  let currentYear = hasYearMarkers ? 0 : fallbackYear;
   let currentMonth = Number(month) || (new Date().getMonth() + 1);
-  const currentYear = Number(year) || new Date().getFullYear();
-  const trList = String(html || "").match(/<tr\b[\s\S]*?<\/tr>/gi) || [];
+  let scanCursor = 0;
+  const trRe = /<tr\b[\s\S]*?<\/tr>/gi;
+  let matched;
 
-  trList.forEach(tr => {
+  while ((matched = trRe.exec(source))) {
+    const tr = matched[0];
+    const beforeRow = source.slice(scanCursor, matched.index);
+    const contextYear = extractFc2LatestYear(beforeRow);
+    if (contextYear && contextYear !== currentYear) {
+      currentYear = contextYear;
+      // 年度が切り替わった直後に月欄が空の行があっても、前年度の月を継承しない。
+      currentMonth = 0;
+    }
+    scanCursor = trRe.lastIndex;
+
     const cells = tr.match(/<t[dh]\b[\s\S]*?<\/t[dh]>/gi) || [];
-    if (cells.length < 5) return;
+    if (cells.length < 5) {
+      // 年度見出しが表内の <tr> に置かれているFC2ページにも対応する。
+      const headerYear = extractFc2LatestYear(tr);
+      if (headerYear && headerYear !== currentYear) {
+        currentYear = headerYear;
+        currentMonth = 0;
+      }
+      continue;
+    }
     const vals = cells.map(cleanHtmlText);
-
-    const monthVal = toInt(vals[0]);
-    const dayVal = toInt(vals[1]);
+    const dateCells = vals.slice(0, 3);
+    const explicit = extractFc2DateParts(dateCells.join(" "));
+    const rowYear = explicit.year || extractFc2LatestYear(dateCells.join(" ")) || currentYear || (hasYearMarkers ? 0 : fallbackYear);
+    const monthVal = explicit.month || extractFc2Month(dateCells[0]);
+    const dayVal = explicit.day || extractFc2Day(dateCells[1]);
     const weekday = vals[2] || "";
     const content = vals[3] || "";
     const location = vals[4] || "";
     const grade = vals[5] || "";
     const note = vals[6] || "";
-    if (!content) return;
+    if (!content) continue;
 
     if (monthVal) currentMonth = monthVal;
-    if (!dayVal || !currentMonth) return;
+    // 年見出しがあるのにコンテキストを確定できない行は、前年の誤取込を防ぐため除外する。
+    if (!dayVal || !currentMonth || (hasYearMarkers && !rowYear)) continue;
 
     rows.push({
-      date: buildYmd(currentYear, currentMonth, dayVal),
+      date: buildYmd(rowYear, currentMonth, dayVal),
       weekday,
       title: firstLine(content),
       content,
@@ -2567,10 +2715,85 @@ function extractFc2Rows(html, year, month) {
       grade,
       note,
       type: inferFc2Type(content),
+      attachments: extractFc2Attachments(tr, sourceUrl),
     });
-  });
+  }
 
   return rows;
+}
+
+function hasFc2YearMarker(text) {
+  return !!extractFc2LatestYear(text);
+}
+
+function extractFc2LatestYear(text) {
+  const source = cleanHtmlText(text);
+  let latest = 0;
+  let match;
+  const western = /(?:^|[^0-9])((?:19|20)[0-9]{2})\s*(?:年度|年|[./-]\s*[0-9]{1,2})/g;
+  while ((match = western.exec(source))) latest = Number(match[1]) || latest;
+  const reiwa = /令和\s*([元0-9０-９]+)\s*年(?:度)?/g;
+  while ((match = reiwa.exec(source))) {
+    const value = String(match[1] || "").replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 65248));
+    const reiwaYear = value === "元" ? 1 : Number(value);
+    if (reiwaYear) latest = 2018 + reiwaYear;
+  }
+  return latest;
+}
+
+function extractFc2DateParts(text) {
+  const source = String(text || "").replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 65248));
+  const match = source.match(/((?:19|20)[0-9]{2})\s*(?:年|[./-])\s*(\d{1,2})\s*(?:月|[./-])\s*(\d{1,2})\s*(?:日)?/);
+  if (!match) return { year: 0, month: 0, day: 0 };
+  return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+}
+
+function extractFc2Month(value) {
+  const source = String(value || "").replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 65248));
+  let match = source.match(/(?:^|\D)(\d{1,2})\s*月/);
+  if (!match) match = source.match(/(?:19|20)[0-9]{2}\s*[./-]\s*(\d{1,2})/);
+  if (!match) match = source.match(/^\s*(\d{1,2})\s*$/);
+  const month = match ? Number(match[1]) : 0;
+  return month >= 1 && month <= 12 ? month : 0;
+}
+
+function extractFc2Day(value) {
+  const source = String(value || "").replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 65248));
+  const match = source.match(/(?:^|\D)(\d{1,2})(?:\s*日)?(?:\D|$)/);
+  const day = match ? Number(match[1]) : 0;
+  return day >= 1 && day <= 31 ? day : 0;
+}
+
+function extractFc2Attachments(tr, sourceUrl) {
+  const attachments = [];
+  const seen = {};
+  const anchorRe = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>`]+))[^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = anchorRe.exec(String(tr || "")))) {
+    const href = decodeHtmlEntities(match[1] || match[2] || match[3] || "").trim();
+    const url = resolveFc2Url(sourceUrl, href);
+    if (!isFc2AttachmentUrl(url) || seen[url]) continue;
+    seen[url] = true;
+    const fallbackName = url.split(/[?#]/)[0].split("/").pop() || "資料";
+    attachments.push({ url, name: cleanHtmlText(match[4]) || fallbackName });
+  }
+  return attachments;
+}
+
+function isFc2AttachmentUrl(url) {
+  return /\.(?:pdf|png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/i.test(String(url || ""));
+}
+
+function resolveFc2Url(baseUrl, href) {
+  const value = String(href || "").trim();
+  if (!value || /^#|^mailto:|^javascript:/i.test(value)) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^\/\//.test(value)) return "https:" + value;
+  const base = String(baseUrl || "http://afcjr.web.fc2.com/").replace(/[?#].*$/, "");
+  const origin = (base.match(/^(https?:\/\/[^/]+)/i) || [])[1] || "";
+  if (value.charAt(0) === "/") return origin + value;
+  const dir = base.replace(/\/[^/]*$/, "/");
+  return dir + value;
 }
 
 function includesFourthGrade(grade) {

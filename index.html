@@ -8898,9 +8898,9 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
         h("button",{onClick:fetchImportPreview,disabled:importBusy,style:{...css.bG,opacity:importBusy?0.6:1}},
           importBusy?"取得中...":"取り込み候補を取得"),
         importMode==="practice"&&h("div",{style:{fontSize:11,color:"#64748B",background:"#F8FAFC",borderRadius:8,padding:"8px 10px",lineHeight:1.5}},
-          "対象: 指定月の4年生（U10を含む）の練習だけ。候補は未選択で表示されます。"),
+          `対象: ${importForm.year}年${importForm.month}月の4年生（U10を含む）の練習だけ。前年・翌年の同月情報は除外し、PDF・画像の資料も一緒に取り込みます。候補は未選択で表示されます。`),
         importMode==="match"&&h("div",{style:{fontSize:11,color:"#64748B",background:"#F8FAFC",borderRadius:8,padding:"8px 10px",lineHeight:1.5}},
-          "対象: 指定月の4年生（U10を含む）の試合だけ。公式戦・カップ戦・練習試合を表示します。"),
+          `対象: ${importForm.year}年${importForm.month}月の4年生（U10を含む）の試合だけ。前年・翌年の同月情報は除外し、PDF・画像の資料も一緒に取り込みます。`),
         importRows.length>0
           ? h("div",{},
               h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",marginBottom:6}},
@@ -8920,15 +8920,15 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
                     h("div",{style:{minWidth:0,flex:1}},
                       h("div",{style:{fontSize:12,fontWeight:800,color:"#1E293B"}},
                         `${fmt(r.dateOnly||r.date).m}/${fmt(r.dateOnly||r.date).d} ${r.title||"練習"}`),
-                      h("div",{style:{fontSize:11,color:"#475569",marginTop:2}},
-                        `${importMode==="match"?importTypeLabel:(r.parsedTime||r.timeLabel||importTypeLabel)}${r.location?" / "+r.location:""}`)));
+                       h("div",{style:{fontSize:11,color:"#475569",marginTop:2}},
+                        `${importMode==="match"?importTypeLabel:(r.parsedTime||r.timeLabel||importTypeLabel)}${r.location?" / "+r.location:""}${Array.isArray(r.attachments)&&r.attachments.length?" / 資料 "+r.attachments.length+"件":""}`)));
                 })),
               h("button",{onClick:runImportFromPreview,disabled:importBusy||selectedImportCount===0,style:{...css.bS,marginTop:10,opacity:importBusy||selectedImportCount===0?0.6:1}},
                 importBusy?"取り込み中...":`選択した ${selectedImportCount} 件を取り込む`))
           : h("div",{style:{fontSize:12,color:"#94A3B8"}},"先に「取り込み候補を取得」を押してください"),
         importResult&&h("div",{style:{fontSize:12,fontWeight:700,color:"#16A34A",background:"#ECFDF3",padding:"8px 10px",borderRadius:8}},
           `取込完了: 追加 ${importResult.inserted||0} / 更新 ${importResult.updated||0} / 変更なし ${importResult.unchanged||0}`+
-          ((importMode==="match"&&((importResult.attached||0)>0||(importResult.attachmentFallbackLinks||0)>0))
+          (((importResult.attached||0)>0||(importResult.attachmentFallbackLinks||0)>0)
             ? ` / 添付 ${importResult.attached||0}（リンクのみ ${importResult.attachmentFallbackLinks||0}）`
             : "")
         )
