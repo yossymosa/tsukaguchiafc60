@@ -1607,7 +1607,8 @@ function dispatch(req) {
       const videoUrl = String(req.videoUrl || "").trim();
       if (!resultId) throw new Error("試合IDがありません");
       if (!["full", "first", "second", "third", "pk"].includes(part)) throw new Error("動画の種類が正しくありません");
-      if (!/^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(videoUrl)) {
+      // 空URLは、YouTube上で削除済みと確認された古いリンクを外すためにだけ使う。
+      if (videoUrl && !/^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(videoUrl)) {
         throw new Error("YouTube動画URLが正しくありません");
       }
       ensureSheetColumnsByMap("試合結果", MAPS.result);
