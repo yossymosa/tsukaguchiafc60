@@ -1653,11 +1653,15 @@ function makeLegacyYtTitle(match, schedule, half) {
   return [dateStr, tournamentLabel, "VS", opponent, tc.lb, gameNo, half, loc].filter(Boolean).join(" ");
 }
 
-// 秒→ m:ss 形式
-function secToTime(min, sec) {
-  const m = Number(min)||0;
-  const s = Number(sec)||0;
-  return m + ":" + String(s).padStart(2,"0");
+// YouTubeの時刻リンク用。1時間を超える動画も正しい表記にする。
+function secondsToYoutubeTime(totalSeconds) {
+  const total = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hour = Math.floor(total / 3600);
+  const minute = Math.floor((total % 3600) / 60);
+  const second = total % 60;
+  return hour
+    ? hour + ":" + String(minute).padStart(2,"0") + ":" + String(second).padStart(2,"0")
+    : minute + ":" + String(second).padStart(2,"0");
 }
 
 // チャプター形式の説明欄生成（通し / 1st / 2nd / 3rd）
@@ -1702,6 +1706,16 @@ function makeYtDesc(match, members, half) {
     ...(match.goals||[]).filter(g => g.team==="them" && (!halfKey || String(g.half).toLowerCase()===halfKey.toLowerCase())),
   ].sort((a,b)=>halfOrder(a.half)-halfOrder(b.half)||Number(a.minute)-Number(b.minute)||Number(a.second)-Number(b.second));
 
+  // 前後半を1本の動画にした時は、後半以降の時計を動画全体の時刻へ換算する。
+  // 以前は後半の「5:00」が前半の得点より後に並んでも 5:00 のままになり、
+  // YouTubeが時刻リンク／チャプターとして認識できないことがあった。
+  const format = parseFormatSelection(match?.formatLabel || "");
+  const perHalfSeconds = Math.max(60, Number(format.time || DEFAULT_FORMAT_TIME) * 60);
+  const videoTime = goal => {
+    const localSeconds = Math.max(0, Number(goal?.minute || 0) * 60 + Number(goal?.second || 0));
+    const order = halfOrder(goal?.half);
+    return halfKey ? localSeconds : (order === 99 ? 0 : order) * perHalfSeconds + localSeconds;
+  };
   const lines = ["0:00 スタート"];
   const events = [
     ...myG.map(g => {
@@ -1711,16 +1725,36 @@ function makeYtDesc(match, members, half) {
       const assistName = as?.name || g.assistName || "";
       const type = g.goalType && g.goalType!=="通常" ? "("+g.goalType+")" : "";
       const assistStr = assistName ? " アシスト "+assistName : "";
-      return { min:Number(g.minute)||0, sec:Number(g.second)||0,
-               text: secToTime(g.minute,g.second)+" [得点]"+scorerName+type+assistStr };
+      const seconds = videoTime(g);
+      return { seconds,
+               text:secondsToYoutubeTime(seconds)+" [得点]"+scorerName+type+assistStr };
     }),
     ...thG.map(g => {
       const type = g.goalType && g.goalType!=="通常" ? "("+g.goalType+")" : "";
-      return { min:Number(g.minute)||0, sec:Number(g.second)||0,
-               text: secToTime(g.minute,g.second)+" 失点"+type };
+      const seconds = videoTime(g);
+      return { seconds,
+               text:secondsToYoutubeTime(seconds)+" 失点"+type };
     }),
-  ].sort((a,b)=>a.min-b.min||a.sec-b.sec);
-  events.forEach(e => lines.push(e.text));
+  ].sort((a,b)=>a.seconds-b.seconds);
+  // 0:00と重複する得点時刻は1行にまとめ、時刻が逆順・重複になるのを防ぐ。
+  const eventBySecond = new Map();
+  events.forEach(e => {
+    const key = Math.max(0, Number(e.seconds || 0) || 0);
+    const prior = eventBySecond.get(key);
+    eventBySecond.set(key, prior ? prior + " / " + e.text.replace(/^\S+\s+/,"") : e.text);
+  });
+  const orderedEvents = [...eventBySecond.entries()].sort((a,b)=>a[0]-b[0]);
+  // YouTubeの手動チャプターは 0:00 を含む3つ以上の時刻が必要。
+  // 得点／失点が1件だけの動画でも、十分に間隔がある場合は開始直後の印を足して
+  // テレビアプリでも得点位置へ移動できるようにする。
+  const timedEvents = orderedEvents.filter(([seconds])=>seconds > 0);
+  if (timedEvents.length === 1 && timedEvents[0][0] >= 20) {
+    lines.push("0:10 試合開始");
+  }
+  orderedEvents.forEach(([seconds,text]) => {
+    if (seconds === 0) lines[0] += " / " + text.replace(/^\S+\s+/,"");
+    else lines.push(text);
+  });
 
   return scoreLine + "\n\n" + lines.join("\n");
 }
@@ -1940,8 +1974,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const youtubeCaptureInputRef = useRef(null);
   const youtubeVideoPickerRef = useRef(null);
   const youtubeCaptureTargetRef = useRef("");
-  const goalInputPointerRef = useRef(null);
-  const goalInputClickGuardRef = useRef(0);
   const clockResumeRef = useRef(null);
   const [matchClockSec,setMatchClockSec]=useState(()=>Math.max(0, Number(goalDraftInit?.matchClockSec || 0) || 0));
   const [clockRunning,setClockRunning]=useState(false);
@@ -2361,6 +2393,12 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     // 出欠が未入力の試合でも、得点記録そのものは止めない。
     return attending.length ? attending : membersSorted;
   }, [membersSorted, scheduleIdForAttend, attendMap]);
+  // iPadのselectではoptgroup内の選手が一時的に表示されないことがあるため、
+  // 得点者はフラットな選手一覧を使う。オウンゴールは最後に残して選手を優先表示する。
+  const goalScorerMembers = useMemo(
+    () => goalAssistSelectableMembers.filter(m => String(m?.id || "").trim()),
+    [goalAssistSelectableMembers]
+  );
   const pkSelectableMembers = useMemo(() => {
     if (!scheduleIdForAttend) return membersSorted;
     if (attendMap === null) return membersSorted;
@@ -2787,40 +2825,18 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     });
   };
   const openAddOurGoal = () => {
+    if (loading || modal) return;
     // 前回キャンセル時の選手を引き継がず、得点入力は毎回まっさらな状態で開く。
     const time = clockRunning ? getGoalTimeFromClock(-20) : {half:visibleHalfOptions[0] || "1st",minute:"",second:"00"};
     setNg({scorerId:"",scorerName:"",assistId:"",assistName:"",goalType:"通常",...time});
     setModal("our");
   };
   const openAddTheirGoal = () => {
+    if (loading || modal) return;
     const time = clockRunning ? getGoalTimeFromClock(-20) : {half:visibleHalfOptions[0] || "1st",minute:"",second:"00"};
     setNtg({goalType:"通常",...time});
     setModal("their");
   };
-  // スクロール開始を「得点入力」タップと誤認しないよう、指を離した時にだけ開く。
-  const beginGoalInputPress = (team,event) => {
-    goalInputPointerRef.current = {
-      team,
-      pointerId:event?.pointerId,
-      x:Number(event?.clientX || 0),
-      y:Number(event?.clientY || 0)
-    };
-  };
-  const finishGoalInputPress = (team,event) => {
-    const start = goalInputPointerRef.current;
-    goalInputPointerRef.current = null;
-    if (!start || start.team !== team || (start.pointerId !== undefined && event?.pointerId !== start.pointerId)) return;
-    const dx = Number(event?.clientX || 0) - start.x;
-    const dy = Number(event?.clientY || 0) - start.y;
-    if (Math.hypot(dx,dy) > 12) return;
-    event?.preventDefault();
-    event?.stopPropagation();
-    // iPadでは pointerup の直後に click がもう一度届く。
-    // モーダルを次のイベント処理まで遅らせ、下の「追加」へ誤タップが届かないようにする。
-    goalInputClickGuardRef.current = Date.now() + 600;
-    setTimeout(()=>{ if (team === "our") openAddOurGoal(); else openAddTheirGoal(); }, 0);
-  };
-  const clearGoalInputPress = () => { goalInputPointerRef.current = null; };
   const openAddSub = () => {
     const firstHalf = visibleHalfOptions[0] || "1st";
     const baseSec = getClockSecNow();
@@ -3174,8 +3190,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           h("span",{style:{color:"#64748B"}},match.opponent||"相手")
         ),
         isAdmin&&h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}},
-          h("button",{type:"button",onPointerDown:e=>beginGoalInputPress("our",e),onPointerUp:e=>finishGoalInputPress("our",e),onPointerCancel:clearGoalInputPress,onPointerLeave:clearGoalInputPress,onClick:e=>{if(e.detail!==0||Date.now()<goalInputClickGuardRef.current)return;openAddOurGoal();},style:{background:"#102A43",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:"pointer",touchAction:"manipulation"}},"得点を入力"),
-          h("button",{type:"button",onPointerDown:e=>beginGoalInputPress("their",e),onPointerUp:e=>finishGoalInputPress("their",e),onPointerCancel:clearGoalInputPress,onPointerLeave:clearGoalInputPress,onClick:e=>{if(e.detail!==0||Date.now()<goalInputClickGuardRef.current)return;openAddTheirGoal();},style:{background:"#475569",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:"pointer",touchAction:"manipulation"}},"失点を入力")
+          h("button",{type:"button",onClick:openAddOurGoal,disabled:loading||!!modal,style:{background:"#102A43",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:loading||modal?"wait":"pointer",opacity:loading||modal?0.55:1}},"得点を入力"),
+          h("button",{type:"button",onClick:openAddTheirGoal,disabled:loading||!!modal,style:{background:"#475569",color:"#fff",border:"none",borderRadius:6,padding:"7px 10px",fontSize:11,fontWeight:800,cursor:loading||modal?"wait":"pointer",opacity:loading||modal?0.55:1}},"失点を入力")
         )
       )
     ),
@@ -3593,9 +3609,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         editGoal.type==="our"&&h("div",{style:{marginBottom:14}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"得点者"),
           h("select",{value:isOpponentOwnGoalDraft(editNg)?OPPONENT_OWN_GOAL_ID:(editNg.scorerId||""),onChange:e=>setEditNg(p=>chooseOurScorer(p,e.target.value)),style:css.inp},
-            h("option",{value:""},"選んでください"),
-            h("option",{value:OPPONENT_OWN_GOAL_ID},OPPONENT_OWN_GOAL_NAME),
-            memberOptionsByPosition(goalAssistSelectableMembers))),
+            h("option",{value:""},goalScorerMembers.length?"選手を選んでください":"選手一覧を読み込み中"),
+            goalScorerMembers.map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name)),
+            h("option",{value:OPPONENT_OWN_GOAL_ID},OPPONENT_OWN_GOAL_NAME))),
         editGoal.type==="our"&&h("div",{style:{marginBottom:14}},
           h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"アシスト（任意）"),
           h("select",{value:editNg.assistId||"",onChange:e=>setEditNg(p=>({...p,assistId:e.target.value})),disabled:isOpponentOwnGoalDraft(editNg),style:{...css.inp,opacity:isOpponentOwnGoalDraft(editNg)?0.45:1}},
@@ -3739,9 +3755,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         h("div",{style:{flex:1}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"秒"),h("input",{value:ng.second,onInput:e=>setNg(p=>({...p,second:e.target.value})),onBlur:e=>setNg(p=>({...p,second:(String(e.target.value||"").trim()===""?"00":String(Math.max(0,Math.min(59,Number(e.target.value)||0))).padStart(2,"0"))})),type:"number",min:"0",max:"59",placeholder:"00",style:{...css.inp,textAlign:"center",fontSize:22,fontWeight:900}}))),
       h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"得点者"),
         h("select",{value:isOpponentOwnGoalDraft(ng)?OPPONENT_OWN_GOAL_ID:ng.scorerId,onChange:e=>setNg(p=>chooseOurScorer(p,e.target.value)),style:css.inp},
-          h("option",{value:""},"選手を選んでください"),
-          h("option",{value:OPPONENT_OWN_GOAL_ID},OPPONENT_OWN_GOAL_NAME),
-          memberOptionsByPosition(goalAssistSelectableMembers))),
+          h("option",{value:""},goalScorerMembers.length?"選手を選んでください":"選手一覧を読み込み中"),
+          goalScorerMembers.map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name)),
+          h("option",{value:OPPONENT_OWN_GOAL_ID},OPPONENT_OWN_GOAL_NAME))),
       h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:600,color:"#666",marginBottom:6}},"アシスト（任意）"),
         h("select",{value:ng.assistId,onChange:e=>setNg(p=>({...p,assistId:e.target.value})),disabled:isOpponentOwnGoalDraft(ng),style:{...css.inp,opacity:isOpponentOwnGoalDraft(ng)?0.45:1}},
           h("option",{value:""},"なし"),
@@ -9551,6 +9567,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
   const [metadataUpdating,setMetadataUpdating] = useState(false);
   const [youtubeReconciling,setYoutubeReconciling] = useState(false);
   const [uploadStates,setUploadStates] = useState({});
+  const [videoPickerBusy,setVideoPickerBusy] = useState("");
   const [shareMessage,setShareMessage] = useState("");
   const [shareError,setShareError] = useState("");
   const [pastedNames,setPastedNames] = useState("");
@@ -9558,6 +9575,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
   const [bulkMessage,setBulkMessage] = useState("");
   const shareInputRef = useRef(null);
   const shareTargetRef = useRef(null);
+  const videoPickerResetTimerRef = useRef(null);
   useEffect(()=>setPlans(buildPlans(results)),[resultSignature]);
 
   const saveVideo = async (row,key,file) => {
@@ -9644,12 +9662,23 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
     const name = String(file?.name || "");
     return type.startsWith("video/") || /\.(mov|mp4|m4v|avi|mpeg|mpg|webm)$/i.test(name);
   };
+  const clearVideoPickerBusy = () => {
+    if (videoPickerResetTimerRef.current) clearTimeout(videoPickerResetTimerRef.current);
+    videoPickerResetTimerRef.current = null;
+    setVideoPickerBusy("");
+  };
   const chooseVideoForShare = event => {
     const input = event?.target;
     const target = shareTargetRef.current;
-    const file = Array.from(input?.files || []).find(isVideoFile);
+    // ここでは動画の中身を読まず、OSが返したFile参照と名前だけを持つ。
+    // 実データを送るのは「アップロード」を押してから。
+    const file = input?.files?.[0];
     try { if (input) input.value = ""; } catch (e) {}
-    if (!target || !file) return;
+    if (!target || !file || !isVideoFile(file)) {
+      clearVideoPickerBusy();
+      shareTargetRef.current = null;
+      return;
+    }
     setSharePlans(current => ({...current,[target.slotKey]:{...target,file}}));
     setUploadStates(current => {
       const next = {...current};
@@ -9657,15 +9686,30 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
       return next;
     });
     shareTargetRef.current = null;
+    clearVideoPickerBusy();
     setShareMessage("");
     setShareError("");
   };
   const chooseShareSlot = target => {
-    if (uploading || metadataUpdating) return;
+    if (uploading || metadataUpdating || youtubeReconciling || videoPickerBusy) return;
     shareTargetRef.current = target;
-    shareInputRef.current?.click();
+    setVideoPickerBusy(target.slotKey);
+    if (videoPickerResetTimerRef.current) clearTimeout(videoPickerResetTimerRef.current);
+    // キャンセル時にもボタンが永遠に操作不能にならないための復帰処理。
+    videoPickerResetTimerRef.current = setTimeout(() => {
+      if (shareTargetRef.current?.slotKey === target.slotKey) shareTargetRef.current = null;
+      setVideoPickerBusy(current => current === target.slotKey ? "" : current);
+      videoPickerResetTimerRef.current = null;
+    }, 60000);
+    const input = shareInputRef.current;
+    if (input) input.click();
+    else clearVideoPickerBusy();
   };
   const removeShareFile = slotKey => {
+    if (videoPickerBusy === slotKey) {
+      shareTargetRef.current = null;
+      clearVideoPickerBusy();
+    }
     setSharePlans(current => {
       const next = {...current};
       delete next[slotKey];
@@ -10172,7 +10216,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
         h("button",{onClick:connectYouTubeForDirectUpload,disabled:youtubeConnecting||uploading||metadataUpdating||youtubeReconciling,style:{...css.bW,padding:"8px 9px",fontSize:10,whiteSpace:"nowrap",opacity:youtubeConnecting||uploading||metadataUpdating||youtubeReconciling?0.65:1,cursor:youtubeConnecting||uploading||metadataUpdating||youtubeReconciling?"wait":"pointer"}},youtubeConnecting?"接続中...":youtubeChannel?"接続し直す":"YouTubeを接続")
       ),
       h("div",{style:{marginBottom:10,padding:"8px 9px",borderLeft:"3px solid #B45309",background:"#FFFBEB",fontSize:10,lineHeight:1.55,color:"#92400E"}},"GoogleのYouTube APIが未監査の場合、Google仕様で動画が非公開になることがあります。その場合も画面には実際の公開状態を表示します。"),
-      h("input",{ref:shareInputRef,type:"file",accept:"video/*,.mov,.mp4,.m4v",onChange:chooseVideoForShare,style:{display:"none"}}),
+      h("input",{ref:shareInputRef,type:"file",accept:"video/*,.mov,.mp4,.m4v",onChange:chooseVideoForShare,onCancel:()=>{shareTargetRef.current=null;clearVideoPickerBusy();},style:{display:"none"}}),
       h("div",{style:{display:"grid",gap:8,marginBottom:10}},shareSlots.map(slot=>{
         const selected = sharePlans[slot.slotKey]?.file;
         const uploadState = uploadStates[slot.slotKey];
@@ -10188,9 +10232,10 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
             h("div",{style:{minWidth:0,fontSize:selected?10:11,color:selected?"#475569":"#94A3B8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},selected?selected.name:"動画を選択してください"),
             h("div",{style:{display:"flex",alignItems:"center",gap:7}},
               selected && h("button",{onClick:()=>removeShareFile(slot.slotKey),disabled:uploading||metadataUpdating||youtubeReconciling,style:{border:0,background:"transparent",color:"#64748B",fontSize:10,fontWeight:800,padding:0,cursor:"pointer"}},"解除"),
-              h("button",{onClick:()=>chooseShareSlot(slot),disabled:uploading||metadataUpdating||youtubeReconciling,style:{...css.bW,padding:"7px 9px",fontSize:10,opacity:uploading||metadataUpdating||youtubeReconciling?0.65:1,cursor:uploading||metadataUpdating||youtubeReconciling?"wait":"pointer"}},selected?"選び直す":savedVideoUrl?"差し替える":"動画を選ぶ")
+              h("button",{onClick:()=>chooseShareSlot(slot),disabled:uploading||metadataUpdating||youtubeReconciling||!!videoPickerBusy,style:{...css.bW,padding:"7px 9px",fontSize:10,opacity:uploading||metadataUpdating||youtubeReconciling||videoPickerBusy?0.65:1,cursor:uploading||metadataUpdating||youtubeReconciling||videoPickerBusy?"wait":"pointer"}},videoPickerBusy===slot.slotKey?"選択準備中...":selected?"選び直す":savedVideoUrl?"差し替える":"動画を選ぶ")
             )
           ),
+          videoPickerBusy===slot.slotKey && h("div",{style:{marginTop:6,fontSize:10,lineHeight:1.45,color:"#526B91"}},"iPadが写真ライブラリから動画を準備しています。アプリはこの時点で動画本体を保存・送信していません。"),
           uploadState && h("div",{style:{marginTop:6,fontSize:10,fontWeight:800,color:statusColor,whiteSpace:uploadState.phase==="error"?"normal":"nowrap",overflow:uploadState.phase==="error"?"visible":"hidden",textOverflow:uploadState.phase==="error"?"clip":"ellipsis",wordBreak:uploadState.phase==="error"?"break-word":"normal",lineHeight:uploadState.phase==="error"?1.5:undefined}},uploadState.message+(uploadState.phase==="uploading"?" "+uploadState.progress+"%":"")),
           visibleVideoUrl && h("a",{href:visibleVideoUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",marginTop:7,fontSize:10,fontWeight:900,color:"#166534",textDecoration:"none"}},"✓ YouTubeに保存済み　開く ↗")
         );
