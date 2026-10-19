@@ -10905,6 +10905,111 @@ function MemberTab({members,liftings=[]}) {
     ));
 }
 
+function AiHighlightTestPanel({user,members=[]}) {
+  const [loading,setLoading] = useState(false);
+  const [error,setError] = useState("");
+  const [channel,setChannel] = useState(null);
+  const [videos,setVideos] = useState([]);
+  const [query,setQuery] = useState("");
+  const [selectedVideoId,setSelectedVideoId] = useState("");
+  const [savedPlan,setSavedPlan] = useState(()=>{
+    try { return JSON.parse(localStorage.getItem("afc_ai_highlight_test_plan") || "null"); }
+    catch(e) { return null; }
+  });
+  const targetMember = members.find(m=>String(m.id||"")===String(user?.memberId||"")) || null;
+  const selectedVideo = videos.find(video=>video.id===selectedVideoId) || null;
+  const filteredVideos = videos.filter(video=>{
+    const needle = String(query||"").trim().toLowerCase();
+    return !needle || String(video.title||"").toLowerCase().includes(needle);
+  });
+
+  const loadYouTubeVideos = async()=>{
+    setLoading(true);
+    setError("");
+    try {
+      const token = await requestYouTubeAccessToken({prompt:"select_account"});
+      const nextChannel = await getYouTubeChannelForUpload(token.accessToken);
+      if (!nextChannel.uploadsPlaylistId) throw new Error("このチャンネルのアップロード一覧を取得できませんでした。");
+      const items = await listYouTubePlaylistItems({
+        accessToken:token.accessToken,
+        playlistId:nextChannel.uploadsPlaylistId,
+        maxPages:6
+      });
+      const mapped = items.map(item=>{
+        const id = String(item?.contentDetails?.videoId || item?.snippet?.resourceId?.videoId || "").trim();
+        if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
+        const snippet = item?.snippet || {};
+        return {
+          id,
+          title:String(snippet.title || "無題の動画"),
+          publishedAt:String(item?.contentDetails?.videoPublishedAt || snippet.publishedAt || ""),
+          thumbnail:String(snippet?.thumbnails?.medium?.url || snippet?.thumbnails?.default?.url || ""),
+          url:"https://www.youtube.com/watch?v="+id
+        };
+      }).filter(Boolean);
+      setChannel(nextChannel);
+      setVideos(mapped);
+      setSelectedVideoId(current=>mapped.some(video=>video.id===current) ? current : String(mapped[0]?.id || ""));
+      if (!mapped.length) setError("対象チャンネルに選択できる動画がありません。");
+    } catch(e) {
+      setError("YouTube動画を読み込めませんでした。"+(e?.message ? " "+e.message : ""));
+    }
+    setLoading(false);
+  };
+
+  const saveTestPlan = ()=>{
+    if (!targetMember) {
+      setError("先にプロフィールで自分の子どもを登録してください。");
+      return;
+    }
+    if (!selectedVideo) {
+      setError("YouTube動画を選んでください。");
+      return;
+    }
+    const next = {
+      status:"source-selected",
+      createdAt:new Date().toISOString(),
+      memberId:String(targetMember.id),
+      memberName:String(targetMember.name||""),
+      videoId:selectedVideo.id,
+      videoTitle:selectedVideo.title,
+      videoUrl:selectedVideo.url
+    };
+    try { localStorage.setItem("afc_ai_highlight_test_plan",JSON.stringify(next)); } catch(e) {}
+    setSavedPlan(next);
+    setError("");
+  };
+
+  return h("div",{style:{background:"#F8FAFC",border:"1px solid #BFDBFE",borderRadius:14,padding:16,marginBottom:12}},
+    h("div",{style:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:8}},
+      h("div",{},
+        h("div",{style:{fontSize:13,fontWeight:900,color:"#102A43"}},"AIタッチ集（管理者テスト）"),
+        h("div",{style:{fontSize:11,color:"#526B91",lineHeight:1.55,marginTop:4}},"YouTubeにある試合動画を選ぶところまでを、あなたのアカウントだけで確認するテストです。")),
+      h("span",{style:{fontSize:10,fontWeight:900,color:"#1D4ED8",background:"#DBEAFE",borderRadius:999,padding:"4px 8px",whiteSpace:"nowrap"}},"TEST")),
+    h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},
+      "対象: ",targetMember ? h("strong",{style:{color:"#102A43"}},targetMember.name+" さん") : "子ども未設定",
+      " ／ 完成時は「",targetMember?.name||"本人"," タッチ集」を限定公開で専用再生リストへ保存します。"),
+    h("button",{onClick:loadYouTubeVideos,disabled:loading,style:{...css.bS,width:"100%",padding:11,fontSize:12,opacity:loading?0.65:1,cursor:loading?"wait":"pointer"}},
+      loading?"YouTubeを確認中...":(channel?"YouTube動画を読み直す":"YouTubeの試合動画を読み込む")),
+    channel&&h("div",{style:{fontSize:10,color:"#166534",fontWeight:800,marginTop:8}},"✓ 読み込み先: "+YOUTUBE_TARGET_CHANNEL_HANDLE+"（"+videos.length+"件）"),
+    !!videos.length&&h(Fragment,{},
+      h("input",{value:query,onChange:e=>setQuery(e.target.value),placeholder:"動画タイトルで絞り込み",style:{...css.inp,width:"100%",marginTop:12,fontSize:12}}),
+      h("select",{value:selectedVideoId,onChange:e=>setSelectedVideoId(e.target.value),style:{...css.inp,width:"100%",marginTop:8,fontSize:12}},
+        filteredVideos.length ? filteredVideos.map(video=>h("option",{key:video.id,value:video.id},(video.publishedAt?String(video.publishedAt).slice(0,10)+"　":"")+video.title)) : h("option",{value:""},"該当する動画がありません")),
+      selectedVideo&&h("div",{style:{display:"flex",gap:10,alignItems:"center",marginTop:10,padding:"10px",background:"#fff",border:"1px solid #D8E0E8",borderRadius:10}},
+        selectedVideo.thumbnail&&h("img",{src:selectedVideo.thumbnail,alt:"",style:{width:76,height:43,objectFit:"cover",borderRadius:6,flexShrink:0}}),
+        h("div",{style:{minWidth:0,flex:1}},
+          h("div",{style:{fontSize:12,fontWeight:800,color:"#102A43",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},selectedVideo.title),
+          h("a",{href:selectedVideo.url,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-block",marginTop:4,fontSize:11,fontWeight:800,color:"#1D4ED8",textDecoration:"none"}},"YouTubeで確認 ↗"))),
+      h("button",{onClick:saveTestPlan,disabled:!targetMember||!selectedVideo,style:{...css.bW,width:"100%",marginTop:10,padding:11,fontSize:12,opacity:(!targetMember||!selectedVideo)?0.55:1,cursor:(!targetMember||!selectedVideo)?"not-allowed":"pointer"}},"この動画でテスト用プランを保存")),
+    savedPlan&&h("div",{style:{marginTop:12,padding:"10px 11px",background:"#ECFDF5",borderLeft:"3px solid #16A34A",fontSize:11,lineHeight:1.65,color:"#166534"}},
+      h("div",{style:{fontWeight:900,marginBottom:3}},"✓ テスト素材を選択済み"),
+      h("div",{},savedPlan.memberName+" ／ "+savedPlan.videoTitle),
+      h("div",{style:{color:"#526B91",marginTop:5}},"このテストではYouTube動画の選択までを確認します。映像本体のAI解析・切り出しは、次に編集用クラウドを接続してから実行します。")),
+    error&&h("div",{style:{marginTop:10,padding:"9px 10px",background:"#FFF7ED",borderLeft:"3px solid #EA580C",fontSize:11,lineHeight:1.55,color:"#9A3412"}},error)
+  );
+}
+
 function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabled,notificationBusy,onToggleNotifications,onUpdateProfile,onUploadMemberPhoto,onAdminUpdateUser,onAddMember,uiTabVisibility,onSaveUiTabVisibility}) {
   const currentUserProfile = (users || []).find(u => String(u.id || "") === String(user.id || "")) || user;
   const child = members.find(m => String(m.id || "") === String(currentUserProfile.memberId || ""));
@@ -11196,6 +11301,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
       h("button",{onClick:saveTabVisibility,disabled:tabVisibilitySaving,style:{...css.bS,width:"100%",opacity:tabVisibilitySaving?0.75:1}},
         tabVisibilitySaving ? "保存中..." : "表示設定を保存")
     ),
+    isSuperAdmin && h(AiHighlightTestPanel,{user,members}),
     isSuperAdmin && h("div",{style:{background:"#fff",borderRadius:16,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:6}},"🛡️ 権限管理（super admin）"),
       h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},"登録ユーザーの権限・紐づけ選手・家族構成をここで更新できます"),
