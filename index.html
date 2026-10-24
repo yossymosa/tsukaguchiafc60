@@ -26,12 +26,12 @@ input,select,textarea,button{font-family:'Noto Sans JP',sans-serif;}
 .page{max-width:480px;margin:0 auto;min-height:100vh;overflow:visible;padding-bottom:24px;background:var(--ground);}
 button{transition:background .16s ease,color .16s ease,border-color .16s ease,transform .16s ease;}
 button:active{transform:translateY(1px);}
-.app-header{background:var(--ink);padding:15px 16px 13px;border-bottom:2px solid #2F80ED;color:#fff;}
+.app-header{background:var(--ink);padding:15px 16px 13px;border-bottom:2px solid var(--blue);color:#fff;}
 .header-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .header-brand{display:flex;align-items:center;gap:8px;min-width:0;}
-.brand-mark,.login-mark{width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:#2F80ED;border:1px solid rgba(255,255,255,.3);}
+.brand-mark,.login-mark{width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:var(--blue);border:1px solid rgba(255,255,255,.3);}
 .brand-mark img,.login-mark img{display:block;width:100%;height:100%;object-fit:contain;}
-.brand-kicker{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:11px;letter-spacing:1.4px;color:#8FB8E8;line-height:1.05;}
+.brand-kicker{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:11px;letter-spacing:1.4px;color:#A8BED4;line-height:1.05;}
 .brand-name{font-size:17px;font-weight:900;letter-spacing:.2px;line-height:1.2;white-space:nowrap;}
 .header-user{display:flex;align-items:center;gap:7px;flex-shrink:0;}
 .header-user-name{font-size:11px;color:#D8E8F8;max-width:88px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -44,7 +44,7 @@ button:active{transform:translateY(1px);}
 .video-link{color:#fff;text-decoration:none;border-left:1px solid rgba(216,232,248,.35);padding-left:6px;font-size:10px;font-weight:800;}
 .app-tabbar{display:flex;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 3px 10px rgba(15,23,42,.05);}
 .app-tab{flex:1;min-width:0;padding:12px 2px 11px;border:0;border-bottom:2px solid transparent;background:#fff;color:#7B8794;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;}
-.app-tab.is-active{color:var(--navy);border-bottom-color:#2F80ED;background:#F8FBFF;font-weight:900;}
+.app-tab.is-active{color:var(--navy);border-bottom-color:var(--blue);background:#F8FBFF;font-weight:900;}
   .content-page{padding:14px 16px 0;touch-action:pan-y;}
   .tab-page-motion{will-change:transform,opacity;}
   .tab-page-motion.from-right{animation:tabPageFromRight .22s cubic-bezier(.2,.8,.2,1) both;}
@@ -53,7 +53,7 @@ button:active{transform:translateY(1px);}
   @keyframes tabPageFromLeft{from{opacity:.35;transform:translateX(-26px)}to{opacity:1;transform:translateX(0)}}
   @media (prefers-reduced-motion:reduce){.tab-page-motion.from-right,.tab-page-motion.from-left{animation:none;}}
 .page-intro{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:2px 0 14px;padding:0 0 10px;border-bottom:1px solid var(--line);}
-.page-intro-eyebrow{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:12px;font-weight:700;letter-spacing:1.5px;color:#2F80ED;line-height:1;}
+.page-intro-eyebrow{font-family:'Barlow Condensed','Noto Sans JP',sans-serif;font-size:12px;font-weight:700;letter-spacing:1.5px;color:var(--blue);line-height:1;}
 .page-intro-title{font-size:20px;font-weight:900;color:var(--ink);letter-spacing:.02em;margin-top:5px;line-height:1.25;}
 .page-intro-note{font-size:11px;color:var(--muted);text-align:right;line-height:1.45;max-width:145px;}
 .content-page button,.detail-page button{border-radius:6px !important;}
@@ -75,7 +75,7 @@ button:active{transform:translateY(1px);}
 .detail-page .match-half-tabs{display:flex;gap:6px;padding:4px;background:#F1F5F9;border:1px solid var(--line);border-radius:6px;}
 .detail-page .match-half-tabs button{border-radius:3px !important;}
 .login-shell{min-height:100vh;background:var(--ink);display:flex;align-items:center;justify-content:center;padding:24px;}
-.login-card{background:#fff;border:1px solid #D8E0E8;border-top:4px solid #2F80ED;padding:30px;width:100%;max-width:360px;box-shadow:0 18px 48px rgba(0,0,0,.26);}
+.login-card{background:#fff;border:1px solid #D8E0E8;border-top:4px solid var(--blue);padding:30px;width:100%;max-width:360px;box-shadow:0 18px 48px rgba(0,0,0,.26);}
 .login-brand{display:flex;align-items:center;gap:12px;margin-bottom:28px;}
 .login-brand-copy{min-width:0;text-align:left;}
 .login-title{font-size:20px;font-weight:900;color:var(--ink);line-height:1.2;}
@@ -85,6 +85,27 @@ button:active{transform:translateY(1px);}
   button{display:none !important;}
   .page{max-width:none !important;padding-bottom:0 !important;}
 }
+  /* 共通トンマナ: 画面構成・機能には触れず、面・罫線・操作部だけを統一する。 */
+  :root{--surface:#fff;--surface-muted:#F7F9FB;--line-soft:#E4EAF0;--accent:#1D4E89;--accent-soft:#F1F6FC;--success:#557B6C;--warning:#8A7057;--danger:#925D59;}
+  .content-page,.detail-page{color:var(--ink);}
+  .content-page div[style*="border-radius:16px"],.detail-page div[style*="border-radius:16px"],
+  .content-page div[style*="border-radius:14px"],.detail-page div[style*="border-radius:14px"],
+  .content-page div[style*="border-radius:12px"],.detail-page div[style*="border-radius:12px"]{border-radius:8px !important;box-shadow:none !important;}
+  .content-page [style*="border-radius:999"],.detail-page [style*="border-radius:999"]{border-radius:4px !important;}
+  .content-page button,.detail-page button{box-shadow:none !important;}
+  .content-page input,.content-page select,.content-page textarea,.detail-page input,.detail-page select,.detail-page textarea{border-color:#CBD5E1 !important;background:#fff !important;box-shadow:none !important;}
+  .content-page [style*="background:#DBEAFE"],.detail-page [style*="background:#DBEAFE"],
+  .content-page [style*="background:#EFF6FF"],.detail-page [style*="background:#EFF6FF"]{background:var(--accent-soft) !important;color:var(--accent) !important;border-color:#C9D9EA !important;}
+  .content-page [style*="background:#DCFCE7"],.detail-page [style*="background:#DCFCE7"],
+  .content-page [style*="background:#E8F5E9"],.detail-page [style*="background:#E8F5E9"]{background:#F4F8F6 !important;color:#456C5B !important;border-color:#C9DAD1 !important;}
+  .content-page [style*="background:#FFEBEE"],.detail-page [style*="background:#FFEBEE"],
+  .content-page [style*="background:#FEE2E2"],.detail-page [style*="background:#FEE2E2"]{background:#FBF6F5 !important;color:#865550 !important;border-color:#E7D0CD !important;}
+  .content-page [style*="background:#FEF3C7"],.detail-page [style*="background:#FEF3C7"],
+  .content-page [style*="background:#FFF7ED"],.detail-page [style*="background:#FFF7ED"]{background:#FAF8F5 !important;color:#786753 !important;border-color:#E4D8C9 !important;}
+  .dashboard-tabs,.match-half-tabs{border-color:var(--line) !important;box-shadow:none !important;}
+  .dashboard-tabs button[style*="background:#F8FBFF"],.detail-page .match-half-tabs button[style*="background:#F1F5F9"]{background:var(--accent-soft) !important;}
+  .app-tabbar{box-shadow:none;}
+  .page-intro{border-color:var(--line-soft);}
 </style>
 </head>
 <body>
@@ -224,21 +245,21 @@ function normalizeFormationLabel(value){
 // スプシ「種類」列は英語・日本語どちらでも対応
 function getTC(type) {
   const m={
-    practice:{bg:"#15803D",lb:"練習"},
+    practice:{bg:"#557B6C",lb:"練習"},
     official:{bg:"#1D4E89",lb:"公式戦"},
-    training:{bg:"#2F80ED",lb:"トレマ"},
-    "練習試合":{bg:"#2F80ED",lb:"トレマ"},
-    "トレーニングマッチ":{bg:"#2F80ED",lb:"トレマ"},
+    training:{bg:"#5B7895",lb:"トレマ"},
+    "練習試合":{bg:"#5B7895",lb:"トレマ"},
+    "トレーニングマッチ":{bg:"#5B7895",lb:"トレマ"},
     cup:     {bg:"#0F172A",lb:"カップ戦"},
-    "練習":  {bg:"#15803D",lb:"練習"},
+    "練習":  {bg:"#557B6C",lb:"練習"},
     "公式戦":{bg:"#1D4E89",lb:"公式戦"},
-    "トレマ":{bg:"#2F80ED",lb:"トレマ"},
+    "トレマ":{bg:"#5B7895",lb:"トレマ"},
     "カップ戦":{bg:"#0F172A",lb:"カップ戦"},
-    five_accompany:{bg:"#7C3AED",lb:"5年帯同"},
-    "5年帯同":{bg:"#7C3AED",lb:"5年帯同"},
-    "５年帯同":{bg:"#7C3AED",lb:"5年帯同"},
-    "event":{bg:"#0F766E",lb:"イベント"},
-    "イベント":{bg:"#0F766E",lb:"イベント"},
+    five_accompany:{bg:"#7A7191",lb:"5年帯同"},
+    "5年帯同":{bg:"#7A7191",lb:"5年帯同"},
+    "５年帯同":{bg:"#7A7191",lb:"5年帯同"},
+    "event":{bg:"#557C7A",lb:"イベント"},
+    "イベント":{bg:"#557C7A",lb:"イベント"},
   };
   return m[type]||{bg:"#999",lb:type||"その他"};
 }
@@ -264,19 +285,19 @@ function isFiveGradeAccompanyResult(result, schedules=[]) {
   return isFiveGradeAccompanyType(linked?.type || result?.type);
 }
 const TC={
-  practice:{bg:"#15803D",lb:"練習"},
+  practice:{bg:"#557B6C",lb:"練習"},
   official:{bg:"#1D4E89",lb:"公式戦"},
-  training:{bg:"#2F80ED",lb:"トレマ"},
+  training:{bg:"#5B7895",lb:"トレマ"},
   cup:     {bg:"#0F172A",lb:"カップ戦"},
-  five_accompany:{bg:"#7C3AED",lb:"5年帯同"},
-  event:   {bg:"#0F766E",lb:"イベント"},
+  five_accompany:{bg:"#7A7191",lb:"5年帯同"},
+  event:   {bg:"#557C7A",lb:"イベント"},
 };
 const PC={FW:{bg:"#64748B"},MF:{bg:"#64748B"},DF:{bg:"#64748B"},GK:{bg:"#64748B"}};
 const ATTEND_OPTS=["○","×","△","未"];
 const ATTEND_STYLE={
-  "○":{bg:"#4CAF50",c:"#fff"},
-  "×":{bg:"#F44336",c:"#fff"},
-  "△":{bg:"#FFC107",c:"#333"},
+  "○":{bg:"#557B6C",c:"#fff"},
+  "×":{bg:"#925D59",c:"#fff"},
+  "△":{bg:"#8A7057",c:"#fff"},
   "未":{bg:"#eee",c:"#aaa"},
 };
 const REFLECT_GOOD_OPTIONS = [
