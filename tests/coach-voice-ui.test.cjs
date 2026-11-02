@@ -5,7 +5,7 @@ const path=require("node:path");
 const vm=require("node:vm");
 const crypto=require("node:crypto");
 const source=fs.readFileSync(path.join(__dirname,"../coach-voice.js"),"utf8");
-function harness({denyMic=false,token="signed-token",failSave=false}={}){
+function harness({denyMic=false,token="signed-token",failSave=false,failAnalyze=false,mimeType="audio/webm"}={}){
   const hooks=[],pending=[],cleanups=[],calls=[],urls=new Set();let cursor=0,clock=1000,tree;
   const tracks=[{stopped:false,stop(){this.stopped=true;}}];const guard={current:()=>true};
   const useState=init=>{const i=cursor++;if(!(i in hooks))hooks[i]=typeof init==="function"?init():init;return [hooks[i],value=>{hooks[i]=typeof value==="function"?value(hooks[i]):value;}];};
@@ -16,24 +16,26 @@ function harness({denyMic=false,token="signed-token",failSave=false}={}){
   const window={preact:{h},preactHooks:{useState,useRef,useEffect},crypto:crypto.webcrypto,
     confirm:()=>true,alert:()=>{},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name),
     localStorage:{setItem(){throw new Error("音声を自動保存してはいけません");}},sessionStorage:{setItem(){throw new Error("音声を自動保存してはいけません");}}};
-  const raw=Buffer.alloc(64);Buffer.from([0x1a,0x45,0xdf,0xa3]).copy(raw);const audio=new Blob([raw],{type:"audio/webm"});
+  const raw=Buffer.alloc(64);if(mimeType==="audio/mp4")raw.write("ftyp",4);else Buffer.from([0x1a,0x45,0xdf,0xa3]).copy(raw);const audio=new Blob([raw],{type:mimeType});
+  const stored=[];
   class Recorder{
-    static isTypeSupported(type){return type.startsWith("audio/webm");}
+    static isTypeSupported(type){return type.startsWith(mimeType);}
     constructor(_stream,options){this.mimeType=options.mimeType;this.state="inactive";}
     start(){this.state="recording";}
-    stop(){this.state="inactive";Promise.resolve().then(()=>{if(this.ondataavailable)this.ondataavailable({data:audio});if(this.onstop)this.onstop();});}
+    stop(){this.state="inactive";Promise.resolve().then(()=>{if(this.ondataavailable)this.ondataavailable({data:tracks.some(t=>t.stopped)?new Blob([]):audio});if(this.onstop)this.onstop();});}
   }
   class Reader{readAsDataURL(blob){blob.arrayBuffer().then(bytes=>{this.result="data:"+blob.type+";base64,"+Buffer.from(bytes).toString("base64");this.onload();});}}
   const api=async(action,body)=>{
     calls.push({action,body});
-    if(action==="getCoachVoiceNotes")return {notes:[]};
+    if(action==="getCoachVoiceNotes")return {notes:[...stored]};
     if(action==="login")return {user:{id:"ADMIN",role:"admin",coachAuthToken:"renewed-token"}};
-    if(action==="analyzeCoachVoice")return {transcript:"後半は周りを見よう。",summary:"・周りを見る。"};
+    if(action==="analyzeCoachVoice"){if(failAnalyze)throw new Error("文字起こしサービスに接続できませんでした");return {transcript:"後半は周りを見よう。",summary:"・周りを見る。"};}
     if(action==="saveCoachVoiceNote"){
       if(failSave)throw new Error("timeout");
-      return {note:{...body,createdAt:new Date().toISOString(),createdByName:"管理者"}};
+      const note={...body,createdAt:new Date().toISOString(),createdByName:"管理者"};stored.push(note);return {note};
     }
-    if(action==="getCoachVoiceAudio")return {audioBase64:raw.toString("base64"),mimeType:"audio/webm"};
+    if(action==="updateCoachVoiceNote"){const note={...stored.find(n=>n.id===body.id),...body,updatedAt:new Date().toISOString()};stored.splice(0,stored.length,note);return {note};}
+    if(action==="getCoachVoiceAudio")return {audioBase64:raw.toString("base64"),mimeType};
     return {deleted:true};
   };
   class Clock extends Date{static now(){return clock;}}
@@ -48,7 +50,7 @@ function harness({denyMic=false,token="signed-token",failSave=false}={}){
   async function settle(){for(let i=0;i<15;i++){await Promise.resolve();}render();}
   function unmount(){for(const cleanup of cleanups)if(typeof cleanup==="function")cleanup();}
   render();
-  return {render,settle,unmount,nodes,text,button,calls,tracks,guard,urls,listeners,advance:()=>{clock+=30000;},setFailSave:value=>{failSave=value;}};
+  return {render,settle,unmount,nodes,text,button,calls,tracks,guard,urls,listeners,advance:()=>{clock+=30000;},setFailSave:value=>{failSave=value;},setFailAnalyze:value=>{failAnalyze=value;}};
 }
 async function record(f){await f.settle();await f.button("🎙 録音を開始").props.onClick();await f.settle();f.advance();f.button("■ 停止して文字起こし・要約").props.onClick();await f.settle();}
 module.exports=(async()=>{
@@ -91,6 +93,24 @@ module.exports=(async()=>{
     assert.ok(f.text().includes("未保存"));assert.equal(f.button("保存せず破棄").props.disabled,true);assert.equal(f.guard.current(),false);
     f.setFailSave(false);await f.button("保存を再確認").props.onClick();await f.settle();
     const saves=f.calls.filter(c=>c.action==="saveCoachVoiceNote");assert.equal(saves[0].body.id,saves[1].body.id);assert.equal(f.guard.current(),true);f.unmount();
+  });
+  await test("iPhoneのMP4で最後の音声を受け取ってからマイクを止めて保存",async()=>{
+    const f=harness({mimeType:"audio/mp4"});await record(f);
+    assert.equal(f.calls.find(c=>c.action==="analyzeCoachVoice").body.mimeType,"audio/mp4");
+    assert.ok(f.tracks.every(t=>t.stopped));
+    await f.button("音声・文字起こし・要約を保存").props.onClick();await f.settle();
+    assert.equal(f.calls.find(c=>c.action==="saveCoachVoiceNote").body.mimeType,"audio/mp4");f.unmount();
+  });
+  await test("AIの失敗後も録音を保存でき、保存した音声で文字起こしを再試行",async()=>{
+    const f=harness({failAnalyze:true});await record(f);
+    assert.equal(f.button("録音音声を保存").props.disabled,false);
+    await f.button("録音音声を保存").props.onClick();await f.settle();
+    const saved=f.calls.find(c=>c.action==="saveCoachVoiceNote");assert.equal(saved.body.transcript,"");assert.ok(saved.body.audioBase64);
+    f.setFailAnalyze(false);await f.button("文字起こし・要約を作成").props.onClick();await f.settle();
+    assert.equal(f.calls.filter(c=>c.action==="updateCoachVoiceNote").length,0);
+    await f.button("文字起こし・要約を保存").props.onClick();await f.settle();
+    const update=f.calls.find(c=>c.action==="updateCoachVoiceNote");assert.equal(update.body.id,saved.body.id);assert.ok(update.body.transcript);assert.equal(update.body.audioBase64,undefined);
+    assert.equal(f.calls.filter(c=>c.action==="saveCoachVoiceNote").length,1);f.unmount();
   });
   console.log(count+" UI flow tests passed");
 })();

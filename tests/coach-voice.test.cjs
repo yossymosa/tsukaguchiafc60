@@ -23,7 +23,7 @@ function fixture(){
     getId(){return this.id;} getSharingAccess(){return this.access;} getEditors(){return this.editors;} getViewers(){return this.viewers;}
     isTrashed(){return this.trashed;} setTrashed(value){this.trashed=value;return this;}
   }
-  class File extends Item {constructor(value){super(value.name);this.blob=value;}getBlob(){return this.blob;}}
+  class File extends Item {constructor(value){super(value.name);this.blob=value;}getBlob(){return this.blob;}setContent(value){this.blob=blob(value,this.blob.mimeType,this.name);return this;}}
   class Folder extends Item {
     constructor(name){super(name);this.children=[];}
     createFolder(name){const item=new Folder(name);this.children.push(item);return item;}
@@ -70,7 +70,7 @@ test("管理者・特別管理者のログインだけが署名セッション�
   assert.equal(f.context.requireCoachVoiceAdmin({coachAuthToken:f.context.issueCoachVoiceSession(f.users[2])}).id,"SUPER");
 });
 test("全操作で userId・role の偽装と未認証を拒否し、音声へ触れない",()=>{
-  for(const action of ["getCoachVoiceNotes","analyzeCoachVoice","saveCoachVoiceNote","getCoachVoiceAudio","deleteCoachVoiceNote"]){
+  for(const action of ["getCoachVoiceNotes","analyzeCoachVoice","saveCoachVoiceNote","updateCoachVoiceNote","getCoachVoiceAudio","deleteCoachVoiceNote"]){
     const f=fixture();
     assert.throws(()=>f.context.dispatch(f.request(action,{coachAuthToken:"",userId:"ADMIN",role:"admin"})),/COACH_AUTH_REQUIRED/);
     assert.equal(f.metrics.created,0);assert.equal(f.metrics.fetches,0);
@@ -100,10 +100,29 @@ test("SafariのMP4はM4AとしてAIへ送り、元の音声形式を維持",()=>
   f.context.dispatch(req);assert.equal(f.metrics.lastRequest.contents[0].parts[1].inlineData.mimeType,"audio/m4a");
   const saved=f.context.dispatch({...req,action:"saveCoachVoiceNote"}).note;assert.equal(saved.mimeType,"audio/mp4");
 });
-test("無効な音声・10分超・8MB超・空の要約を拒否",()=>{
-  for(const extra of [{mimeType:"text/html"},{audioBase64:"invalid"},{audioBase64:Buffer.alloc(64).toString("base64")},{durationSec:602},{durationSec:0},{durationSec:Infinity},{audioBase64:"A".repeat(11184816)},{summary:""}]){
+test("無効な音声・10分超・8MB超・長すぎる要約を拒否",()=>{
+  for(const extra of [{mimeType:"text/html"},{audioBase64:"invalid"},{audioBase64:Buffer.alloc(64).toString("base64")},{durationSec:602},{durationSec:0},{durationSec:Infinity},{audioBase64:"A".repeat(11184816)},{summary:"あ".repeat(12001)}]){
     const f=fixture();assert.throws(()=>f.context.dispatch(f.request("saveCoachVoiceNote",extra)));assert.equal(f.metrics.created,0);
   }
+});
+test("AI処理に失敗しても音声だけ保存でき、後から確認済みの文章を追加できる",()=>{
+  const f=fixture();
+  const saved=f.context.dispatch(f.request("saveCoachVoiceNote",{transcript:"",summary:""})).note;
+  assert.equal(saved.transcript,"");assert.equal(saved.summary,"");
+  const before=f.metrics.created;
+  const update=f.request("updateCoachVoiceNote",{revision:saved.createdAt,transcript:"後半は周りを見よう。",summary:"周りを見る。",audioBase64:undefined});
+  const result=f.context.dispatch(update).note;
+  assert.ok(result.transcript);assert.ok(result.updatedAt);assert.equal(f.metrics.created,before);
+  assert.equal(f.context.dispatch(update).note.updatedAt,result.updatedAt);
+  assert.equal(f.context.dispatch(f.request("getCoachVoiceNotes")).notes[0].summary,result.summary);
+  assert.ok(f.context.dispatch(f.request("getCoachVoiceAudio")).audioBase64);
+});
+test("他の管理者による文章の変更を古い画面から上書きしない",()=>{
+  const f=fixture();const note=f.context.dispatch(f.request("saveCoachVoiceNote")).note;
+  f.metrics.clock+=1000;
+  f.context.dispatch(f.request("updateCoachVoiceNote",{revision:note.createdAt,summary:"新しい指導内容"}));
+  assert.throws(()=>f.context.dispatch(f.request("updateCoachVoiceNote",{revision:note.createdAt,summary:"古い画面からの変更"})),/別の管理者/);
+  assert.throws(()=>f.context.dispatch(f.request("updateCoachVoiceNote",{revision:note.createdAt,summary:""})),/確認/);
 });
 test("保存ボタンの再試行は二重保存せず、Drive IDもクライアントへ返さない",()=>{
   const f=fixture();const first=f.context.dispatch(f.request("saveCoachVoiceNote")).note;

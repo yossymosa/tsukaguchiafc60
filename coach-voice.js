@@ -6,9 +6,10 @@
   const MAX_BYTES = 8 * 1024 * 1024;
   const MAX_SECONDS = 600;
   const labels = ["ハーフタイム","試合前","試合後","その他"];
-  const box = {background:"#fff",border:"1px solid #D8E0E8",borderRadius:8,padding:14,marginBottom:12,fontSize:13};
-  const button = {minHeight:44,padding:"10px 14px",border:"1px solid #1D4E89",borderRadius:6,background:"#fff",color:"#1D4E89",fontSize:13,fontWeight:800,cursor:"pointer"};
-  const input = {width:"100%",boxSizing:"border-box",padding:10,border:"1px solid #CBD5E1",borderRadius:6,fontSize:14,lineHeight:1.7,fontFamily:"inherit",background:"#fff",color:"#102A43"};
+  const box = {background:"#fff",border:"1px solid #D8E0E8",borderTop:"3px solid #1D4E89",borderRadius:8,padding:16,marginBottom:12,fontSize:13,minWidth:0,maxWidth:"100%",boxSizing:"border-box",overflowWrap:"anywhere"};
+  const button = {width:"100%",minWidth:0,minHeight:48,padding:"12px 14px",border:"1px solid #1D4E89",borderRadius:6,background:"#fff",color:"#1D4E89",fontSize:14,fontWeight:800,lineHeight:1.6,whiteSpace:"normal",cursor:"pointer",touchAction:"manipulation"};
+  const input = {width:"100%",minWidth:0,boxSizing:"border-box",padding:10,border:"1px solid #CBD5E1",borderRadius:6,fontSize:16,lineHeight:1.7,fontFamily:"inherit",background:"#fff",color:"#102A43"};
+  const audioStyle = {display:"block",width:"100%",minWidth:0,maxWidth:"100%",height:48,margin:"8px 0 14px"};
   const time = seconds => Math.floor(seconds/60)+":"+String(Math.floor(seconds%60)).padStart(2,"0");
   const uid = () => window.crypto.randomUUID ? window.crypto.randomUUID() : Array.from(window.crypto.getRandomValues(new Uint8Array(16)),v=>v.toString(16).padStart(2,"0")).join("");
   const blobBase64 = blob => new Promise((resolve,reject)=>{
@@ -33,6 +34,7 @@
     const [error,setError] = useState("");
     const [message,setMessage] = useState("");
     const [saveUncertain,setSaveUncertain] = useState(false);
+    const draftPanel = useRef(null);
     const runtime = useRef({alive:true,recorder:null,stream:null,timer:null,wake:null,urls:new Set(),startedAt:0,bytes:0,chunks:[],phase:"idle",draft:null,saveUncertain:false});
     const state = runtime.current;
     state.phase = phase;
@@ -73,7 +75,7 @@
         if(state.draft || state.phase!=="idle") {event.preventDefault();event.returnValue="";}
       };
       const canLeave = () => {
-        if(["starting","recording","stopping","analyzing","saving"].includes(state.phase)) {
+        if(["starting","recording","stopping","analyzing","saving","loadingSaved"].includes(state.phase)) {
           window.alert("指導録音の録音・処理中です。完了してから移動してください。");
           return false;
         }
@@ -97,6 +99,7 @@
       };
     },[]);
     useEffect(()=>{loadNotes();},[token]);
+    useEffect(()=>{if(draft?.saved)draftPanel.current?.scrollIntoView({behavior:"smooth",block:"start"});},[draft?.id]);
 
     const unlock = async event => {
       event.preventDefault();
@@ -122,14 +125,14 @@
         if(!state.alive)return;
         setCurrentDraft({...current,transcript:String(result.transcript||""),summary:String(result.summary||"")});
         setMessage("文字起こしと要約を確認・修正し、保存するか選んでください。");
-      }catch(err){showError(err);}
+      }catch(err){showError(err);if(state.alive)setMessage("文字起こしができなくても、録音はそのまま保存できます。保存した音声から後で再試行できます。");}
       finally{if(state.alive)changePhase("idle");}
     };
     const stopRecording = () => {
-      if(state.recorder?.state!=="inactive" && state.recorder){
+      if(state.recorder?.state==="recording" || state.recorder?.state==="paused"){
         changePhase("stopping");
         state.recorder.stop();
-        stopTracks();
+        // Safari が最後の音声データを返してからマイクを解放する。
       }
     };
     const startRecording = async () => {
@@ -179,31 +182,46 @@
     };
     const discard = () => {
       if(!state.draft || state.phase!=="idle" || state.saveUncertain)return;
-      if(!window.confirm("この未保存の録音・文字起こし・要約を破棄しますか？"))return;
-      releaseUrl(state.draft.audioUrl);setCurrentDraft(null);setError("");setMessage("未保存の録音を破棄しました。");
+      const saved=state.draft.saved;
+      if(!window.confirm(saved?"文字起こしの編集を閉じますか？ 保存済みの録音は残ります。":"この未保存の録音・文字起こし・要約を破棄しますか？"))return;
+      releaseUrl(state.draft.audioUrl);setCurrentDraft(null);setError("");setMessage(saved?"編集を閉じました。保存済みの録音は残っています。":"未保存の録音を破棄しました。");
     };
     const save = async () => {
       const current=state.draft;
-      if(!current || !token || !canWrite || state.phase!=="idle" || !current.transcript.trim() || !current.summary.trim())return;
+      if(!current || !token || !canWrite || state.phase!=="idle" || current.blob.size>MAX_BYTES)return;
+      if(current.saved&&(!current.transcript.trim()||!current.summary.trim()))return;
       changePhase("saving");setError("");setMessage("");
       let submitted=false;
       try {
-        const audioBase64=await blobBase64(current.blob);
+        const audioBase64=current.saved?null:await blobBase64(current.blob);
         if(!state.alive)return;
         submitted=true;
-        const result=await call("saveCoachVoiceNote",{id:current.id,label:current.label,transcript:current.transcript,summary:current.summary,
-          audioBase64,mimeType:current.mimeType,durationSec:current.durationSec});
+        const result=await call(current.saved?"updateCoachVoiceNote":"saveCoachVoiceNote",{id:current.id,label:current.label,transcript:current.transcript,summary:current.summary,
+          ...(current.saved?{revision:current.updatedAt||current.createdAt}:{audioBase64,mimeType:current.mimeType,durationSec:current.durationSec})});
         if(!result.note?.id)throw new Error("保存結果を確認できませんでした。同じボタンから再確認してください。");
         if(!state.alive)return;
         setNotes(previous=>[result.note,...previous.filter(note=>note.id!==result.note.id)]);
         releaseUrl(current.audioUrl);setCurrentDraft(null);setSaveUncertain(false);state.saveUncertain=false;
-        setMessage("音声・文字起こし・要約を管理者限定で保存しました。");
+        setMessage(result.note.transcript&&result.note.summary?"音声・文字起こし・要約を管理者限定で保存しました。":"録音音声を管理者限定で保存しました。文字起こしは下の保存した記録から再試行できます。");
       }catch(err){
         const text=String(err?.message||"");
-        const uncertain=submitted&&(!/^\[saveCoachVoiceNote\]/.test(text)||/タイムアウト|レスポンス解析失敗/.test(text));
+        const uncertain=submitted&&(!/^\[(saveCoachVoiceNote|updateCoachVoiceNote)\]/.test(text)||/タイムアウト|レスポンス解析失敗/.test(text));
         if(state.alive){setSaveUncertain(uncertain);state.saveUncertain=uncertain;}
         showError(err);
       }finally{if(state.alive)changePhase("idle");}
+    };
+    const transcribeSaved = async note => {
+      if(noteBusy||!token||!canWrite||state.draft||state.phase!=="idle")return;
+      changePhase("loadingSaved");setError("");setMessage("");
+      try {
+        const result=await call("getCoachVoiceAudio",{id:note.id});
+        if(!state.alive)return;
+        const blob=new Blob([Uint8Array.from(atob(result.audioBase64),c=>c.charCodeAt(0))],{type:result.mimeType});
+        const current={...note,saved:true,blob,audioUrl:urlFor(blob)};
+        setCurrentDraft(current);
+        await analyze(current);
+      }catch(err){showError(err);}
+      finally{if(state.alive)changePhase("idle");}
     };
     const playSaved = async note => {
       if(noteBusy || !token)return;
@@ -231,12 +249,14 @@
     };
     const busy=phase!=="idle";
     const editDraft=(field,value)=>setCurrentDraft({...state.draft,[field]:value});
-    const action=(text,onClick,disabled=false,primary=false)=>h("button",{type:"button",onClick,disabled,style:{...button,...(primary?{background:"#1D4E89",color:"#fff"}:{}),opacity:disabled?0.55:1,cursor:disabled?"default":"pointer"}},text);
-    return h("section",{style:box,"aria-label":"管理者限定の指導録音"},
+    const action=(text,onClick,disabled=false,primary=false,style={})=>h("button",{type:"button",onClick,disabled,style:{...button,...(primary?{background:"#1D4E89",color:"#fff"}:{}),opacity:disabled?0.55:1,cursor:disabled?"default":"pointer",...style}},text);
+    return h("section",{style:box,"aria-label":"管理者限定の指導録音","data-no-tab-swipe":"true"},
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}},
         h("strong",{style:{color:"#102A43",fontSize:15}},"🎙 指導の録音メモ"),
-        h("span",{style:{fontSize:11,fontWeight:800,color:"#1D4E89",background:"#EDF3FA",padding:"4px 8px",borderRadius:4}},"管理者限定")),
-      h("p",{style:{fontSize:12,color:"#64748B",lineHeight:1.7,margin:"0 0 12px"}},"ハーフタイムの指導などを録音し、文字起こしと要約を確認してから保存できます。一般メンバーには表示されません。"),
+        h("span",{style:{flexShrink:0,fontSize:11,fontWeight:800,color:"#1D4E89",background:"#EDF3FA",padding:"4px 8px",borderRadius:4}},"管理者限定")),
+      h("p",{style:{fontSize:12,color:"#64748B",lineHeight:1.8,margin:"0 0 14px"}},"ハーフタイムの指導を音声で記録。内容を確認して、保存するか選べます。"),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:4,marginBottom:16},"aria-label":"録音の手順"},
+        ["1 録音","2 内容を確認","3 保存"].map((text,index)=>h("div",{key:text,style:{padding:"8px 2px",textAlign:"center",fontSize:12,fontWeight:800,borderRadius:4,background:(index===(draft?1:0)?"#EDF3FA":"#F8FAFC"),color:index===(draft?1:0)?"#1D4E89":"#64748B"}},text))),
       error&&h("div",{role:"alert",style:{padding:10,marginBottom:10,borderRadius:6,background:"#FEF2F2",color:"#9B2929",lineHeight:1.7,overflowWrap:"anywhere"}},error),
       message&&h("div",{role:"status",style:{padding:10,marginBottom:10,borderRadius:6,background:"#F0F7F3",color:"#285F44",lineHeight:1.7}},message),
       !token&&h("form",{onSubmit:unlock,style:{padding:12,background:"#F8FAFC",borderRadius:6,marginBottom:12}},
@@ -248,37 +268,40 @@
         h("label",{style:{display:"block",marginBottom:10}},h("span",{style:{display:"block",fontSize:12,fontWeight:800,marginBottom:6}},"録音する場面"),
           h("select",{value:label,onChange:event=>setLabel(event.target.value),disabled:busy,style:input},labels.map(value=>h("option",{key:value,value},value)))),
         phase==="recording"
-          ?h("div",{},h("div",{role:"status",style:{color:"#A52A2A",fontSize:22,fontWeight:900,marginBottom:10}},"● 録音中 ",time(elapsed)),
+          ?h("div",{style:{padding:14,border:"1px solid #FECACA",background:"#FFF7F7",borderRadius:8}},h("div",{role:"status",style:{textAlign:"center",color:"#A52A2A",fontSize:28,fontWeight:900,marginBottom:14,fontVariantNumeric:"tabular-nums"}},"● 録音中 ",time(elapsed)),
             action("■ 停止して文字起こし・要約",stopRecording,false,true),
             h("p",{style:{fontSize:12,color:"#64748B",lineHeight:1.7}},"録音中はこの画面を開いたままにしてください。最長10分で自動停止します。"))
           :action(phase==="starting"?"マイクを準備中…":phase==="stopping"?"録音を停止中…":"🎙 録音を開始",startRecording,busy||loadingNotes,true),
-        h("p",{style:{fontSize:11,color:"#64748B",lineHeight:1.7,marginBottom:0}},"停止後、音声をAIに送って文字起こし・要約します。「保存」を押すまでは、この画面を閉じると消えます。最長10分・8MB。")),
-      draft&&h("div",{style:{border:"1px solid #B9CDE3",background:"#F8FAFC",borderRadius:6,padding:12,marginBottom:12}},
-        h("div",{style:{display:"flex",justifyContent:"space-between",gap:8,fontWeight:800,marginBottom:10}},h("span",{},draft.label," / ",time(draft.durationSec)),h("span",{style:{color:"#946200"}},"未保存")),
-        h("audio",{controls:true,preload:"metadata",src:draft.audioUrl,style:{width:"100%",marginBottom:8},"aria-label":"未保存の指導録音"}),
+        h("p",{style:{fontSize:11,color:"#64748B",lineHeight:1.8,margin:"10px 0 0"}},"停止後にAIで文字起こし・要約します。最長10分・8MB。保存前に画面を閉じると録音は消えます。")),
+      draft&&h("div",{ref:draftPanel,style:{minWidth:0,scrollMarginTop:220,border:"1px solid #B9CDE3",background:"#F8FAFC",borderRadius:6,padding:12,marginBottom:12}},
+        h("div",{style:{display:"flex",flexWrap:"wrap",justifyContent:"space-between",gap:8,fontWeight:800,marginBottom:10}},h("span",{},draft.label," / ",time(draft.durationSec)),h("span",{style:{color:"#946200"}},draft.saved?"文字起こしを編集中":"未保存")),
+        h("audio",{controls:true,preload:"metadata",src:draft.audioUrl,style:audioStyle,"aria-label":"確認中の指導録音"}),
         phase==="analyzing"&&h("div",{role:"status",style:{color:"#1D4E89",fontWeight:800,padding:"10px 0"}},"音声を文字起こし・要約しています…"),
         h("label",{style:{display:"block",marginBottom:12}},h("span",{style:{display:"block",fontWeight:800,marginBottom:6}},"要約（編集できます）"),
-          h("textarea",{value:draft.summary,onInput:event=>editDraft("summary",event.target.value),rows:6,maxLength:12000,disabled:busy||saveUncertain,style:input,placeholder:"文字起こしが終わると要約が表示されます"})),
+          h("textarea",{value:draft.summary,onInput:event=>editDraft("summary",event.target.value),rows:4,maxLength:12000,disabled:busy||saveUncertain,style:input,placeholder:"文字起こしが終わると要約が表示されます"})),
         h("details",{open:!draft.summary},h("summary",{style:{fontWeight:800,cursor:"pointer",padding:"6px 0"}},"文字起こしを確認・編集"),
           h("textarea",{"aria-label":"指導録音の文字起こし",value:draft.transcript,onInput:event=>editDraft("transcript",event.target.value),rows:8,maxLength:40000,disabled:busy||saveUncertain,style:input})),
         saveUncertain&&h("p",{role:"status",style:{color:"#946200",lineHeight:1.7}},"保存結果が未確認です。「保存を再確認」で確認できます。同じ記録が二重に保存されることはありません。"),
-        h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}},
-          action(phase==="saving"?"保存中…":saveUncertain?"保存を再確認":"音声・文字起こし・要約を保存",save,busy||!token||!canWrite||!draft.summary.trim()||!draft.transcript.trim(),true),
-          action("保存せず破棄",discard,busy||saveUncertain),
-          !draft.summary&&action("文字起こし・要約を再試行",()=>analyze(),busy||!token||!canWrite||draft.blob.size>MAX_BYTES)),
+        !draft.saved&&!draft.summary&&phase!=="analyzing"&&h("p",{style:{fontSize:12,color:"#475569",lineHeight:1.8,marginTop:12}},"文字起こしは後からでもできます。まず録音音声だけ保存できます。"),
+        h("div",{style:{display:"grid",gridTemplateColumns:"minmax(0,1fr)",gap:8,marginTop:14}},
+          action(phase==="saving"?"保存中…":saveUncertain?"保存を再確認":draft.saved?"文字起こし・要約を保存":draft.summary&&draft.transcript?"音声・文字起こし・要約を保存":"録音音声を保存",save,busy||!token||!canWrite||draft.blob.size>MAX_BYTES||(draft.saved&&(!draft.summary.trim()||!draft.transcript.trim())),true),
+          !draft.summary&&action("文字起こし・要約を再試行",()=>analyze(),busy||saveUncertain||!token||!canWrite||draft.blob.size>MAX_BYTES),
+          action(draft.saved?"編集を閉じる":"保存せず破棄",discard,busy||saveUncertain)),
         h("a",{href:draft.audioUrl,download:"指導録音-"+draft.id+(draft.mimeType==="audio/webm"?".webm":draft.mimeType==="audio/ogg"?".ogg":".m4a"),style:{display:"inline-block",marginTop:12,fontSize:12,color:"#1D4E89"}},"録音音声を端末にダウンロード")),
       token&&h("div",{style:{borderTop:"1px solid #E2E8F0",marginTop:14,paddingTop:12}},
         h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}},h("strong",{},"保存した指導記録"),
-          action(loadingNotes?"読込中…":"更新",loadNotes,loadingNotes||busy)),
+          action(loadingNotes?"読込中…":"更新",loadNotes,loadingNotes||busy,false,{width:"auto",minHeight:44,padding:"8px 14px",fontSize:12,flexShrink:0})),
         !notes.length&&!loadingNotes&&h("p",{style:{color:"#64748B",fontSize:12}},"この試合の指導記録はまだありません。"),
         notes.map(note=>h("details",{key:note.id,style:{padding:"10px 0",borderBottom:"1px solid #E2E8F0"}},
           h("summary",{style:{cursor:"pointer",fontWeight:800,lineHeight:1.8}},note.label," / ",time(Number(note.durationSec)||0),"　",new Date(note.createdAt).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})),
           h("div",{style:{fontSize:11,color:"#64748B",margin:"6px 0"}},"記録者: ",note.createdByName||"管理者"),
           h("div",{style:{whiteSpace:"pre-wrap",lineHeight:1.8,marginBottom:10,overflowWrap:"anywhere"}},note.summary),
           h("details",{},h("summary",{style:{cursor:"pointer",fontSize:12,padding:"6px 0"}},"文字起こし全文"),h("div",{style:{whiteSpace:"pre-wrap",lineHeight:1.8,overflowWrap:"anywhere"}},note.transcript)),
-          savedAudio?.id===note.id?h("audio",{controls:true,src:savedAudio.url,preload:"metadata",style:{width:"100%",marginTop:10},"aria-label":note.label+"の保存済み録音"})
+          !note.transcript&&h("p",{style:{fontSize:12,color:"#946200",margin:"8px 0"}},"録音は保存済みです。文字起こし・要約はまだありません。"),
+          savedAudio?.id===note.id?h("audio",{controls:true,src:savedAudio.url,preload:"metadata",style:audioStyle,"aria-label":note.label+"の保存済み録音"})
             :action(noteBusy===note.id?"処理中…":"保存した音声を読み込む",()=>playSaved(note),!!noteBusy),
-          canWrite&&h("div",{style:{marginTop:10}},action("この指導記録を削除",()=>remove(note),!!noteBusy||busy)))))
+          canWrite&&(!note.transcript||!note.summary)&&h("div",{style:{marginTop:8}},action(phase==="loadingSaved"?"音声を読み込み中…":"文字起こし・要約を作成",()=>transcribeSaved(note),!!noteBusy||busy||!!draft)),
+          canWrite&&h("div",{style:{marginTop:10}},action("この指導記録を削除",()=>remove(note),!!noteBusy||busy||!!draft)))))
     );
   };
 })();

@@ -45,7 +45,7 @@ button:active{transform:translateY(1px);}
 .app-tabbar{display:flex;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 3px 10px rgba(15,23,42,.05);}
 .app-tab{flex:1;min-width:0;padding:12px 2px 11px;border:0;border-bottom:2px solid transparent;background:#fff;color:#7B8794;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .app-tab.is-active{color:var(--navy);border-bottom-color:var(--blue);background:#F8FBFF;font-weight:900;}
-  .content-page{padding:14px 16px 0;touch-action:pan-y;}
+  .content-page{padding:14px 16px 0;touch-action:auto;min-width:0;}
   .tab-page-motion{will-change:transform,opacity;}
   .tab-page-motion.from-right{animation:tabPageFromRight .22s cubic-bezier(.2,.8,.2,1) both;}
   .tab-page-motion.from-left{animation:tabPageFromLeft .22s cubic-bezier(.2,.8,.2,1) both;}
@@ -97,7 +97,7 @@ button:active{transform:translateY(1px);}
 </head>
 <body>
 <div id="app"></div>
-<script src="/coach-voice.js?v=1"></script>
+<script src="/coach-voice.js?v=2"></script>
 <script>
 const __bootRoot = document.getElementById("app");
 function __bootMessage(text){
@@ -314,7 +314,7 @@ async function api(action,body={}) {
   ]);
   const longActions = new Set([
     "syncFc2PracticeSchedules","syncOfficialHpMatchImport","syncYoutubeLinksToResults","syncYoutubePlaylist","uploadMemberPhoto",
-    "analyzeCoachVoice","saveCoachVoiceNote","getCoachVoiceAudio"
+    "analyzeCoachVoice","saveCoachVoiceNote","updateCoachVoiceNote","getCoachVoiceAudio"
   ]);
   const timeoutMs = longActions.has(action) ? 120000 : (shortActions.has(action) ? 25000 : 45000);
   const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
@@ -3671,6 +3671,13 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     h("div",{style:{padding:"8px 16px 0"}},
       scoreboardBlock,
       pkSummaryBlock,
+      h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:14,fontSize:13,marginBottom:12,border:"1px solid #D8E0E8"}},
+        h("div",{className:"match-section-heading",style:{fontSize:15,fontWeight:800,color:"#102A43",marginBottom:6}},"試合のメモ"),
+        isAdmin&&h("p",{style:{fontSize:12,color:"#64748B",marginBottom:8}},"このメモはメンバーにも表示されます。"),
+        isAdmin
+          ? h("textarea",{value:matchMemo,onChange:e=>setMatchMemo(e.target.value),rows:3,placeholder:"この試合の補足メモを入力",style:{...css.inp,width:"100%",fontSize:16,resize:"vertical"}})
+          : h("div",{style:{color:"#64748B",lineHeight:1.7,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}},matchMemo||"メモなし")),
+      isAdmin&&window.CoachVoiceNotes&&h(window.CoachVoiceNotes,{key:String(match.id)+"|"+String(user?.id),match,user,api,canWrite,leaveGuardRef:coachVoiceLeaveGuard}),
       matchStatusBlock,
       matchStatsBlock,
       goalsTimelineBlock,
@@ -3702,6 +3709,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
                style:{width:"100%",border:"1px solid #B8C6D5",borderRadius:6,padding:"8px 12px",marginTop:8,fontSize:13,background:"#fff",color:"#102A43",fontWeight:700,outline:"none"}},
               h("option",{value:""}, attendLoading ? "出席者読込中..." : (pkSelectableMembers.length ? "＋ キッカーを追加..." : "出席者がいません")),
               memberOptionsByPosition(pkSelectableMembers)),
+          ),
            h("div",{style:{borderTop:"2px solid #f5f5f5",paddingTop:14}},
             h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
               h("div",{style:{fontSize:13,fontWeight:800,color:"#666"}},match.opponent),
@@ -3735,13 +3743,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         disabled:loading,
         style:{...css.bS,width:"100%",padding:16,fontSize:15,marginBottom:16,opacity:loading?0.7:1,cursor:loading?"wait":"pointer"}
       },loading?"保存中...":"💾 試合全体を保存"),
-      h("div",{style:{background:"#fff",borderRadius:8,padding:14,fontSize:13,marginBottom:12,border:"1px solid #D8E0E8"}},
-        h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"MATCH NOTE"),
-        isAdmin
-          ? h("textarea",{value:matchMemo,onChange:e=>setMatchMemo(e.target.value),
-              rows:4,placeholder:"この試合の補足メモを入力",style:{...css.inp,width:"100%",resize:"none"}})
-          : h("div",{style:{color:"#64748B",lineHeight:1.7,whiteSpace:"pre-wrap"}},matchMemo||"メモなし")),
-      isAdmin&&window.CoachVoiceNotes&&h(window.CoachVoiceNotes,{key:String(match.id)+"|"+String(user?.id),match,user,api,canWrite,leaveGuardRef:coachVoiceLeaveGuard}),
       h("button",{
         onClick:()=>{
           scrollAppTop();
@@ -3799,7 +3800,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     substitutionModal,
 
     // ゴール編集モーダル
-    editGoalModal));
+    editGoalModal);
 }
 
 // ── ホームタブ ─────────────────────────────────────────────────
@@ -12326,20 +12327,29 @@ function App() {
     {k:"settings",l:"設定"},
   ];
   const handleTabSwipeStart=e=>{
+    tabSwipeStartRef.current=null;
+    if(e.touches?.length!==1) return;
     const target=e.target instanceof Element ? e.target : null;
-    if(target?.closest("input, textarea, select, button, a, [role='button'], [contenteditable='true'], .dashboard-tabs, [data-no-tab-swipe='true']")){
-      tabSwipeStartRef.current=null;
-      return;
+    if(target?.closest("input, textarea, select, button, a, audio, video, summary, [role='button'], [contenteditable='true'], .dashboard-tabs, [data-no-tab-swipe='true']")) return;
+    for(let node=target;node&&node!==e.currentTarget;node=node.parentElement){
+      if(node.scrollWidth>node.clientWidth+2&&/auto|scroll/.test(getComputedStyle(node).overflowX)) return;
     }
     const touch=e.touches?.[0];
-    if(!touch) return;
-    tabSwipeStartRef.current={x:touch.clientX,y:touch.clientY,time:Date.now()};
+    if(!touch||touch.clientX<24||touch.clientX>window.innerWidth-24) return;
+    tabSwipeStartRef.current={x:touch.clientX,y:touch.clientY,time:Date.now(),axis:null,scrollY:window.scrollY};
+  };
+  const handleTabSwipeMove=e=>{
+    const start=tabSwipeStartRef.current;
+    if(!start) return;
+    if(e.touches?.length!==1){tabSwipeStartRef.current=null;return;}
+    const touch=e.touches[0],dx=Math.abs(touch.clientX-start.x),dy=Math.abs(touch.clientY-start.y);
+    if(start.axis===null&&Math.max(dx,dy)>12) start.axis=dx>dy*1.35?"horizontal":"vertical";
   };
   const handleTabSwipeEnd=e=>{
     const start=tabSwipeStartRef.current;
     tabSwipeStartRef.current=null;
     const touch=e.changedTouches?.[0];
-    if(!start||!touch||Date.now()-start.time>900) return;
+    if(!start||!touch||e.touches?.length||start.axis==="vertical"||Date.now()-start.time>900||Math.abs(window.scrollY-start.scrollY)>10) return;
     const dx=touch.clientX-start.x;
     const dy=touch.clientY-start.y;
     if(Math.abs(dx)<72||Math.abs(dx)<=Math.abs(dy)*1.35) return;
@@ -12379,7 +12389,7 @@ function App() {
           TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),className:"app-tab"+(tab===t.k?" is-active":""),"aria-current":tab===t.k?"page":undefined},t.l))
         )
       ),
-      h("main",{className:"content-page",onTouchStart:handleTabSwipeStart,onTouchEnd:handleTabSwipeEnd,onTouchCancel:()=>{tabSwipeStartRef.current=null;}},
+      h("main",{className:"content-page",onTouchStart:handleTabSwipeStart,onTouchMove:handleTabSwipeMove,onTouchEnd:handleTabSwipeEnd,onTouchCancel:()=>{tabSwipeStartRef.current=null;}},
         h("div",{key:tab,className:"tab-page-motion "+tabSlideDirection},
           tabMeta[tab] && h(PageIntro,tabMeta[tab]),
           currentTabContent))

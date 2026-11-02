@@ -961,7 +961,7 @@ function dispatchCoachVoice(req) {
       const transcript = String(req.transcript || "").trim();
       const summary = String(req.summary || "").trim();
       const label = String(req.label || "ハーフタイム");
-      if (!transcript || !summary || transcript.length>40000 || summary.length>12000) throw new Error("文字起こしと要約を確認してください");
+      if (transcript.length>40000 || summary.length>12000) throw new Error("文字起こしと要約の長さを確認してください");
       if (!["ハーフタイム","試合前","試合後","その他"].includes(label)) throw new Error("録音の場面を選んでください");
       const folder = coachVoiceFolder(resultId, true);
       const existing = coachVoiceNoteFile(folder, id);
@@ -981,6 +981,20 @@ function dispatchCoachVoice(req) {
         if (audioFile) audioFile.setTrashed(true);
         throw e;
       }
+    }
+    if (req.action === "updateCoachVoiceNote") {
+      const file = coachVoiceNoteFile(coachVoiceFolder(resultId,false),id);
+      if (!file) throw new Error("指導記録が見つかりません");
+      const note = coachVoiceReadNote(file,resultId);
+      const transcript = String(req.transcript || "").trim();
+      const summary = String(req.summary || "").trim();
+      if (!transcript || !summary || transcript.length>40000 || summary.length>12000) throw new Error("文字起こしと要約を確認してください");
+      // 応答を受け取れなかった場合の再送は、同じ更新として扱う。
+      if (note.transcript === transcript && note.summary === summary) return {note:coachVoicePublicNote(note)};
+      if (String(req.revision || "") !== String(note.updatedAt || note.createdAt)) throw new Error("別の管理者がこの記録を更新しました。画面を更新して確認してください");
+      const next = {...note,transcript,summary,updatedAt:nowIso(),updatedBy:String(user.id)};
+      file.setContent(JSON.stringify(next));
+      return {note:coachVoicePublicNote(next)};
     }
     if (req.action === "deleteCoachVoiceNote") {
       const file = coachVoiceNoteFile(coachVoiceFolder(resultId,false),id);
@@ -2395,6 +2409,7 @@ function dispatch(req) {
     case "getCoachVoiceNotes":
     case "analyzeCoachVoice":
     case "saveCoachVoiceNote":
+    case "updateCoachVoiceNote":
     case "getCoachVoiceAudio":
     case "deleteCoachVoiceNote":
       return dispatchCoachVoice(req);
