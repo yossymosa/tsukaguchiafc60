@@ -97,6 +97,7 @@ button:active{transform:translateY(1px);}
 </head>
 <body>
 <div id="app"></div>
+<script src="/coach-voice.js?v=1"></script>
 <script>
 const __bootRoot = document.getElementById("app");
 function __bootMessage(text){
@@ -312,7 +313,8 @@ async function api(action,body={}) {
     "saveReflection","getReflection","saveGoals","saveFormation","saveShotStats","saveAttend","saveEventAttend","saveCarpool","saveCarpoolPlan","updateUserBySuperAdmin"
   ]);
   const longActions = new Set([
-    "syncFc2PracticeSchedules","syncOfficialHpMatchImport","syncYoutubeLinksToResults","syncYoutubePlaylist","uploadMemberPhoto"
+    "syncFc2PracticeSchedules","syncOfficialHpMatchImport","syncYoutubeLinksToResults","syncYoutubePlaylist","uploadMemberPhoto",
+    "analyzeCoachVoice","saveCoachVoiceNote","getCoachVoiceAudio"
   ]);
   const timeoutMs = longActions.has(action) ? 120000 : (shortActions.has(action) ? 25000 : 45000);
   const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
@@ -1851,6 +1853,7 @@ function copyToClipboard(text) {
 
 // ── ゴール記録ページ ─────────────────────────────────────────
 function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap={},onToggleFavorite,onBack,onHome,onSaved,onShotSaved}) {
+  const coachVoiceLeaveGuard=useRef(()=>true);
   const halfSortOrder = h => {
     const v = normalizeHalfLabel(h);
     return v==="1st" ? 0 : v==="2nd" ? 1 : v==="3rd" ? 2 : 99;
@@ -3052,8 +3055,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const headerBlock = h("div",{style:{background:"#0B1220",borderBottom:"3px solid #1D4E89",padding:"14px 16px 12px",position:"sticky",top:0,zIndex:1400}},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}},
       h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
-        h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
-        h("button",{onClick:onHome,style:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"ホーム")
+        h("button",{onClick:()=>coachVoiceLeaveGuard.current()&&onBack(),style:{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
+        h("button",{onClick:()=>coachVoiceLeaveGuard.current()&&onHome(),style:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"ホーム")
       ),
       h("button",{
         onClick:onClickFavoriteButton,
@@ -3728,7 +3731,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       ),
 
       isAdmin&&h("button",{
-        onClick:save,
+        onClick:()=>{if(coachVoiceLeaveGuard.current())save();},
         disabled:loading,
         style:{...css.bS,width:"100%",padding:16,fontSize:15,marginBottom:16,opacity:loading?0.7:1,cursor:loading?"wait":"pointer"}
       },loading?"保存中...":"💾 試合全体を保存"),
@@ -3738,6 +3741,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           ? h("textarea",{value:matchMemo,onChange:e=>setMatchMemo(e.target.value),
               rows:4,placeholder:"この試合の補足メモを入力",style:{...css.inp,width:"100%",resize:"none"}})
           : h("div",{style:{color:"#64748B",lineHeight:1.7,whiteSpace:"pre-wrap"}},matchMemo||"メモなし")),
+      isAdmin&&window.CoachVoiceNotes&&h(window.CoachVoiceNotes,{key:String(match.id)+"|"+String(user?.id),match,user,api,canWrite,leaveGuardRef:coachVoiceLeaveGuard}),
       h("button",{
         onClick:()=>{
           scrollAppTop();
