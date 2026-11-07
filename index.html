@@ -9580,16 +9580,18 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
   const [metadataUpdating,setMetadataUpdating] = useState(false);
   const [youtubeReconciling,setYoutubeReconciling] = useState(false);
   const [uploadStates,setUploadStates] = useState({});
-  const [videoPickerBusy,setVideoPickerBusy] = useState("");
+  const [useVideoFileInput,setUseVideoFileInput] = useState(()=>typeof window.showOpenFilePicker!=="function");
   const [shareMessage,setShareMessage] = useState("");
   const [shareError,setShareError] = useState("");
   const [pastedNames,setPastedNames] = useState("");
   const [bulkSaving,setBulkSaving] = useState(false);
   const [bulkMessage,setBulkMessage] = useState("");
-  const shareInputRef = useRef(null);
-  const shareTargetRef = useRef(null);
-  const videoPickerResetTimerRef = useRef(null);
+  const videoSelectionRef = useRef({alive:true,pending:false});
   useEffect(()=>setPlans(buildPlans(results)),[resultSignature]);
+  useEffect(()=>{
+    videoSelectionRef.current.alive=true;
+    return ()=>{videoSelectionRef.current.alive=false;};
+  },[]);
 
   const saveVideo = async (row,key,file) => {
     if (saving) return;
@@ -9675,54 +9677,50 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
     const name = String(file?.name || "");
     return type.startsWith("video/") || /\.(mov|mp4|m4v|avi|mpeg|mpg|webm)$/i.test(name);
   };
-  const clearVideoPickerBusy = () => {
-    if (videoPickerResetTimerRef.current) clearTimeout(videoPickerResetTimerRef.current);
-    videoPickerResetTimerRef.current = null;
-    setVideoPickerBusy("");
-  };
-  const chooseVideoForShare = event => {
-    const input = event?.target;
-    const target = shareTargetRef.current;
-    // ここでは動画の中身を読まず、OSが返したFile参照と名前だけを持つ。
-    // 実データを送るのは「アップロード」を押してから。
-    const file = input?.files?.[0];
-    try { if (input) input.value = ""; } catch (e) {}
-    if (!target || !file || !isVideoFile(file)) {
-      clearVideoPickerBusy();
-      shareTargetRef.current = null;
+  const selectShareVideo = (target,selection) => {
+    if(!videoSelectionRef.current.alive) return;
+    if(!isVideoFile(selection.file || {name:selection.fileName})) {
+      setShareError("動画ファイル（MOV・MP4など）を選んでください。");
       return;
     }
-    setSharePlans(current => ({...current,[target.slotKey]:{...target,file}}));
+    setSharePlans(current => ({...current,[target.slotKey]:selection}));
     setUploadStates(current => {
       const next = {...current};
       delete next[target.slotKey];
       return next;
     });
-    shareTargetRef.current = null;
-    clearVideoPickerBusy();
     setShareMessage("");
     setShareError("");
   };
-  const chooseShareSlot = target => {
-    if (uploading || metadataUpdating || youtubeReconciling || videoPickerBusy) return;
-    shareTargetRef.current = target;
-    setVideoPickerBusy(target.slotKey);
-    if (videoPickerResetTimerRef.current) clearTimeout(videoPickerResetTimerRef.current);
-    // キャンセル時にもボタンが永遠に操作不能にならないための復帰処理。
-    videoPickerResetTimerRef.current = setTimeout(() => {
-      if (shareTargetRef.current?.slotKey === target.slotKey) shareTargetRef.current = null;
-      setVideoPickerBusy(current => current === target.slotKey ? "" : current);
-      videoPickerResetTimerRef.current = null;
-    }, 60000);
-    const input = shareInputRef.current;
-    if (input) input.click();
-    else clearVideoPickerBusy();
+  const chooseVideoForShare = (target,event) => {
+    if(uploading || metadataUpdating || youtubeReconciling) return;
+    const input=event?.currentTarget || event?.target;
+    const file=input?.files?.[0];
+    if(!file) return; // キャンセルと input/change の二重通知では既存の選択を変えない。
+    try { input.value=""; } catch(e) {}
+    // 動画本体・サイズ・プレビューを読まず、参照と名前だけを画面へ反映する。
+    selectShareVideo(target,{file,fileName:String(file.name || "")});
+  };
+  const chooseShareSlot = async target => {
+    if (uploading || metadataUpdating || youtubeReconciling || videoSelectionRef.current.pending) return;
+    videoSelectionRef.current.pending=true;
+    try {
+      const [fileHandle]=await window.showOpenFilePicker({
+        multiple:false,
+        types:[{description:"動画ファイル",accept:{"video/*":[".mov",".mp4",".m4v",".webm",".avi",".mpeg",".mpg"]}}]
+      });
+      // getFile() もアップロード時まで遅らせ、選択時はハンドルの名前だけを使う。
+      if(fileHandle) selectShareVideo(target,{fileHandle,fileName:String(fileHandle.name || "")});
+    } catch(e) {
+      if(videoSelectionRef.current.alive && e?.name!=="AbortError") {
+        setUseVideoFileInput(true);
+        setShareError("ファイル選択を開けませんでした。もう一度「ファイルから選ぶ」を押してください。");
+      }
+    } finally {
+      videoSelectionRef.current.pending=false;
+    }
   };
   const removeShareFile = slotKey => {
-    if (videoPickerBusy === slotKey) {
-      shareTargetRef.current = null;
-      clearVideoPickerBusy();
-    }
     setSharePlans(current => {
       const next = {...current};
       delete next[slotKey];
@@ -9798,8 +9796,8 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
     }));
   });
   const getSelectedShareVideos = () => shareSlotsForSchedule()
-    .map(slot => ({...slot,file:sharePlans[slot.slotKey]?.file}))
-    .filter(slot => !!slot.file);
+    .map(slot => ({...slot,...sharePlans[slot.slotKey]}))
+    .filter(slot => !!(slot.file || slot.fileHandle));
   const getSavedYoutubeUrl = (row,part) => {
     const keys = Array.isArray(part?.urlKeys) ? part.urlKeys : [];
     for (const key of keys) {
@@ -10070,9 +10068,11 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
             continue;
           }
           setUploadStates(current => ({...current,[slot.slotKey]:{phase:"uploading",progress:0,message:"アップロードを開始しています"}}));
+          const file=slot.file || await slot.fileHandle.getFile();
+          if(!isVideoFile(file)) throw new Error("選択した動画を読み込めませんでした。動画ファイルを選び直してください。");
           const video = await uploadFileToYouTube({
             accessToken,
-            file:slot.file,
+            file,
             title:template.title,
             description:template.description,
             onProgress:(sent,total)=>{
@@ -10211,16 +10211,26 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
   };
 
   if (!isAdmin || !results.length) return null;
-  // iPadの写真ライブラリでは動画本体の取り込み待ちが発生するため、通常運用は共有シートからYouTubeへ渡す。
+  // 通常運用はファイル選択後に名前だけ表示し、明示的なアップロード操作で送信する。
   const showFileNameFlow = false;
   const shareSlots = shareSlotsForSchedule();
   const selectedShareVideos = getSelectedShareVideos();
   const pendingShareVideos = selectedShareVideos.filter(slot => uploadStates[slot.slotKey]?.phase !== "done");
   const linkedMetadataSlots = getLinkedYoutubeSlotsForMetadata();
+  const filePickerLabel = (slot,photos=false) => {
+    const disabled=uploading||metadataUpdating||youtubeReconciling;
+    // iOS の標準経路は Files にする。動画形式の検証は選択後に行う。
+    return h("label",{style:{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",minHeight:44,padding:"9px 12px",border:"1px solid "+(photos?"#CBD5E1":"#1D4E89"),borderRadius:6,background:"#fff",color:photos?"#475569":"#1D4E89",fontSize:12,fontWeight:800,cursor:disabled?"wait":"pointer",opacity:disabled?0.6:1,overflow:"hidden"}},
+      photos?"写真から選ぶ":"ファイルから選ぶ",
+      h("input",{type:"file",accept:photos?"video/*,.mov,.mp4,.m4v":"application/octet-stream",disabled,
+        "aria-label":slot.gameLabel+" "+slot.part.label+(photos?"の動画を写真から選ぶ":"の動画をファイルから選ぶ"),
+        onChange:event=>chooseVideoForShare(slot,event),onInput:event=>chooseVideoForShare(slot,event),
+        style:{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0,cursor:disabled?"wait":"pointer"}}));
+  };
   if (!showFileNameFlow) return h(Fragment,{},
     h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:10,border:"1px solid #D8E0E8"}},
       h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"YOUTUBE DIRECT UPLOAD"),
-      h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.6,marginBottom:12}},"YouTubeアプリを開かず、この画面から直接アップロードします。保存先は "+YOUTUBE_TARGET_CHANNEL_HANDLE+" に固定され、個人チャンネルには投稿しません。初回だけ「YouTubeを接続」でチャンネルを確認すれば、次回からは「アップロード」だけで接続も自動実行します。タイトル・概要欄はYouTubeテンプレを自動使用し、限定公開・子ども向けではない・試合動画再生リストへの追加まで行います。アップロード中はこの画面を開いたままにしてください。"),
+      h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.8,marginBottom:12}},"動画を選ぶ → ファイル名を確認 → アップロード。選択時は動画を送信しません。タイトル・概要欄は自動で設定し、限定公開で試合動画の再生リストへ保存します。"),
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"9px 10px",background:youtubeChannel?"#F0FDF4":"#F8FAFC",border:"1px solid "+(youtubeChannel?"#C9DAD1":"#D8E0E8"),borderRadius:7,marginBottom:9}},
         h("div",{style:{minWidth:0}},
           h("div",{style:{fontSize:11,fontWeight:900,color:youtubeChannel?"#456C5B":"#334155",marginBottom:youtubeChannel?2:0}},youtubeChannel?"保存先: "+YOUTUBE_TARGET_CHANNEL_HANDLE+"（"+youtubeChannel.title+"）":"保存先: "+YOUTUBE_TARGET_CHANNEL_HANDLE),
@@ -10229,9 +10239,10 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
         h("button",{onClick:connectYouTubeForDirectUpload,disabled:youtubeConnecting||uploading||metadataUpdating||youtubeReconciling,style:{...css.bW,padding:"8px 9px",fontSize:10,whiteSpace:"nowrap",opacity:youtubeConnecting||uploading||metadataUpdating||youtubeReconciling?0.65:1,cursor:youtubeConnecting||uploading||metadataUpdating||youtubeReconciling?"wait":"pointer"}},youtubeConnecting?"接続中...":youtubeChannel?"接続し直す":"YouTubeを接続")
       ),
       h("div",{style:{marginBottom:10,padding:"8px 9px",borderLeft:"3px solid #786753",background:"#FFFBEB",fontSize:10,lineHeight:1.55,color:"#786753"}},"GoogleのYouTube APIが未監査の場合、Google仕様で動画が非公開になることがあります。その場合も画面には実際の公開状態を表示します。"),
-      h("input",{ref:shareInputRef,type:"file",accept:"video/*,.mov,.mp4,.m4v",onChange:chooseVideoForShare,onCancel:()=>{shareTargetRef.current=null;clearVideoPickerBusy();},style:{display:"none"}}),
+      h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.8,marginBottom:10,padding:"9px 10px",background:"#F1F6FC",borderRadius:6}},
+        "すぐ選ぶには「ファイルから選ぶ」を使ってください。写真アプリの動画は、共有 →「ファイルに保存」で先に端末へ保存すると、写真から選ぶときの変換待ちを避けられます。クラウド上の動画はダウンロードに時間がかかります。"),
       h("div",{style:{display:"grid",gap:8,marginBottom:10}},shareSlots.map(slot=>{
-        const selected = sharePlans[slot.slotKey]?.file;
+        const selected = sharePlans[slot.slotKey];
         const uploadState = uploadStates[slot.slotKey];
         const savedVideoUrl = getSavedYoutubeUrl(slot.row,slot.part);
         const visibleVideoUrl = uploadState?.videoUrl || savedVideoUrl;
@@ -10241,18 +10252,21 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
             h("div",{style:{fontSize:12,fontWeight:900,color:"#102A43",whiteSpace:"nowrap"}},slot.gameLabel),
             h("div",{style:{fontSize:10,color:"#64748B",minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"vs "+slot.opponent+" / "+slot.part.label)
           ),
-          h("div",{style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:8}},
-            h("div",{style:{minWidth:0,fontSize:selected?10:11,color:selected?"#475569":"#94A3B8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},selected?selected.name:"動画を選択してください"),
-            h("div",{style:{display:"flex",alignItems:"center",gap:7}},
-              selected && h("button",{onClick:()=>removeShareFile(slot.slotKey),disabled:uploading||metadataUpdating||youtubeReconciling,style:{border:0,background:"transparent",color:"#64748B",fontSize:10,fontWeight:800,padding:0,cursor:"pointer"}},"解除"),
-              h("button",{onClick:()=>chooseShareSlot(slot),disabled:uploading||metadataUpdating||youtubeReconciling||!!videoPickerBusy,style:{...css.bW,padding:"7px 9px",fontSize:10,opacity:uploading||metadataUpdating||youtubeReconciling||videoPickerBusy?0.65:1,cursor:uploading||metadataUpdating||youtubeReconciling||videoPickerBusy?"wait":"pointer"}},videoPickerBusy===slot.slotKey?"選択準備中...":selected?"選び直す":savedVideoUrl?"差し替える":"動画を選ぶ")
-            )
-          ),
-          videoPickerBusy===slot.slotKey && h("div",{style:{marginTop:6,fontSize:10,lineHeight:1.45,color:"#526B91"}},"iPadが写真ライブラリから動画を準備しています。アプリはこの時点で動画本体を保存・送信していません。"),
+          h("div",{role:"status","aria-live":"polite",style:{minWidth:0,fontSize:12,lineHeight:1.7,color:selected?"#102A43":"#64748B",overflowWrap:"anywhere",marginBottom:8}},selected?selected.fileName:"動画はまだ選ばれていません"),
+          selected&&h("div",{style:{fontSize:11,fontWeight:800,color:"#456C5B",marginBottom:8}},"✓ 選択済み・アップロード待ち"),
+          h("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
+            useVideoFileInput?filePickerLabel(slot):h("button",{onClick:()=>chooseShareSlot(slot),disabled:uploading||metadataUpdating||youtubeReconciling,style:{...css.bW,minHeight:44,padding:"9px 12px",fontSize:12}},"ファイルから選ぶ"),
+            filePickerLabel(slot,true),
+            selected&&h("button",{onClick:()=>removeShareFile(slot.slotKey),disabled:uploading||metadataUpdating||youtubeReconciling,style:{border:0,background:"transparent",color:"#64748B",fontSize:12,fontWeight:800,minHeight:44,padding:"8px",cursor:"pointer"}},"解除")),
           uploadState && h("div",{style:{marginTop:6,fontSize:10,fontWeight:800,color:statusColor,whiteSpace:uploadState.phase==="error"?"normal":"nowrap",overflow:uploadState.phase==="error"?"visible":"hidden",textOverflow:uploadState.phase==="error"?"clip":"ellipsis",wordBreak:uploadState.phase==="error"?"break-word":"normal",lineHeight:uploadState.phase==="error"?1.5:undefined}},uploadState.message+(uploadState.phase==="uploading"?" "+uploadState.progress+"%":"")),
           visibleVideoUrl && h("a",{href:visibleVideoUrl,target:"_blank",rel:"noopener noreferrer",style:{display:"inline-flex",alignItems:"center",marginTop:7,fontSize:10,fontWeight:900,color:"#456C5B",textDecoration:"none"}},"✓ YouTubeに保存済み　開く ↗")
         );
       })),
+      h("button",{onClick:uploadSelectedVideosDirectly,disabled:uploading||metadataUpdating||youtubeReconciling||!pendingShareVideos.length,style:{...css.bS,width:"100%",minHeight:48,padding:12,fontSize:14,marginBottom:10,opacity:uploading||metadataUpdating||youtubeReconciling||!pendingShareVideos.length?0.55:1,cursor:uploading||metadataUpdating||youtubeReconciling||!pendingShareVideos.length?"wait":"pointer"}},uploading?"YouTubeへアップロード中...":metadataUpdating?"動画情報を更新中...":youtubeReconciling?"YouTubeを照合中...":"選択した "+pendingShareVideos.length+" 本をアップロード"),
+      shareMessage&&h("div",{role:"status",style:{marginBottom:10,padding:"8px 9px",borderLeft:"3px solid #456C5B",background:"#F0FDF4",fontSize:11,lineHeight:1.6,color:"#456C5B",fontWeight:700}},shareMessage),
+      shareError&&h("div",{role:"alert",style:{marginBottom:10,padding:"8px 9px",borderLeft:"3px solid #786753",background:"#FFFBEB",fontSize:11,lineHeight:1.6,color:"#786753",fontWeight:700}},
+        h("div",{},shareError),
+        shareError.includes("デフォルト チャンネル")&&h("a",{href:"https://www.youtube.com/account_advanced",target:"_blank",rel:"noopener noreferrer",style:{display:"inline-block",marginTop:5,color:"#1D4E89",fontWeight:900,textDecoration:"underline"}},"YouTubeの詳細設定を開く ↗")),
       h("div",{style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:10,marginBottom:10,padding:"10px 11px",borderRadius:7,background:"#EEF4FF",border:"1px solid #C8D8F5"}},
         h("div",{style:{minWidth:0}},
           h("div",{style:{fontSize:12,fontWeight:900,color:"#173B75",marginBottom:2}},"YouTubeを照合・リンク修復"),
@@ -10269,12 +10283,6 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
         ),
         h("button",{onClick:updateLinkedYoutubeMetadata,disabled:metadataUpdating||uploading||youtubeConnecting||youtubeReconciling||!linkedMetadataSlots.length,style:{...css.bG,padding:"9px 10px",fontSize:11,whiteSpace:"nowrap",opacity:metadataUpdating||uploading||youtubeConnecting||youtubeReconciling||!linkedMetadataSlots.length?0.55:1,cursor:metadataUpdating||uploading||youtubeConnecting||youtubeReconciling?"wait":"pointer"}},metadataUpdating?"更新中...":"情報を更新")
       ),
-      h("button",{onClick:uploadSelectedVideosDirectly,disabled:uploading||metadataUpdating||youtubeReconciling||!pendingShareVideos.length,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:uploading||metadataUpdating||youtubeReconciling||!pendingShareVideos.length?0.55:1,cursor:uploading||metadataUpdating||youtubeReconciling||!pendingShareVideos.length?"wait":"pointer"}},uploading?"YouTubeへアップロード中...":metadataUpdating?"動画情報を更新中...":youtubeReconciling?"YouTubeを照合中...":!youtubeAccessToken?"YouTubeへ接続して "+pendingShareVideos.length+" 本をアップロード":"テンプレで "+pendingShareVideos.length+" 本をアップロード"),
-      shareMessage && h("div",{style:{marginTop:9,padding:"8px 9px",borderLeft:"3px solid #456C5B",background:"#F0FDF4",fontSize:10,lineHeight:1.6,color:"#456C5B",fontWeight:700}},shareMessage),
-      shareError && h("div",{style:{marginTop:9,padding:"8px 9px",borderLeft:"3px solid #786753",background:"#FFFBEB",fontSize:10,lineHeight:1.6,color:"#786753",fontWeight:700}},
-        h("div",{},shareError),
-        shareError.includes("デフォルト チャンネル") && h("a",{href:"https://www.youtube.com/account_advanced",target:"_blank",rel:"noopener noreferrer",style:{display:"inline-block",marginTop:5,color:"#1D4E89",fontWeight:900,textDecoration:"underline"}},"YouTubeの詳細設定を開く ↗")
-      )
     )
   );
   return h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
