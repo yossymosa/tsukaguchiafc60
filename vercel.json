@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/app-motion.css",
+      "destination": "/app-motion.css"
+    },
+    {
+      "source": "/app-motion.js",
+      "destination": "/app-motion.js"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },

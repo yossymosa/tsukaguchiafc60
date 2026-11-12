@@ -59,7 +59,6 @@ button:active{transform:translateY(1px);}
 .content-page button,.detail-page button{border-radius:6px !important;}
 .content-page input,.content-page select,.content-page textarea,.detail-page input,.detail-page select,.detail-page textarea{border-radius:6px !important;}
 .content-page [role="button"],.detail-page [role="button"]{border-radius:6px !important;}
-.content-page div[style*="box-shadow"],.detail-page div[style*="box-shadow"]{box-shadow:none !important;border-radius:8px !important;border-color:var(--line) !important;}
 .dashboard-tabs button{border-radius:0 !important;}
 .schedule-detail-panel{background:#fff !important;border:1px solid var(--line) !important;border-radius:8px !important;box-shadow:none !important;}
 .schedule-detail-panel [style*="border-radius"]{border-radius:6px !important;}
@@ -94,10 +93,12 @@ button:active{transform:translateY(1px);}
   .app-tabbar{box-shadow:none;}
   .page-intro{border-color:var(--line-soft);}
 </style>
+<link rel="stylesheet" href="/app-motion.css?v=1"/>
 </head>
 <body>
 <div id="app"></div>
 <script src="/coach-voice.js?v=2"></script>
+<script src="/app-motion.js?v=1"></script>
 <script>
 const __bootRoot = document.getElementById("app");
 function __bootMessage(text){
@@ -1242,20 +1243,40 @@ async function enableNotifications() {
 
 // ── 共通コンポーネント ────────────────────────────────────────
 function Loader({msg="処理中..."}) {
-  return h("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center"}},
-    h("div",{style:{background:"#fff",borderRadius:6,padding:"18px 28px",fontWeight:800,fontSize:14,color:"#0B1220",borderTop:"3px solid #1D4E89"}},msg));
+  return h("div",{className:"app-loader",role:"status","aria-live":"polite"},
+    h("div",{className:"app-loader-card"},
+      h("span",{className:"loader-orbit","aria-hidden":"true"},h("span")),
+      h("div",{className:"loader-caption"},msg),
+      h("div",{className:"loader-track","aria-hidden":"true"},h("span"))));
 }
 function Modal({title,onClose,children,position="bottom"}) {
   const isCenter = position === "center";
-  return h("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:4000,display:"flex",alignItems:isCenter?"center":"flex-end",padding:isCenter?"12px 0":"0"}},
-    h("div",{style:{background:"#fff",width:"100%",maxWidth:isCenter?460:480,margin:"0 auto",borderRadius:isCenter?8:"8px 8px 0 0",maxHeight:isCenter?"82vh":"92vh",overflowY:"auto",border:isCenter?"1px solid #D8E0E8":"none"}},
-      h("div",{style:{padding:"18px 22px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #D8E0E8",position:"sticky",top:0,background:"#fff",zIndex:1}},
+  return h("div",{className:"app-modal-backdrop"+(isCenter?" is-center":""),style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:4000,display:"flex",alignItems:isCenter?"center":"flex-end",padding:isCenter?"12px 0":"0"}},
+    h("div",{className:"app-modal-panel",role:"dialog","aria-label":title,style:{background:"#fff",width:"100%",maxWidth:isCenter?460:480,margin:"0 auto",borderRadius:isCenter?8:"8px 8px 0 0",maxHeight:isCenter?"82vh":"92vh",overflowY:"auto",border:isCenter?"1px solid #D8E0E8":"none"}},
+      h("div",{className:"app-modal-heading",style:{padding:"18px 22px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #D8E0E8",position:"sticky",top:0,background:"#fff",zIndex:1}},
         h("div",{style:{fontSize:17,fontWeight:800,color:"#102A43"}},title),
-        h("button",{onClick:onClose,style:{background:"#fff",border:"1px solid #B8C6D5",borderRadius:6,width:32,height:32,fontSize:16,color:"#475569",cursor:"pointer"}},"×")),
+        h("button",{onClick:onClose,"aria-label":"閉じる",style:{background:"#fff",border:"1px solid #B8C6D5",borderRadius:6,width:32,height:32,fontSize:16,color:"#475569",cursor:"pointer"}},"×")),
       h("div",{style:{padding:"16px 22px 32px"}},children)));
 }
 function Bdg({label,color,bg,small}) {
-  return h("span",{style:{background:bg||"#F8FAFC",color,border:"1px solid "+color+"55",borderLeft:"3px solid "+color,borderRadius:2,padding:small?"2px 6px":"3px 8px",fontSize:small?10:11,fontWeight:800,letterSpacing:".02em",lineHeight:1.3,display:"inline-block"}},label);
+  return h("span",{className:"app-badge",style:{background:bg||"#F8FAFC",color,border:"1px solid "+color+"55",borderLeft:"3px solid "+color,borderRadius:2,padding:small?"2px 6px":"3px 8px",fontSize:small?10:11,fontWeight:800,letterSpacing:".02em",lineHeight:1.3,display:"inline-block"}},label);
+}
+function AppIcon({name,size=20}) {
+  const paths = {
+    home:["m3 10 9-7 9 7","M5 9v12h14V9","M9 21v-8h6v8"],
+    cal:["M8 2v4m8-4v4","M3 10h18","M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z","m8 16 2 2 5-5"],
+    match:["M7 3h10v5a5 5 0 0 1-10 0Z","M7 5H3v2a4 4 0 0 0 4 4m10-6h4v2a4 4 0 0 1-4 4","M12 13v5m-4 3h8m-7 0v-3h6v3"],
+    dash:["M4 20h17","M7 16v-5m5 5V5m5 11V8"],
+    docs:["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z","M14 2v6h6M8 12h8m-8 4h5"],
+    settings:["M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Z","M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"],
+    arrow:["M5 12h14m-5-5 5 5-5 5"],
+    refresh:["M20 7v5h-5","M4 17v-5h5","M6 7a7 7 0 0 1 12-2l2 3M4 16l2 3a7 7 0 0 0 12-2"]
+  };
+  return h("svg",{width:size,height:size,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor","stroke-width":1.7,"stroke-linecap":"round","stroke-linejoin":"round","aria-hidden":"true",focusable:"false"},
+    (paths[name]||paths.home).map((d,i)=>h("path",{key:i,d})));
+}
+function activateCardOnKeyDown(e) {
+  if(e.target===e.currentTarget && (e.key==="Enter" || e.key===" ")){e.preventDefault();e.currentTarget.click();}
 }
 function PageIntro({eyebrow,title,note}) {
   return h("div",{className:"page-intro"},
@@ -1345,7 +1366,7 @@ function AppHeader({user,onLogout,onRefresh,notificationEnabled,notificationBusy
           h("div",{className:"brand-name"},"塚口AFC Jr"))),
       h("div",{className:"header-user"},
         h("div",{className:"header-user-name"},user.name),
-        h("button",{onClick:onRefresh,className:"header-action"},"更新"),
+        h("button",{onClick:onRefresh,className:"header-action header-refresh"},h(AppIcon,{name:"refresh",size:12}),"更新"),
         h("button",{onClick:onLogout,className:"header-action"},"ログアウト"))),
     h("div",{className:"header-utilities"},
       topLinks.map(renderHeaderLink),
@@ -1593,11 +1614,13 @@ function Login({onLogin}) {
   return h("div",{className:"login-shell"},
     loading&&h(Loader,{msg:mode==="login"?"ログイン中...":"処理中..."}),
     h("div",{className:"login-card"},
+      h("div",{className:"login-eyebrow"},"ONE TEAM. ONE GOAL."),
       h("div",{className:"login-brand"},
         h("div",{className:"login-mark"},h("img",{src:"/icon-512.png",alt:"塚口AFC"})),
         h("div",{className:"login-brand-copy"},
           h("div",{className:"login-title"},"塚口AFC Jr"),
           h("div",{className:"login-subtitle"},"AMAGASAKI FOOTBALL CLUB"))),
+      h("p",{className:"login-welcome"},"日々の挑戦を、チームの力に。"),
       h("div",{style:{display:"flex",gap:0,marginBottom:18,borderBottom:"1px solid #D8E0E8"}},
         h("button",{onClick:()=>{setMode("login");setErr("");},style:{flex:1,padding:"10px 0",border:"none",borderBottom:mode==="login"?"2px solid #1D4E89":"2px solid transparent",cursor:"pointer",fontWeight:800,background:"transparent",color:mode==="login"?"#102A43":"#64748B"}},"ログイン"),
         h("button",{onClick:()=>{setMode("signup");setErr("");},style:{flex:1,padding:"10px 0",border:"none",borderBottom:mode==="signup"?"2px solid #1D4E89":"2px solid transparent",cursor:"pointer",fontWeight:800,background:"transparent",color:mode==="signup"?"#102A43":"#64748B"}},"新規登録")),
@@ -3052,7 +3075,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const phaseScores = visibleHalfOptions.map(hf =>
     `${halfScoreMapOur[hf]||0}-${halfScoreMapTheir[hf]||0}`
   );
-  const headerBlock = h("div",{style:{background:"#0B1220",borderBottom:"3px solid #1D4E89",padding:"14px 16px 12px",position:"sticky",top:0,zIndex:1400}},
+  const headerBlock = h("div",{className:"detail-header",style:{background:"#0B1220",borderBottom:"3px solid #1D4E89",padding:"14px 16px 12px",position:"sticky",top:0,zIndex:1400}},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}},
       h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
         h("button",{onClick:()=>coachVoiceLeaveGuard.current()&&onBack(),style:{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
@@ -3252,7 +3275,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const substitutionTimeline = [...(substitutions || [])]
     .map((s, idx) => ({...s, _idx: idx}))
     .sort((a,b)=>halfSortOrder(a.half)-halfSortOrder(b.half)||Number(a.minute)-Number(b.minute)||Number(a.second)-Number(b.second)||a._idx-b._idx);
-  const substitutionsBlock = h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
+  const substitutionsBlock = h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8",boxShadow:"none"}},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
       h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2}},"SUBSTITUTIONS"),
       isAdmin && h("button",{onClick:openAddSub,style:{border:"1px solid #1D4E89",background:"#fff",color:"#1D4E89",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:800,cursor:"pointer"}},"＋ 交代を追加")
@@ -3982,7 +4005,6 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
   const daysUntil=nextSch?Math.ceil((new Date(nd(nextSch.date)+"T00:00:00")-new Date(today+"T00:00:00"))/(1000*60*60*24)):null;
   const nextTc = nextSch ? getTC(nextSch.type || "") : {bg:"#1D4E89", lb:"予定"};
   const nextTimeText = nextSch ? getScheduleTimeText(nextSch) : "";
-  const next2Tc = nextSch2 ? getTC(nextSch2.type || "") : null;
   const next2TimeText = nextSch2 ? getScheduleTimeText(nextSch2) : "";
   const next2DaysUntil = nextSch2 ? Math.ceil((new Date(nd(nextSch2.date)+"T00:00:00")-new Date(today+"T00:00:00"))/(1000*60*60*24)) : null;
   const nextDate = nextSch ? fmt(nextSch.date) : {y:"",m:"",d:"",dw:""};
@@ -3995,56 +4017,53 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
     {label:"失点",value:fiscalStats.ga,color:"#64748B"}
   ];
   return h(Fragment,{},
+    h("div",{className:"home-welcome","data-reveal":""},
+      h("div",{},h("div",{className:"home-eyebrow"},"60TH GENERATION / TEAM HUB"),
+        h("h1",{},"チームの今を、ひと目で。")),
+      h("span",{className:"home-date"},fmt(todayKey).short)),
     // ① 次の試合カード
-    nextSch&&h("div",{onClick:()=>onGoToDay&&onGoToDay(nextSch),style:{background:"#fff",borderRadius:8,padding:16,marginTop:8,marginBottom:16,boxShadow:"none",border:"1px solid #D8E0E8",borderLeft:"4px solid #1D4E89",cursor:"pointer"}},
-      h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:10}},
-        h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"#102A43",letterSpacing:1.2}},"NEXT EVENT"),
-        h("div",{style:{fontSize:11,fontWeight:800,color:"#1D4E89"}},"日程を見る  ›")
-      ),
-        h("div",{style:{display:"flex",alignItems:"stretch",gap:14}},
-          h("div",{style:{width:82,flexShrink:0,paddingRight:12,borderRight:"1px solid #D8E0E8",textAlign:"center"}},
-            h("div",{style:{fontSize:10,fontWeight:800,color:"#64748B",letterSpacing:.6}},nextDate.y),
-            h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:34,fontWeight:700,color:"#0B1220",lineHeight:1,letterSpacing:0,whiteSpace:"nowrap"}},nextDate.m+"/"+nextDate.d),
-            h("div",{style:{fontSize:11,fontWeight:800,color:"#475569",marginTop:5}},"("+nextDate.dw+")")),
-          h("div",{style:{minWidth:0,flex:1,padding:"3px 0"}},
-            h("div",{style:{marginBottom:8}},h(Bdg,{label:nextTc.lb,color:nextTc.bg,small:true})),
-            h("div",{style:{fontSize:17,fontWeight:900,color:"#0B1220",marginBottom:5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},nextSch.title||"（タイトルなし）"),
-            nextSch.location&&h("div",{style:{fontSize:12,color:"#475569",marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},nextSch.location),
-            nextTimeText&&h("div",{style:{fontSize:12,fontWeight:700,color:"#475569"}},nextTimeText))
-        ),
-        nextSch2&&h("div",{style:{marginTop:10,paddingTop:10,borderTop:"1px dashed #E2E8F0"}},
-          h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}},
-            h("div",{style:{display:"flex",alignItems:"center",gap:6,minWidth:0,flex:1}},
-              h(Bdg,{label:next2Tc?.lb||"予定",color:(next2Tc?.bg||"#1D4E89"),small:true}),
-              h("div",{style:{fontSize:12,fontWeight:800,color:"#334155",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},nextSch2.title||"（タイトルなし）")
-            ),
-            h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",flexShrink:0}},
-              (next2DaysUntil===0?"今日":`${next2DaysUntil}日後`))
-          ),
-          h("div",{style:{fontSize:10,color:"#94A3B8",marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
-            fmt(nextSch2.date).full + (next2TimeText?" / "+next2TimeText:"") + (nextSch2.location?" / "+nextSch2.location:""))
-        )
-      ),
+    nextSch ? h("div",{className:"next-event-card",role:"button",tabIndex:0,onKeyDown:activateCardOnKeyDown,"data-reveal":"",onClick:()=>onGoToDay&&onGoToDay(nextSch)},
+      h("div",{className:"next-event-top"},
+        h("span",{className:"next-event-kicker"},h("span",{className:"event-status-dot","aria-hidden":"true"}),"NEXT EVENT"),
+        h("span",{className:"event-countdown"},daysUntil===0?"TODAY":daysUntil===1?"明日":`${daysUntil}日後`)),
+      h("div",{className:"next-event-body"},
+        h("div",{className:"next-event-date"},h("span",{className:"event-year"},nextDate.y),
+          h("strong",{},nextDate.m+"/"+nextDate.d),h("span",{className:"event-weekday"},nextDate.dw+"曜日")),
+        h("div",{className:"next-event-info"},
+          h(Bdg,{label:nextTc.lb,color:"#DCEAFF",bg:"rgba(255,255,255,.08)",small:true}),
+          h("h2",{},nextSch.title||"（タイトルなし）"),
+          nextSch.location&&h("p",{},nextSch.location),
+          nextTimeText&&h("p",{className:"event-time"},nextTimeText))),
+      nextSch2&&h("div",{className:"next-event-following"},
+        h("span",{},"その次の予定"),
+        h("div",{className:"following-event-copy"},
+          h("strong",{},fmt(nextSch2.date).short+" "+(nextSch2.title||"（タイトルなし）")),
+          (next2TimeText||nextSch2.location)&&h("small",{},[next2TimeText,nextSch2.location].filter(Boolean).join(" / "))),
+        h("span",{},next2DaysUntil===0?"今日":`${next2DaysUntil}日後`)),
+      h("div",{className:"next-event-footer"},"日程・出欠を確認",h(AppIcon,{name:"arrow",size:17})))
+    : h("div",{className:"home-empty-event motion-surface","data-reveal":""},h(AppIcon,{name:"cal",size:26}),
+        h("div",{},h("strong",{},"次の予定を待っています"),h("p",{},"新しい予定は日程から確認できます")),
+        h("button",{onClick:()=>onOpenTab&&onOpenTab("cal"),"aria-label":"日程を見る"},h(AppIcon,{name:"arrow"}))),
     // ② シーズン戦績
-    h("div",{style:{marginBottom:20}},
+    h("div",{className:"home-section","data-reveal":"",style:{marginBottom:20}},
       h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"SEASON SUMMARY"),
-      h("div",{onClick:()=>onOpenDashTab&&onOpenDashTab("result"),style:{background:"#fff",borderRadius:8,padding:"16px 14px",boxShadow:"none",border:"1px solid #D8E0E8",cursor:onOpenDashTab?"pointer":"default"}},
+      h("div",{className:"season-card motion-surface",role:"button",tabIndex:0,onKeyDown:activateCardOnKeyDown,onClick:()=>onOpenDashTab&&onOpenDashTab("result"),style:{background:"#fff",borderRadius:8,padding:"16px 14px",boxShadow:"none",border:"1px solid #D8E0E8",cursor:onOpenDashTab?"pointer":"default"}},
         h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}},
           h("div",{style:{fontSize:13,fontWeight:900,color:"#0F172A"}},`${fiscalLabel}（4月〜3月）`),
           h("div",{style:{fontSize:12,fontWeight:800,color:"#1D4E89",background:"#F1F6FC",border:"1px solid #C5D8EC",borderRadius:4,padding:"4px 8px"}},`勝率 ${fiscalStats.pct}`)
         ),
-        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",borderTop:"1px solid #E2E8F0",borderLeft:"1px solid #E2E8F0"}},
-          seasonFigures.map(item=>h("div",{key:item.label,style:{textAlign:"center",padding:"11px 5px",borderRight:"1px solid #E2E8F0",borderBottom:"1px solid #E2E8F0"}},
-            h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:28,fontWeight:700,color:item.color,lineHeight:1}},item.value),
+      h("div",{className:"season-grid",style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",borderTop:"1px solid #E2E8F0",borderLeft:"1px solid #E2E8F0"}},
+          seasonFigures.map(item=>h("div",{key:item.label,className:"season-figure",style:{textAlign:"center",padding:"11px 5px",borderRight:"1px solid #E2E8F0",borderBottom:"1px solid #E2E8F0"}},
+            h("div",{className:"season-value","data-count":item.value,style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:28,fontWeight:700,color:item.color,lineHeight:1}},item.value),
             h("div",{style:{fontSize:10,fontWeight:800,color:"#64748B",marginTop:4}},item.label)
           ))
         )
       )
     ),
     // ③ 未回答一覧
-    h("div",{style:{marginBottom:20}},
+    h("div",{className:"home-section","data-reveal":"",style:{marginBottom:20}},
       h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"ACTION REQUIRED"),
-      pendingList.length===0&&h("div",{style:{background:"#fff",borderRadius:8,padding:18,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},"未回答はありません"),
+      pendingList.length===0&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},"未回答はありません"),
       pendingList.map(n=>{
         const tt = String(n.targetType||"").toLowerCase();
         const kind = tt==="pending_carpool" ? "配車" : "出欠";
@@ -4053,7 +4072,7 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
         const dRaw = String(n.deadline||n.targetDeadline||"").trim();
         const dFmt = dRaw ? (fmt(dRaw).short || dRaw) : "";
         const summary = `${scheduleDate?fmt(scheduleDate).short+" ":""}${scheduleTitle}${dFmt?" / 締切 "+dFmt:""}`.trim();
-        return h("div",{key:"pending_"+n.id,onClick:()=>openNotice(n),style:{background:"#fff",borderRadius:8,padding:"12px",marginBottom:8,boxShadow:"none",border:"1px solid #D8E0E8",borderLeft:"3px solid #D97706",cursor:"pointer"}},
+        return h("div",{className:"motion-surface",key:"pending_"+n.id,onClick:()=>openNotice(n),style:{background:"#fff",borderRadius:8,padding:"12px",marginBottom:8,boxShadow:"none",border:"1px solid #D8E0E8",borderLeft:"3px solid #D97706",cursor:"pointer"}},
           h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5,gap:8}},
             h("div",{style:{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,flexWrap:"wrap"}},
               h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e",paddingRight:8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}},`${kind} 未回答`)),
@@ -4063,15 +4082,15 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
           h("div",{style:{fontSize:12,color:"#1E293B",lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:700}},summary));
       })),
     // ④ 最近の試合結果
-    h("div",{style:{marginBottom:20}},
+    h("div",{className:"home-section","data-reveal":"",style:{marginBottom:20}},
       h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"LATEST RESULTS"),
-      recent.length===0&&h("div",{style:{background:"#fff",borderRadius:8,padding:18,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},"試合記録がありません"),
+      recent.length===0&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},"試合記録がありません"),
       recent.map(r=>{
         const tc=getTC(getResultType(r));
         const s=findLinkedScheduleForResult(r, schedules);
         const cardTitle = String((s && s.title) || "").trim();
         const dt=fmt(r.date);
-        return h("div",{key:r.id,onClick:()=>onGoToMatch(r,s),style:{background:"#fff",borderRadius:8,padding:"13px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12,boxShadow:"none",border:"1px solid #D8E0E8",cursor:"pointer"}},
+        return h("div",{className:"motion-surface",key:r.id,onClick:()=>onGoToMatch(r,s),style:{background:"#fff",borderRadius:8,padding:"13px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12,boxShadow:"none",border:"1px solid #D8E0E8",cursor:"pointer"}},
           h("div",{style:{textAlign:"center",flexShrink:0,width:36}},h("div",{style:{fontSize:11,color:"#aaa"}},dt.short),h("div",{style:{fontSize:10,color:"#ccc"}},dt.dw)),
           h("div",{style:{width:3,height:40,background:tc.bg,borderRadius:2,flexShrink:0}}),
           h("div",{style:{flex:1,minWidth:0}},
@@ -5000,7 +5019,7 @@ function ReflectionSection({schedule,user,members=[],isAdmin,canWrite=true}) {
     }
   };
 
-  return h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+  return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8,flexWrap:"wrap"}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"🌱 ふりかえり"),
       updatedAt && h("div",{style:{fontSize:11,color:"#94A3B8"}},`更新: ${formatUpdatedAt(updatedAt)}`)
@@ -6002,7 +6021,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
       },"再読み込み")
     ),
     // 自分の回答
-    h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)",opacity:isReadOnly?0.72:1,pointerEvents:isReadOnly?"none":"auto"}},
+    h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)",opacity:isReadOnly?0.72:1,pointerEvents:isReadOnly?"none":"auto"}},
       isReadOnly&&h("div",{style:{fontSize:12,fontWeight:700,color:"#64748B",marginBottom:10,padding:"8px 10px",background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:10}},
         "閲覧専用アカウントのため配車回答は編集できません"),
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:12}},
@@ -6127,7 +6146,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
         isReadOnly?"閲覧専用":(isCarpoolPast?"締切済":(saved?"✓ 保存済":saving?"保存中...":"回答する")))),
 
     // 集計
-    h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+    h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"集計"),
         h("div",{style:{fontSize:13,fontWeight:700,color:"#557B6C"}},"合計 "+total+"人")),
@@ -6174,7 +6193,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
     ),
 
     // 配車割り当て（adminのみ）
-    isAdmin&&fleetRows.length>0&&attendingChildren.length>0&&h("div",{style:{background:"#fff",borderRadius:8,padding:18,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+    isAdmin&&fleetRows.length>0&&attendingChildren.length>0&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"🗺 配車割り当て"),
         selectedFleetRows.length>0&&h("button",{onClick:autoAssign,
@@ -6571,7 +6590,7 @@ function CarpoolSection({schedule, user, isAdmin, canWrite=true, members, users=
         }, planSaving ? "確定中..." : "この内容で配車確定")
       )
     ),
-    (!isAdmin && confirmedPlan?.confirmed) && h("div",{style:{background:"#fff",borderRadius:8,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+    (!isAdmin && confirmedPlan?.confirmed) && h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#4F46E5",letterSpacing:1}},"🚗 確定した配車"),
         h("div",{style:{fontSize:11,color:"#64748B"}},
@@ -6849,7 +6868,7 @@ function AlbumSection({schedule, isAdmin, canWrite=true}) {
         ))
       )
     ),
-    h("div",{style:{background:"#fff",borderRadius:8,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}} ,
+    h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}} ,
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:12}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"アルバム"),
         h("div",{style:{fontSize:11,color:"#64748B"}},`${imageItems.length}枚${selectedIndexes.length?` / 選択${selectedIndexes.length}`:""}`)
@@ -7131,7 +7150,7 @@ function SettlementSection({schedule}) {
     alert("計算結果と合計をコピーしました");
   };
 
-  return h("div",{style:{background:"#fff",borderRadius:8,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+  return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:16,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
     h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2,marginBottom:10}},"💴 精算（仮）"),
     h("div",{style:{marginBottom:10,padding:"10px 12px",border:"1px solid #E2E8F0",borderRadius:10,background:"#F8FAFC"}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#64748B",marginBottom:4}},"出発地"),
@@ -7504,7 +7523,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
       total: acc.total + Number(row.adultCount || 0) + Number(row.childCount || 0) + Number(row.preschoolCount || 0),
     }), {total:0});
 
-    return h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}} ,
+    return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}} ,
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}},
         h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"📋 出欠"),
         deadline&&h("div",{style:{fontSize:11,fontWeight:700,color:isPast?"#925D59":"#FF9800",background:isPast?"#FBF6F5":"#F1F6FC",borderRadius:8,padding:"3px 8px"}},
@@ -7572,7 +7591,7 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
     );
   }
 
-  return h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
+  return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginTop:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}},
     h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}},
       h("div",{style:{fontSize:11,fontWeight:700,color:"#bbb",letterSpacing:2}},"📋 出欠"),
       deadline&&h("div",{style:{fontSize:11,fontWeight:700,color:isPast?"#925D59":"#FF9800",background:isPast?"#FBF6F5":"#F1F6FC",borderRadius:8,padding:"3px 8px"}},
@@ -7822,7 +7841,7 @@ function MatchListByMonth({results,schedules,onGoToMatch}) {
         }))),
 
     // 月サマリー
-    cur&&st&&h("div",{style:{background:"#fff",borderRadius:8,padding:"12px 16px",marginBottom:12,display:"flex",gap:16,alignItems:"center",boxShadow:"0 2px 6px rgba(0,0,0,0.05)"}},
+    cur&&st&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:"12px 16px",marginBottom:12,display:"flex",gap:16,alignItems:"center",boxShadow:"0 2px 6px rgba(0,0,0,0.05)"}},
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",flex:1}},cur.label),
       h("div",{style:{display:"flex",gap:12,fontSize:13}},
         h("span",{style:{color:"#456C5B",fontWeight:700}},st.wins+"勝"),
@@ -7914,10 +7933,10 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
   }, [monthGroups, selYm, currentYm]);
 
   if (matchSchedules.length === 0) {
-    return h("div",{style:{background:"#fff",borderRadius:8,padding:20,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},"試合日程がありません");
+    return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:20,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},"試合日程がありません");
   }
   if (visibleMatchSchedules.length === 0) {
-    return h("div",{style:{background:"#fff",borderRadius:8,padding:20,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},
+    return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:20,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},
       matchView==="favorite" ? "お気に入り登録された試合がありません" : "試合日程がありません");
   }
 
@@ -7939,7 +7958,7 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
   const monthStat = calcStats(monthResults);
 
   return h(Fragment,{},
-    h("div",{style:{background:"#fff",borderRadius:8,padding:5,marginBottom:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,boxShadow:"none",border:"1px solid #D8E0E8"}} ,
+    h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:5,marginBottom:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,boxShadow:"none",border:"1px solid #D8E0E8"}} ,
       h("button",{onClick:()=>setMatchView("all"),
         style:{border:"none",borderRadius:6,padding:"9px 10px",fontSize:12,fontWeight:800,cursor:"pointer",
           background:matchView==="all"?"#102A43":"#F1F5F9",color:matchView==="all"?"#fff":"#475569"}},"すべて"),
@@ -7976,7 +7995,7 @@ function MatchTab({results,schedules,members,isAdmin,onGoToMatch,onGoToDay,onAdd
             h("div",{style:{fontSize:10,opacity:0.85,marginTop:2}},mst.wins+"勝"+mst.draws+"分"+mst.losses+"敗"));
         }))),
 
-    cur && h("div",{style:{background:"#fff",borderRadius:8,padding:"12px 16px",marginBottom:12,display:"flex",gap:16,alignItems:"center",boxShadow:"none",border:"1px solid #D8E0E8"}},
+    cur && h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:"12px 16px",marginBottom:12,display:"flex",gap:16,alignItems:"center",boxShadow:"none",border:"1px solid #D8E0E8"}},
       h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:17,fontWeight:800,letterSpacing:0.5,color:"#102A43",flex:1}},cur.label),
       h("div",{style:{display:"flex",gap:10,fontSize:12,flexWrap:"wrap",justifyContent:"flex-end"}},
         h("span",{style:{color:"#456C5B",fontWeight:700}},monthStat.wins+"勝"),
@@ -8134,7 +8153,7 @@ function RankList({title,icon,data,unit}) {
     Number(a?.m?.number||999)-Number(b?.m?.number||999)||
     String(a?.m?.name||"").localeCompare(String(b?.m?.name||""))
   );
-  return h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+  return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
     h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},icon+" "+title),
     sortedData.length===0&&h("div",{style:{color:"#ccc",fontSize:13,textAlign:"center",padding:"10px 0"}},"データがありません"),
     sortedData.map((x,i)=>{
@@ -8333,7 +8352,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
             background:dashTab===t.k?"#F1F6FC":"#fff",
             color:dashTab===t.k?"#102A43":"#64748B",fontSize:11,fontWeight:dashTab===t.k?800:700,cursor:"pointer",whiteSpace:"nowrap"}},t.l))),
     // フィルター（インライン）
-    h("div",{style:{background:"#fff",borderRadius:8,padding:14,marginBottom:14,border:"1px solid #D8E0E8",boxShadow:"none"}},
+    h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:14,marginBottom:14,border:"1px solid #D8E0E8",boxShadow:"none"}},
       h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:800,color:"#102A43",letterSpacing:1.1,marginBottom:8}},"MATCH FILTER"),
       h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:4,marginBottom:10}},
         [{k:"all",l:"すべて"},{k:"official",l:"公式戦"},{k:"cup",l:"カップ戦"},{k:"training",l:"トレマ"}].map(t=>h("button",{key:t.k,onClick:()=>setTypeF(t.k),style:{padding:"7px 4px",border:`1px solid ${typeF===t.k?"#102A43":"#D8E0E8"}`,borderRadius:4,background:typeF===t.k?"#102A43":"#fff",color:typeF===t.k?"#fff":"#64748B",fontSize:11,fontWeight:typeF===t.k?800:600,cursor:"pointer",whiteSpace:"nowrap"}},t.l))),
@@ -8405,7 +8424,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
               .sort((a,b)=>nd(b.date).localeCompare(nd(a.date)));
         return h(Fragment,{},
           // 集計カード
-          h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+          h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
             h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",letterSpacing:2,marginBottom:10}},
               (oppFilter==="all"?"全体":"vs "+oppFilter)+" · "+oppStatRows.length+"試合"),
             st2.games>0&&h(Fragment,{},
@@ -8421,7 +8440,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
                   h("div",{style:{fontSize:20,fontWeight:900,color:x.c}},x.v),
                   h("div",{style:{fontSize:10,color:"#94A3B8",marginTop:2}},x.l))))),
           // 対戦相手別サマリー（全相手表示中のみ）
-          oppFilter==="all"&&opps.length>0&&h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+          oppFilter==="all"&&opps.length>0&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
             h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🆚 対戦相手別"),
             opps.map(([opp,s],i)=>
               (()=>{
@@ -8463,7 +8482,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
                   )
                 );
               })())),
-          oppFilter!=="all"&&h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+          oppFilter!=="all"&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
             h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:12}},"📝 対戦相手メモ"),
             opponentMemoRows.length===0
               ? h("div",{style:{fontSize:12,color:"#94A3B8"}},"この対戦相手のメモはまだありません")
@@ -8472,7 +8491,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
                     h("div",{style:{fontSize:11,fontWeight:700,color:"#94A3B8",marginBottom:4}},fmt(row.date).full),
                     h("div",{style:{fontSize:13,color:"#334155",lineHeight:1.6,whiteSpace:"pre-wrap"}},row.memo)))),
           // 試合一覧
-          h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+          h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
             h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"📋 試合一覧"),
             oppStatRows.length===0&&h("div",{style:{textAlign:"center",color:"#ccc",fontSize:13,padding:16}},"試合がありません"),
             oppStatRows.map((r,i)=>{
@@ -8499,7 +8518,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
       })()),
 
     // ── 大会結果タブ ──
-    dashTab==="tournament"&&h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+    dashTab==="tournament"&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🏆 大会結果"),
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr",gap:8,marginBottom:14,textAlign:"center"}},
         [{l:"優勝回数",v:championCount,c:"#FFD700"}]
@@ -8524,7 +8543,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
       h(RankList,{title:"MVP獲得",icon:"🏅",data:toRank(mvpMap,members),unit:"回"}),
 
       // PK得点ランキング
-      Object.keys(pkScoreMap).length>0&&h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+      Object.keys(pkScoreMap).length>0&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
         h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🥅 PK得点ランキング"),
         Object.entries(pkScoreMap)
           .map(([id,cnt])=>{const m=members.find(x=>x.id===id)||members.find(x=>x.name===id);return m?{m,cnt}:null;})
@@ -8553,7 +8572,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
         const pkW=pkGames.filter(r=>Number(r.pkOur)>Number(r.pkTheir)).length;
         const pkL=pkGames.filter(r=>Number(r.pkOur)<Number(r.pkTheir)).length;
         const pkRate=Math.round(pkW/pkGames.length*100)+"%";
-        return h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+        return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
           h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🥅 PK戦"),
           h("div",{style:{display:"flex",gap:8}},
             [{l:"PK勝ち",v:pkW,c:"#456C5B"},{l:"PK負け",v:pkL,c:"#865550"},{l:"PK試合",v:pkGames.length,c:"#607D8B"},{l:"PK勝率",v:pkRate,c:"#1D4E89"}]
@@ -8567,13 +8586,13 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     dashTab==="personal"&&h(Fragment,{},
       isAdmin&&h(LiftingInput,{members,liftings:liftings||[]}),
       personalStats.length===0
-        ? h("div",{style:{background:"#fff",borderRadius:8,padding:32,textAlign:"center",color:"#ccc",fontSize:13}},"データがありません")
+        ? h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:32,textAlign:"center",color:"#ccc",fontSize:13}},"データがありません")
         : personalStats.map(m=>{
           const pc=PC[m.position]||{bg:"#999"};
           const pkRate=m.pkTotal>0?Math.round(m.pkMade/m.pkTotal*100)+"%":"-";
           const shotRate = m.shotRateShots>0 ? (Math.round((m.shotRateGoals/m.shotRateShots)*1000)/10)+"%" : "-";
           const lf=(liftings||[]).find(x=>x.memberId===m.id);
-          return h("div",{key:m.id,style:{background:"#fff",borderRadius:8,padding:18,marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+          return h("div",{className:"motion-surface",key:m.id,style:{background:"#fff",borderRadius:8,padding:18,marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
             h("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:12}},
               m.photoUrl
                 ? h(MemberFace,{member:m,size:42,alt:m.name})
@@ -8613,7 +8632,7 @@ function LiftingInput({members,liftings}) {
     if(lf){lf.count=Number(cnt);}else{liftings.push({memberId:selId,memberName:sel?.name||"",count:Number(cnt)});}
     setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2000);
   };
-  return h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+  return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
     h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"📝 記録を入力・更新"),
     h("select",{value:selId,onChange:e=>setSelId(e.target.value),style:{...css.inp,width:"100%",marginBottom:10}},
       h("option",{value:""},"選手を選択..."),
@@ -8811,7 +8830,7 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
 
   return h(Fragment,{},
 // ── カレンダー本体
- h("div",{style:{background:"#fff",borderRadius:8,marginBottom:12,boxShadow:"none",border:"1px solid #D8E0E8",overflow:"hidden"}},
+ h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,marginBottom:12,boxShadow:"none",border:"1px solid #D8E0E8",overflow:"hidden"}},
 
   h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#102A43",padding:"10px 12px"}},
     h("button",{onClick:prev,style:{background:"transparent",border:"1px solid rgba(255,255,255,.35)",borderRadius:4,width:32,height:30,fontSize:19,color:"#fff",cursor:"pointer"}},"‹"),
@@ -8883,12 +8902,12 @@ function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Pr
       return h(Fragment,{},
     h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"#102A43",letterSpacing:1.2,marginBottom:8}},"MONTHLY SCHEDULE"),
     upcomingDayKeys.length===0
-      ?h("div",{style:{background:"#fff",borderRadius:8,padding:20,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},"本日以降の日程はありません")
+      ?h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:20,textAlign:"center",color:"#64748B",fontSize:13,border:"1px solid #D8E0E8"}},"本日以降の日程はありません")
       :upcomingDayKeys.map(d=>{
           const evs=dayData[d];
           const dStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
           const dt=fmt(dStr);
-          return h("div",{key:d,id:"cal-day-"+dStr,style:{background:"#fff",borderRadius:8,padding:"12px 14px",marginBottom:8,boxShadow:"none",border:"1px solid #D8E0E8"}},
+          return h("div",{className:"motion-surface",key:d,id:"cal-day-"+dStr,style:{background:"#fff",borderRadius:8,padding:"12px 14px",marginBottom:8,boxShadow:"none",border:"1px solid #D8E0E8"}},
             h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:800,letterSpacing:.6,color:"#102A43",marginBottom:8}},dt.m+" / "+dt.d+"  "+dt.dw),
             evs.map(e=>{
               const tc=getTC(e.type);
@@ -9213,7 +9232,7 @@ function MemoTab({news,isAdmin,user,onAdd,onDelete}) {
       [{k:"連絡",l:"📢 連絡"},...(isAdmin?[{k:"コーチメモ",l:"📋 コーチメモ"}]:[])].map(t=>h("button",{key:t.k,onClick:()=>{setCat(t.k);setFn(p=>({...p,category:t.k}));},style:{flex:1,padding:"10px",border:`2px solid ${cat===t.k?"#1D4E89":"#eee"}`,borderRadius:8,background:cat===t.k?"#1D4E89":"#fff",color:cat===t.k?"#fff":"#666",fontSize:13,fontWeight:cat===t.k?700:400,cursor:"pointer"}},t.l)),
       isAdmin&&h("button",{onClick:()=>setModal(true),style:{...css.bO,padding:"10px 14px",borderRadius:8}},"+ 作成")),
     items.length===0&&h("div",{style:{textAlign:"center",padding:"40px",color:"#aaa",background:"#fff",borderRadius:8}},h("div",{style:{fontSize:36,marginBottom:10}},cat==="コーチメモ"?"📋":"📢"),cat+"はありません"),
-    items.map(n=>h("div",{key:n.id,style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
+    items.map(n=>h("div",{className:"motion-surface",key:n.id,style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}},
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}},
         h("div",{style:{fontSize:15,fontWeight:700,color:"#1a1a2e",flex:1,paddingRight:12}},n.title),
         h("div",{style:{display:"flex",gap:6,alignItems:"center",flexShrink:0}},
@@ -9413,6 +9432,7 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate,onReorder}) {
   const renderItem=(item)=>{
     const opened=openId===item.id;
     return h("div",{
+      className:"motion-surface document-card"+(isAdmin&&dragId===item.id?" is-dragging":""),
       key:item.id,
       draggable:isAdmin,
       onDragStart:e=>{
@@ -9444,14 +9464,14 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate,onReorder}) {
         border:isAdmin&&dragId===item.id?"2px solid #60A5FA":"2px solid transparent"
       }
     },
-      h("button",{onClick:()=>setOpenId(opened?"":item.id),style:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"14px 14px",border:"none",background:"#fff",cursor:"pointer"}},
+      h("button",{onClick:()=>setOpenId(opened?"":item.id),"aria-expanded":opened,style:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"14px 14px",border:"none",background:"#fff",cursor:"pointer"}},
         h("div",{style:{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}},
           isAdmin ? h("span",{style:{fontSize:14,color:"#94A3B8",cursor:"grab",flexShrink:0}},"⋮⋮") : null,
           h("div",{style:{fontSize:14,fontWeight:800,color:"#1E293B",textAlign:"left",flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},item.title)
         ),
-        h("div",{style:{fontSize:16,color:"#94A3B8",fontWeight:800,flexShrink:0}},opened?"−":"+")
+        h("div",{className:"document-toggle"+(opened?" is-open":""),"aria-hidden":"true",style:{fontSize:16,color:"#94A3B8",fontWeight:800,flexShrink:0}},"+")
       ),
-      opened ? h("div",{style:{padding:"0 14px 14px",borderTop:"1px solid #F1F5F9"}},
+      opened ? h("div",{className:"document-content",style:{padding:"0 14px 14px",borderTop:"1px solid #F1F5F9"}},
         h("div",{style:{fontSize:13,color:"#334155",lineHeight:1.8,whiteSpace:"pre-wrap",marginTop:10}},item.content||"（内容なし）"),
         item.attachmentUrl ? h("div",{style:{marginTop:10}},
           h("a",{href:item.attachmentUrl,target:"_blank",rel:"noopener noreferrer",
@@ -9487,7 +9507,7 @@ function InfoTab({news,isAdmin,user,onAdd,onDelete,onUpdate,onReorder}) {
       "チーム運営に必要な情報をためていく",
       isAdmin ? "（カードをドラッグして並び替え可）" : ""
     ),
-    items.length===0 ? h("div",{style:{background:"#fff",borderRadius:8,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"資料はまだありません") : null,
+    items.length===0 ? h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:20,textAlign:"center",color:"#94A3B8",fontSize:13}},"資料はまだありません") : null,
     items.map(renderItem),
 
     createModal ? h(Modal,{title:"資料を追加",onClose:()=>setCreateModal(false)},
@@ -10228,7 +10248,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
         style:{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0,cursor:disabled?"wait":"pointer"}}));
   };
   if (!showFileNameFlow) return h(Fragment,{},
-    h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:10,border:"1px solid #D8E0E8"}},
+    h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:10,border:"1px solid #D8E0E8"}},
       h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"YOUTUBE DIRECT UPLOAD"),
       h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.8,marginBottom:12}},"動画を選ぶ → ファイル名を確認 → アップロード。選択時は動画を送信しません。タイトル・概要欄は自動で設定し、限定公開で試合動画の再生リストへ保存します。"),
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"9px 10px",background:youtubeChannel?"#F0FDF4":"#F8FAFC",border:"1px solid "+(youtubeChannel?"#C9DAD1":"#D8E0E8"),borderRadius:7,marginBottom:9}},
@@ -10285,7 +10305,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
       ),
     )
   );
-  return h("div",{style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
+  return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid #D8E0E8"}},
     h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:4}},"DAY VIDEO UPLOAD"),
     h("div",{style:{fontSize:11,color:"#64748B",lineHeight:1.55,marginBottom:12}},"試合形式に合わせた本数だけ表示します。iPadでは右側の「ファイルを選択」から写真ライブラリを開きます。動画本体は読み込まず、選択した動画名だけをすぐ記録します。"),
     h("div",{style:{display:"grid",gap:8,marginBottom:12}},
@@ -10706,7 +10726,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         style:{width:"100%",marginTop:12,padding:12,background:"#FBF6F5",color:"#925D59",border:"none",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}},"🗑 日程を削除")),
     // ヘッダー + 内部タブ（固定）
     h("div",{style:{position:"sticky",top:0,zIndex:1200,background:"#F4F6F8"}},
-      h("div",{style:{background:"#0B1220",borderBottom:"3px solid #1D4E89",padding:"14px 16px 12px"}},
+      h("div",{className:"detail-header",style:{background:"#0B1220",borderBottom:"3px solid #1D4E89",padding:"14px 16px 12px"}},
       h("div",{style:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}},
         h("button",{onClick:onBack,style:{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"← 戻る"),
         h("button",{onClick:onHome,style:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"6px 14px",color:"#fff",fontSize:13,cursor:"pointer"}},"ホーム")),
@@ -10715,7 +10735,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         isAdmin&&h("button",{onClick:()=>{setSchForm(buildEditScheduleForm(schedule));setEditSch(true);},style:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"5px 12px",color:"#fff",fontSize:12,cursor:"pointer",flexShrink:0}},"編集")),
       h("div",{style:{fontSize:20,fontWeight:900,color:"#fff",marginBottom:4}},schedule.title||"（タイトルなし）"),
       h("div",{style:{fontSize:13,color:"rgba(255,255,255,0.6)"}},dt.full+(schedule.location?" ／ "+schedule.location:""))),
-      h("div",{style:{background:"#fff",margin:"0 0 10px",border:"1px solid #D8E0E8",borderTop:"none",boxShadow:"none",overflow:"hidden"}},
+      h("div",{className:"day-tabbar",style:{background:"#fff",margin:"0 0 10px",border:"1px solid #D8E0E8",borderTop:"none",boxShadow:"none",overflow:"hidden"}},
         h("div",{style:{display:"flex"}},
           (isSimpleDay
             ? [{k:"detail",l:"詳細"},{k:"attend",l:"出欠"}]
@@ -10728,7 +10748,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       )
     ),
 
-    h("div",{style:{padding:"0 16px"}},
+    h("div",{className:"day-content",key:dayTab,style:{padding:"0 16px"}},
       // テンプレボタン（HP: admin/member, YouTube: admin）
       canWrite&&dayTab==="matches"&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},
         h("button",{onClick:openHpModal,
@@ -10746,7 +10766,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
         h("div",{style:{fontSize:13,fontWeight:900,color:"#5B21B6",marginBottom:3}},"5年帯同の試合記録"),
         h("div",{style:{fontSize:12,color:"#6D28D9",lineHeight:1.55}},dayR.length+"試合を記録中。勝敗・勝率・個人成績・ランキングには含まれません。")),
       // 試合一覧・成績（matches タブ）
-      dayTab==="matches"&&dayR.length>0&&!isFiveGradeAccompanyDay&&h("div",{style:{background:"#fff",borderRadius:8,padding:"16px 14px",marginBottom:14,boxShadow:"none",border:"1px solid #D8E0E8"}},
+      dayTab==="matches"&&dayR.length>0&&!isFiveGradeAccompanyDay&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:"16px 14px",marginBottom:14,boxShadow:"none",border:"1px solid #D8E0E8"}},
         h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:12}},"TODAY'S RESULTS"),
         h("div",{style:{display:"flex",justifyContent:"center",gap:0,border:"1px solid #E2E8F0",borderRadius:6,overflow:"hidden"}},
           h("div",{style:{textAlign:"center",padding:"10px 20px",flex:1,borderRight:"1px solid #E2E8F0",background:"#fff"}},
@@ -10769,9 +10789,9 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
 
       // 試合リスト (matches タブ)
       dayTab==="matches"&&h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:10,marginTop:14}},"MATCHES"),
-      dayTab==="matches"&&dayR.length===0&&h("div",{style:{background:"#fff",borderRadius:8,padding:"20px",textAlign:"center",color:"#64748B",fontSize:13,marginBottom:10,border:"1px solid #D8E0E8"}},"試合記録がありません"),
+      dayTab==="matches"&&dayR.length===0&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:"20px",textAlign:"center",color:"#64748B",fontSize:13,marginBottom:10,border:"1px solid #D8E0E8"}},"試合記録がありません"),
       dayTab==="matches"&&dayR.map(r=>
-        h("div",{key:r.id,style:{background:"#fff",borderRadius:8,padding:"14px 16px",marginBottom:10,
+        h("div",{className:"motion-surface",key:r.id,style:{background:"#fff",borderRadius:8,padding:"14px 16px",marginBottom:10,
                  border:"1px solid #D8E0E8",boxShadow:"none"}},
           h("div",{style:{display:"flex",alignItems:"center",gap:14,cursor:"pointer"},onClick:()=>onGoToMatch(r,schedule)},
             h("div",{style:{width:32,height:32,borderRadius:8,background:"#F0F4F8",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},
@@ -10829,7 +10849,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin,canWrite,users}),
 
       // MVP入力欄（公式戦・カップ戦のみ・matchesタブ）
-      dayTab==="matches"&&isTournamentTarget&&h("div",{style:{background:"#fff",borderRadius:8,padding:16,marginTop:14,border:"1px solid #D8E0E8",boxShadow:"none"}},
+      dayTab==="matches"&&isTournamentTarget&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:16,marginTop:14,border:"1px solid #D8E0E8",boxShadow:"none"}},
         h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"#102A43",letterSpacing:1.2,marginBottom:12}},"MVP"),
         // 現在のMVP表示
         schedule.mvp&&h("div",{style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,marginBottom:12}},
@@ -10912,7 +10932,7 @@ function MemberTab({members,liftings=[]}) {
       sorted.map(m=>{
         const pc=PC[m.position]||{bg:"#999"};
         const lf=liftings.find(x=>x.memberId===m.id);
-        return h("div",{key:m.id,style:{background:"#fff",borderRadius:8,padding:"10px 8px",
+        return h("div",{className:"motion-surface",key:m.id,style:{background:"#fff",borderRadius:8,padding:"10px 8px",
           boxShadow:"0 2px 8px rgba(0,0,0,0.06)",textAlign:"center",minWidth:0}},
           h("div",{style:{width:40,height:40,borderRadius:10,background:pc.bg,margin:"0 auto 8px",
             display:"flex",alignItems:"center",justifyContent:"center",
@@ -11230,7 +11250,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
 
   return h(Fragment,{},
     photoCrop&&h(MemberPhotoCropModal,{source:photoCrop.source,fileName:photoCrop.fileName,onClose:()=>setPhotoCrop(null),onSave:saveCroppedPhoto}),
-    h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+    h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"👤 アカウント"),
       editing ? h(Fragment,{},
         h("div",{style:{marginBottom:12}},
@@ -11267,7 +11287,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
             h("div",{style:{fontSize:11,color:"#94A3B8",marginBottom:2}},"最終アクセス"),
             h("div",{style:{fontSize:12,fontWeight:700,color:"#1a1a2e"}},lastAccessLabel))),
         h("button",{onClick:()=>setEditing(true),style:{...css.bS,width:"100%",marginTop:16}},"プロフィールを編集"))),
-    h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+    h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🧒 子ども情報"),
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
         h("div",{style:{background:"#F8FAFC",borderRadius:8,padding:"12px 14px"}},
@@ -11292,7 +11312,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
         h("label",{style:{display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#102A43",color:"#fff",borderRadius:7,padding:"9px 11px",fontSize:12,fontWeight:800,cursor:photoUploading||!child||photoCrop?"wait":"pointer",opacity:photoUploading||!child||photoCrop?0.55:1}},
           h("input",{type:"file",accept:"image/jpeg,image/png,image/webp",onChange:uploadPhoto,disabled:photoUploading||!child||!!photoCrop,style:{display:"none"}}),
           photoUploading?"更新中...":"写真を選ぶ"))),
-    ["admin","super_admin"].includes(String(user?.role||"").trim()) && h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+    ["admin","super_admin"].includes(String(user?.role||"").trim()) && h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:10}},"🧩 タブ表示設定"),
       h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12}},"管理者で「選手」「メモ」タブの表示を切り替えできます（全員共通）"),
       h("div",{style:{display:"grid",gap:10,marginBottom:12}},
@@ -11323,7 +11343,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
         tabVisibilitySaving ? "保存中..." : "表示設定を保存")
     ),
     isSuperAdmin && h(AiHighlightTestPanel,{user,members}),
-    isSuperAdmin && h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+    isSuperAdmin && h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:6}},"🛡️ 権限管理（super admin）"),
       h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},"登録ユーザーの権限・紐づけ選手・家族構成をここで更新できます"),
       h("div",{style:{display:"grid",gap:10}},
@@ -11369,7 +11389,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
         })
       )
     ),
-    isSuperAdmin && h("div",{style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+    isSuperAdmin && h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:6}},"👟 メンバー追加（ID自動発番）"),
       h("div",{style:{fontSize:12,color:"#64748B",marginBottom:12,lineHeight:1.6}},"追加時にメンバーIDは自動発番されます"),
       memberAddedId && h("div",{style:{fontSize:12,fontWeight:700,color:"#1D4E89",background:"#EEF2FF",border:"1px solid #D8E1FF",borderRadius:10,padding:"8px 10px",marginBottom:10}},
@@ -11396,7 +11416,7 @@ function SettingsTab({user,users=[],members,isSuperAdmin=false,notificationEnabl
       h("button",{onClick:addManagedMember,disabled:memberAdding||!String(newMember.name||"").trim()||!String(newMember.generation||"").trim(),style:{...css.bS,width:"100%",opacity:(memberAdding||!String(newMember.name||"").trim()||!String(newMember.generation||"").trim())?0.65:1}},
         memberAdding ? "追加中..." : "メンバーを追加する")
     ),
-    h("div",{style:{background:"#fff",borderRadius:8,padding:18,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
+    h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}} ,
       h("div",{style:{fontSize:13,fontWeight:800,color:"#1a1a2e",marginBottom:14}},"🔔 通知設定"),
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}},
         h("div",{},
@@ -11906,6 +11926,7 @@ function CameraTab({results=[],schedules=[],isAdmin=false}) {
 
 // ── メインアプリ ───────────────────────────────────────────────
 function App() {
+  useEffect(()=>window.AFCMotion?.mount(document.getElementById("app")),[]);
   const [user,setUser]=useState(()=>{
     try{ const u=localStorage.getItem("afc_user"); return u?JSON.parse(u):null; }catch(e){ return null; }
   });
@@ -12391,10 +12412,12 @@ function App() {
   return h(Fragment,{},
     loading && h(Loader,{msg:loadMsg}),
     h("div",{className:"page app-shell"},
-      h("div",{style:{position:"sticky",top:0,zIndex:1500,background:"#F4F6F8"}},
+      h("div",{className:"app-chrome",style:{position:"sticky",top:0,zIndex:1500,background:"#F4F6F8"}},
         h(AppHeader,{user,onLogout:()=>saveUser(null),onRefresh:()=>load("更新中..."),notificationEnabled,notificationBusy,onEnableNotifications:handleEnableNotifications}),
-        h("nav",{className:"app-tabbar","aria-label":"メインメニュー"},
-          TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),className:"app-tab"+(tab===t.k?" is-active":""),"aria-current":tab===t.k?"page":undefined},t.l))
+        h("nav",{className:"app-tabbar","aria-label":"メインメニュー",style:{"--active-tab":Math.max(0,TABS.findIndex(t=>t.k===tab)),"--tab-count":TABS.length}},
+          h("span",{className:"app-tab-indicator","aria-hidden":"true"}),
+          TABS.map(t=>h("button",{key:t.k,onClick:()=>safeSetTab(t.k),className:"app-tab"+(tab===t.k?" is-active":""),"aria-current":tab===t.k?"page":undefined},
+            h("span",{className:"app-tab-icon"},h(AppIcon,{name:t.k,size:18})),h("span",{},t.l)))
         )
       ),
       h("main",{className:"content-page",onTouchStart:handleTabSwipeStart,onTouchMove:handleTabSwipeMove,onTouchEnd:handleTabSwipeEnd,onTouchCancel:()=>{tabSwipeStartRef.current=null;}},
