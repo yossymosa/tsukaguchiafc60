@@ -9,7 +9,7 @@
     const counted=new WeakMap();
     const observed=new Set();
     const counters=new Map();
-    const effects=new Set();
+    const effects=new Map();
     let scanFrame=0,scrollFrame=0,stopped=false;
     const surfaceSelector="[data-reveal],.motion-surface,.match-section,.schedule-detail-panel,.card";
     const progress=doc.createElement("div");
@@ -41,7 +41,7 @@
       function tick(now){
         if(stopped||reduce.matches||!el.isConnected){stopCounter(el);return;}
         if(item.start===null) item.start=now;
-        const t=Math.min(1,(now-item.start)/720);
+        const t=Math.min(1,(now-item.start)/520);
         overlay.textContent=String(Math.round(value*(1-Math.pow(1-t,3))));
         if(t<1) item.frame=global.requestAnimationFrame(tick);
         else stopCounter(el);
@@ -61,7 +61,7 @@
             viewport.unobserve(el);observed.delete(el);
             if(el.hasAttribute("data-count")) count(el);
             else{
-              el.style.setProperty("--reveal-delay",Math.min(order++,4)*45+"ms");
+              el.style.setProperty("--reveal-delay",Math.min(order++,3)*24+"ms");
               reveal(el);
             }
           });
@@ -104,25 +104,36 @@
       const value=height>0?Math.max(0,Math.min(1,global.scrollY/height)):0;
       progress.style.setProperty("--scroll-progress",String(value));
     }
-    function onScroll(){if(!scrollFrame&&!stopped) scrollFrame=global.requestAnimationFrame(updateProgress);}
+    function removeEffect(el){
+      global.clearTimeout(effects.get(el));
+      el.remove();effects.delete(el);
+    }
+    function clearEffects(){effects.forEach((_timer,el)=>removeEffect(el));}
+    function onScroll(){
+      clearEffects();
+      if(!scrollFrame&&!stopped) scrollFrame=global.requestAnimationFrame(updateProgress);
+    }
     function onClick(event){
       if(reduce.matches||event.defaultPrevented) return;
       const target=event.target.closest?.("button,[role='button']");
       if(!target||!root.contains(target)||target.disabled||target.getAttribute("aria-disabled")==="true") return;
-      const wave=doc.createElement("span");
-      wave.className="tap-wave";
-      wave.setAttribute("aria-hidden","true");
       const rect=target.getBoundingClientRect();
-      wave.style.left=(event.detail===0?rect.left+rect.width/2:event.clientX)+"px";
-      wave.style.top=(event.detail===0?rect.top+rect.height/2:event.clientY)+"px";
-      doc.body.appendChild(wave);effects.add(wave);
-      wave.addEventListener("animationend",()=>{wave.remove();effects.delete(wave);},{once:true});
+      // Confirm a completed click inside its control; never react to pointer-down or a drag.
+      if(rect.width<=0||rect.height<=0||rect.width>220||rect.height>70) return;
+      clearEffects();
+      const feedback=doc.createElement("span"),style=global.getComputedStyle(target);
+      feedback.className="press-feedback";
+      feedback.setAttribute("aria-hidden","true");
+      Object.assign(feedback.style,{left:rect.left+"px",top:rect.top+"px",width:rect.width+"px",height:rect.height+"px",borderRadius:style.borderRadius,color:style.color});
+      doc.body.appendChild(feedback);
+      effects.set(feedback,global.setTimeout(()=>removeEffect(feedback),400));
+      feedback.addEventListener("animationend",()=>removeEffect(feedback),{once:true});
     }
     function onMotionChange(){
       if(reduce.matches){
         observed.forEach(el=>viewport?.unobserve(el));observed.clear();
         counters.forEach((_item,el)=>stopCounter(el));
-        effects.forEach(el=>el.remove());effects.clear();
+        clearEffects();
         root.querySelectorAll(".motion-reveal").forEach(el=>el.classList.remove("motion-reveal"));
       }
       scheduleScan();
@@ -141,7 +152,7 @@
       stopped=true;changes.disconnect();viewport?.disconnect();
       global.cancelAnimationFrame(scanFrame);global.cancelAnimationFrame(scrollFrame);
       counters.forEach((_item,el)=>stopCounter(el));
-      effects.forEach(el=>el.remove());effects.clear();progress.remove();
+      clearEffects();progress.remove();
       root.removeEventListener("click",onClick);root.removeEventListener("animationend",onAnimationEnd);
       global.removeEventListener("scroll",onScroll);global.removeEventListener("resize",onScroll);
       reduce.removeEventListener?.("change",onMotionChange);
