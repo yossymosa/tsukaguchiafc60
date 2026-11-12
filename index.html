@@ -93,11 +93,12 @@ button:active{transform:translateY(1px);}
   .app-tabbar{box-shadow:none;}
   .page-intro{border-color:var(--line-soft);}
 </style>
-<link rel="stylesheet" href="/app-motion.css?v=1"/>
+<link rel="stylesheet" href="/app-motion.css?v=2"/>
 </head>
 <body>
 <div id="app"></div>
 <script src="/coach-voice.js?v=2"></script>
+<script src="/timetree-view.js?v=1"></script>
 <script src="/app-motion.js?v=1"></script>
 <script>
 const __bootRoot = document.getElementById("app");
@@ -314,6 +315,7 @@ async function api(action,body={}) {
     "saveReflection","getReflection","saveGoals","saveFormation","saveShotStats","saveAttend","saveEventAttend","saveCarpool","saveCarpoolPlan","updateUserBySuperAdmin"
   ]);
   const longActions = new Set([
+    "connectTimeTree","getTimeTreeEvents",
     "syncFc2PracticeSchedules","syncOfficialHpMatchImport","syncYoutubeLinksToResults","syncYoutubePlaylist","uploadMemberPhoto",
     "analyzeCoachVoice","saveCoachVoiceNote","updateCoachVoiceNote","getCoachVoiceAudio"
   ]);
@@ -8648,6 +8650,18 @@ function LiftingInput({members,liftings}) {
         saved?"✓ 保存済":saving?"保存中...":"保存")));
 }
 
+function ScheduleCalendarTab(props) {
+  const [source,setSource]=useState("app");
+  if(!props.isAdmin) return h(CalTab,props);
+  return h(Fragment,{},
+    h("div",{className:"schedule-source-tabs","aria-label":"日程の表示元"},
+      h("button",{type:"button",onClick:()=>setSource("app"),className:source==="app"?"is-selected":"","aria-pressed":source==="app"},"アプリの日程"),
+      h("button",{type:"button",onClick:()=>setSource("timetree"),className:source==="timetree"?"is-selected":"","aria-pressed":source==="timetree"},"TimeTree",h("span",{},"管理者"))),
+    source==="timetree"
+      ? (window.TimeTreePanel?h(window.TimeTreePanel,{user:props.user,api}):h("p",{role:"alert"},"TimeTree画面を読み込めませんでした。再読み込みしてください。"))
+      : h(CalTab,props));
+}
+
 // ── 日程タブ：カレンダー＋今月の予定＋日程追加 ─────────────────
 function CalTab({schedules,results,isAdmin,onGoToDay,onAddSchedule,onImportFc2Practice}) {
   const today=new Date();
@@ -12398,7 +12412,7 @@ function App() {
   };
   const currentTabContent =
     tab==="home" ? h(HomeTab,{results,schedules,news,pendingNotices,members,isAdmin,onGoToMatch:goToMatch,onGoToDay:goToDay,onOpenDashTab:openDashTab,onOpenTab:safeSetTab})
-    : tab==="cal" ? h(CalTab,{schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule,onImportFc2Practice:handleImportFc2Practice})
+    : tab==="cal" ? h(ScheduleCalendarTab,{user,schedules,results,isAdmin,onGoToDay:goToDay,onAddSchedule:handleAddSchedule,onImportFc2Practice:handleImportFc2Practice})
     : tab==="match" ? h(MatchTab,{results,schedules,members,isAdmin,favoriteMap:myFavorites,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="dash" ? h(DashTab,{results,members,schedules,liftings,isAdmin,initialDashTab:dashInitialTab,onGoToMatch:goToMatch,onGoToDay:goToDay})
     : tab==="camera" ? h(CameraTab,{results,schedules,isAdmin})

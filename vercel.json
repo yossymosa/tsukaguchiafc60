@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/timetree-view.js",
+      "destination": "/timetree-view.js"
+    },
+    {
       "source": "/app-motion.css",
       "destination": "/app-motion.css"
     },

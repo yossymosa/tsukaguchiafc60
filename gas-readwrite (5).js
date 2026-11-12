@@ -826,6 +826,171 @@ function requireCoachVoiceAdmin(req) {
   return user;
 }
 
+// TimeTree 閲覧試作。署名済みの管理者だけが利用し、外部予定の書き込みは実装しない。
+// Web エンドポイントの仕様参考: ehs208/TimeTree-MCP、nmt3325/timetree-api。
+function timeTreeSessionKey(req, user) {
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+    String(user.id) + ":" + String(req.coachAuthToken), Utilities.Charset.UTF_8);
+  return "afc_tt_" + Utilities.base64EncodeWebSafe(digest).replace(/=+$/, "");
+}
+
+function timeTreeCookie(headers) {
+  const name = Object.keys(headers || {}).find(key => key.toLowerCase() === "set-cookie");
+  const values = name ? (Array.isArray(headers[name]) ? headers[name] : [headers[name]]) : [];
+  for (let i = 0; i < values.length; i++) {
+    const match = String(values[i]).match(/(?:^|,\s*)_session_id=([^;,\r\n]*)/);
+    if (match && match[1] && match[1].length <= 12000) return "_session_id=" + match[1];
+  }
+  return "";
+}
+
+function timeTreeRequest(path, session, credentials) {
+  // URL とメソッドを固定。利用者から任意 URL・Cookie・HTTP メソッドを受け取らない。
+  if (credentials ? path !== "/auth/email/signin" : !/^\/(calendars\?since=0|calendar\/\d+\/events\/sync(?:\?since=\d+)?)$/.test(path)) {
+    throw new Error("TimeTreeへの操作が許可されていません");
+  }
+  const options = {
+    method:credentials ? "put" : "get", muteHttpExceptions:true, followRedirects:false,
+    headers:{"X-TimeTreeA":"web/2.1.0/en", "Accept":"application/json"}
+  };
+  if (session && session.cookie) options.headers.Cookie = session.cookie;
+  if (credentials) {
+    options.contentType = "application/json";
+    options.payload = JSON.stringify({uid:credentials.email, password:credentials.password,
+      uuid:Utilities.getUuid().replace(/-/g, "")});
+  }
+  let response;
+  try { response = UrlFetchApp.fetch("https://timetreeapp.com/api/v1" + path, options); }
+  catch (e) { throw new Error("TimeTreeに接続できませんでした。時間をおいて再度お試しください"); }
+  const code = response.getResponseCode();
+  const text = response.getContentText();
+  let data;
+  try { if (text.length > 3000000) throw new Error(); data = JSON.parse(text); }
+  catch (e) { data = null; }
+  const providerCode = data && data.error && Number(data.error.code);
+  if (code === 429) throw new Error("TimeTreeへの接続が混み合っています。少し時間をおいてください");
+  if (code === 401 || code === 403 || providerCode === -493) {
+    throw new Error(credentials ? "TimeTreeにログインできませんでした。メールアドレスとパスワードを確認してください"
+      : "TIMETREE_LOGIN_REQUIRED: TimeTreeの接続が切れました。再接続してください");
+  }
+  if (providerCode === -425) throw new Error("このTimeTreeカレンダーを閲覧できません。カレンダーを選び直してください");
+  if (code < 200 || code >= 300 || !data || data.error) {
+    // 応答本文には認証情報が含まれる可能性があるため、ログ・クライアントに返さない。
+    throw new Error(credentials ? "TimeTreeにログインできませんでした。Web版でログインできるか確認してください"
+      : "TimeTreeの予定を取得できませんでした。連携先の仕様が変更された可能性があります");
+  }
+  const cookie = timeTreeCookie(response.getAllHeaders());
+  if (session && cookie) session.cookie = cookie;
+  return {data, cookie};
+}
+
+function timeTreeCalendars(session) {
+  const data = timeTreeRequest("/calendars?since=0", session).data;
+  if (!Array.isArray(data.calendars)) throw new Error("TimeTreeのカレンダー一覧を読み取れませんでした");
+  return data.calendars.filter(c => c && !c.deactivated_at && /^\d+$/.test(String(c.id)))
+    .map(c => ({id:String(c.id), name:String(c.name || "カレンダー").slice(0, 200)}));
+}
+
+function timeTreeEventView(event) {
+  if (!event || !String(event.id || event.uuid || "")) return null;
+  const start = Number(event.start_at), end = Number(event.end_at);
+  if (event.start_at == null || event.end_at == null || !Number.isFinite(start) || !Number.isFinite(end)
+      || !Number.isFinite(new Date(start).getTime()) || !Number.isFinite(new Date(end).getTime()) || end < start) return null;
+  const allDay = event.all_day === true;
+  const dateKey = (value, zone) => {
+    try { return Utilities.formatDate(new Date(value), zone || "Asia/Tokyo", "yyyy-MM-dd"); }
+    catch (e) { return Utilities.formatDate(new Date(value), "Asia/Tokyo", "yyyy-MM-dd"); }
+  };
+  const recurrences = Array.isArray(event.recurrences) ? event.recurrences : [];
+  const note = String(event.note || (event.attachment && event.attachment.content) || "");
+  return {
+    id:String(event.id || event.uuid), title:String(event.title || "（タイトルなし）").slice(0, 500),
+    startAt:start, endAt:end, allDay,
+    startDate:dateKey(start, allDay ? event.start_timezone : "Asia/Tokyo"),
+    endDate:dateKey(end, allDay ? event.end_timezone || event.start_timezone : "Asia/Tokyo"),
+    location:String(event.location || "").slice(0, 1000), note:note.slice(0, 10000), noteTruncated:note.length > 10000,
+    recurring:recurrences.length > 0, updatedAt:Number(event.updated_at || 0)
+  };
+}
+
+function dispatchTimeTree(req) {
+  const actions = ["connectTimeTree", "getTimeTreeCalendars", "getTimeTreeEvents", "disconnectTimeTree"];
+  if (actions.indexOf(req.action) < 0) throw new Error("TimeTreeへの操作が許可されていません");
+  // role / userId の自己申告は信用しない。現在の権限・署名・期限を毎回確認する。
+  const user = requireCoachVoiceAdmin(req);
+  const key = timeTreeSessionKey(req, user);
+  const cache = CacheService.getScriptCache();
+  if (req.action === "disconnectTimeTree") {
+    cache.remove(key);
+    return {connected:false};
+  }
+  let session;
+  if (req.action === "connectTimeTree") {
+    const email = String(req.email || "").trim(), password = String(req.password || "");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || !password || password.length > 2048) {
+      throw new Error("TimeTreeのメールアドレスとパスワードを入力してください");
+    }
+    const rateKey = key + "_attempts";
+    const attempts = Number(cache.get(rateKey) || 0);
+    if (attempts >= 5) throw new Error("接続操作が続いています。1分ほど待って再度お試しください");
+    cache.put(rateKey, String(attempts + 1), 60);
+    cache.remove(key);
+    // パスワードはこのリクエストで TimeTree に送るだけ。シート・プロパティ・キャッシュには保存しない。
+    const result = timeTreeRequest("/auth/email/signin", null, {email, password});
+    if (!result.cookie) throw new Error("TimeTreeの接続情報を確認できませんでした。Web版でログインできるか確認してください");
+    session = {cookie:result.cookie, expiresAt:Date.now() + 6 * 60 * 60 * 1000};
+  } else {
+    try { session = JSON.parse(cache.get(key) || "null"); } catch (e) { session = null; }
+  }
+  if (!session || !/^_session_id=[^\r\n;,]+$/.test(String(session.cookie || ""))
+      || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now()) {
+    cache.remove(key);
+    if (req.action === "getTimeTreeCalendars") return {connected:false, calendars:[]};
+    throw new Error("TIMETREE_LOGIN_REQUIRED: TimeTreeに接続してください");
+  }
+  try {
+    const calendars = timeTreeCalendars(session);
+    const remaining = Math.max(1, Math.min(21600, Math.floor((session.expiresAt - Date.now()) / 1000)));
+    cache.put(key, JSON.stringify(session), remaining);
+    if (req.action !== "getTimeTreeEvents") return {connected:true, calendars, expiresAt:session.expiresAt};
+    const calendarId = String(req.calendarId || "");
+    if (!/^\d+$/.test(calendarId) || !calendars.some(c => c.id === calendarId)) {
+      throw new Error("このTimeTreeカレンダーを閲覧できません。カレンダーを選び直してください");
+    }
+    const seenCursors = {}, records = {};
+    const started = Date.now();
+    let cursor = "", complete = false;
+    for (let page = 0; page < 40; page++) {
+      if (Date.now() - started > 60000) break;
+      const path = "/calendar/" + calendarId + "/events/sync" + (cursor ? "?since=" + cursor : "");
+      const data = timeTreeRequest(path, session).data;
+      if (!Array.isArray(data.events) || typeof data.chunk !== "boolean") {
+        throw new Error("TimeTreeの予定データを読み取れませんでした。連携先の仕様が変更された可能性があります");
+      }
+      data.events.forEach(event => {
+        if (!event || (event.calendar_id != null && String(event.calendar_id) !== calendarId)) return;
+        const id = String(event.id || event.uuid || "");
+        if (!id) return;
+        const recordKey = "$" + id;
+        if (!records[recordKey] || Number(event.updated_at || 0) >= Number(records[recordKey].updated_at || 0)) records[recordKey] = event;
+      });
+      if (Object.keys(records).length > 10000) break;
+      if (!data.chunk) {complete = true; break;}
+      const next = String(data.since == null ? "" : data.since);
+      if (!/^\d{1,20}$/.test(next) || seenCursors[next]) throw new Error("TimeTreeの続きの予定を読み取れませんでした");
+      seenCursors[next] = true; cursor = next;
+    }
+    if (!complete) throw new Error("予定が多いため全件取得を中止しました。TimeTreeで内容をご確認ください");
+    const events = Object.keys(records).map(id => records[id]).filter(event => !event.deactivated_at)
+      .map(timeTreeEventView).filter(Boolean).sort((a,b) => a.startAt - b.startAt || a.id.localeCompare(b.id));
+    cache.put(key, JSON.stringify(session), Math.max(1, Math.min(remaining, Math.floor((session.expiresAt - Date.now()) / 1000))));
+    return {connected:true, calendar:calendars.find(c => c.id === calendarId), events, fetchedAt:new Date().toISOString()};
+  } catch (e) {
+    if (String(e.message || "").indexOf("TIMETREE_LOGIN_REQUIRED") >= 0) cache.remove(key);
+    throw e;
+  }
+}
+
 function coachVoiceId(value) {
   const id = String(value || "").trim();
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) throw new Error("指導記録のIDが正しくありません");
@@ -2404,6 +2569,13 @@ function dispatch(req) {
       return {};
     }
 
+
+    // 非公開の TimeTree 予定は管理者用の応答だけに含める。
+    case "connectTimeTree":
+    case "getTimeTreeCalendars":
+    case "getTimeTreeEvents":
+    case "disconnectTimeTree":
+      return dispatchTimeTree(req);
 
     // 音声・文字起こしは getAll / 試合結果 / お知らせには含めない。
     case "getCoachVoiceNotes":
