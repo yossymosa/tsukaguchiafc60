@@ -4018,8 +4018,7 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
   ];
   return h(Fragment,{},
     h("div",{className:"home-welcome","data-reveal":""},
-      h("div",{},h("div",{className:"home-eyebrow"},"60TH GENERATION / TEAM HUB"),
-        h("h1",{},"チームの今を、ひと目で。")),
+      h("div",{className:"home-eyebrow"},"60TH GENERATION / TEAM HUB"),
       h("span",{className:"home-date"},fmt(todayKey).short)),
     // ① 次の試合カード
     nextSch ? h("div",{className:"next-event-card",role:"button",tabIndex:0,onKeyDown:activateCardOnKeyDown,"data-reveal":"",onClick:()=>onGoToDay&&onGoToDay(nextSch)},

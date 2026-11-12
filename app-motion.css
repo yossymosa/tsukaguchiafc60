@@ -81,7 +81,6 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible,summary:focus
 .motion-surface{transition:box-shadow .25s ease,border-color .25s ease,translate .3s var(--motion-ease);}
 .home-welcome{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:1px 0 18px;}
 .home-eyebrow{font-family:'Barlow Condensed',sans-serif;color:#5B7491;font-size:10px;font-weight:700;letter-spacing:1.6px;}
-.home-welcome h1{font-size:19px;line-height:1.5;letter-spacing:-.025em;font-weight:900;margin-top:5px;color:#142E4D;}
 .home-date{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;white-space:nowrap;border-left:1px solid #CBD9E7;padding-left:12px;color:#59718D;}
 .content-page .next-event-card{
   position:relative;isolation:isolate;overflow:hidden;display:block;width:100%;text-align:left;
@@ -167,7 +166,7 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible,summary:focus
   .next-event-card:hover .next-event-footer svg{translate:4px 0;}
 }
 @media(min-width:600px){.page{box-shadow:0 0 100px rgba(0,0,0,.2);border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);}}
-@media(max-width:360px){.brand-name{font-size:17px;}.brand-kicker{font-size:8px;letter-spacing:.8px;}.header-user{max-width:126px;}.header-brand{gap:7px;}.home-welcome h1{font-size:17px;}.home-eyebrow{font-size:9px;letter-spacing:1px;}.content-page{padding-left:13px;padding-right:13px;}.next-event-body{gap:12px;}.next-event-date{min-width:78px;padding-right:12px;}.next-event-date strong{font-size:41px;}.next-event-info h2{font-size:15px;}.video-switch-label{display:none;}}
+@media(max-width:360px){.brand-name{font-size:17px;}.brand-kicker{font-size:8px;letter-spacing:.8px;}.header-user{max-width:126px;}.header-brand{gap:7px;}.home-eyebrow{font-size:9px;letter-spacing:1px;}.content-page{padding-left:13px;padding-right:13px;}.next-event-body{gap:12px;}.next-event-date{min-width:78px;padding-right:12px;}.next-event-date strong{font-size:41px;}.next-event-info h2{font-size:15px;}.video-switch-label{display:none;}}
 @keyframes pageArrive{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes cardArrive{from{opacity:.25;translate:0 13px}to{opacity:1;translate:0 0}}
 @keyframes pageFromRight{from{opacity:.3;transform:translateX(20px)}to{opacity:1;transform:none}}
