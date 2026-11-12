@@ -1876,6 +1876,34 @@ function copyToClipboard(text) {
 }
 
 // ── ゴール記録ページ ─────────────────────────────────────────
+function GoalEditButton({onEdit,...props}) {
+  const gesture=useRef(null);
+  const trackPointer=event=>{
+    const start=gesture.current;
+    if(!start || start.id!==event.pointerId) return;
+    if(Math.abs(event.clientX-start.x)>10 || Math.abs(event.clientY-start.y)>10) start.cancelled=true;
+  };
+  return h("button",{...props,
+    onPointerDown:event=>{
+      gesture.current={id:event.pointerId,x:event.clientX,y:event.clientY,released:false,cancelled:event.isPrimary===false || event.button!==0};
+    },
+    onPointerMove:trackPointer,
+    onPointerUp:event=>{
+      trackPointer(event);
+      if(gesture.current?.id===event.pointerId) gesture.current.released=true;
+    },
+    onPointerCancel:()=>{if(gesture.current) gesture.current.cancelled=true;},
+    onPointerLeave:()=>{if(gesture.current && !gesture.current.released) gesture.current.cancelled=true;},
+    onClick:event=>{
+      const start=gesture.current;
+      gesture.current=null;
+      // スクロール後の互換クリックも除外する。キーボード操作のクリックは有効。
+      if(event.detail!==0 && start?.cancelled){event.preventDefault();event.stopPropagation();return;}
+      onEdit(event);
+    }
+  });
+}
+
 function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap={},onToggleFavorite,onBack,onHome,onSaved,onShotSaved}) {
   const coachVoiceLeaveGuard=useRef(()=>true);
   const halfSortOrder = h => {
@@ -3261,7 +3289,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
           )
         ),
         isAdmin&&h("div",{style:{display:"flex",flexDirection:"column",gap:3,alignItems:"stretch"}},
-          h("button",{type:"button",onPointerDown:event=>openGoalEditor(event,g,isUs),"aria-label":minuteLabel+"のゴールを編集",style:{minHeight:34,background:"#fff",border:"1px solid #B8C6D5",borderRadius:4,color:"#334155",fontSize:11,fontWeight:800,padding:"5px 6px",cursor:"pointer",touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}},"編集"),
+          h(GoalEditButton,{type:"button",onEdit:event=>openGoalEditor(event,g,isUs),"aria-label":minuteLabel+"のゴールを編集",style:{minHeight:34,background:"#fff",border:"1px solid #B8C6D5",borderRadius:4,color:"#334155",fontSize:11,fontWeight:800,padding:"5px 6px",cursor:"pointer",touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}},"編集"),
           h("button",{type:"button",onClick:async()=>{
               const nextGoals = isUs ? goals.filter((_,j)=>j!==g.sourceIdx) : goals;
               const nextTheirGoals = isUs ? theirG : theirG.filter((_,j)=>j!==g.sourceIdx);
