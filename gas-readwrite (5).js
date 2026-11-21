@@ -776,6 +776,25 @@ function calcScores(goals) {
   return map;
 }
 
+// MVPはその日程の出席者から選ぶ。候補表示後の出欠変更も保存時に確認する。
+function resolveMvpSelection(req) {
+  const scheduleId=String(req.scheduleId||"").trim();
+  if(!scheduleId) throw new Error("MVPを保存する日程が指定されていません。");
+  const memberId=String(req.memberId||"").trim(),value=String(req.mvp||"").trim();
+  if(!memberId&&!value) return {memberId:"",name:""};
+  const attendance=new Map();
+  sheetToObjects("出欠",MAPS.attend).forEach(row=>{
+    if(String(row.scheduleId||"").trim()===scheduleId) attendance.set(String(row.memberId||"").trim(),String(row.status||"").trim());
+  });
+  const candidates=sheetToObjects("メンバー",MAPS.member).filter(member=>{
+    const id=String(member.id||"").trim();
+    return id&&attendance.get(id)==="○"&&(memberId?id===memberId:(String(member.name||"").trim()===value||id===value));
+  });
+  if(candidates.length!==1) throw new Error("MVPはこの日程の出欠が「○」の選手から選んでください。出席者を再読み込みしてください。");
+  const member=candidates[0];
+  return {memberId:String(member.id).trim(),name:String(member.name||"").trim()};
+}
+
 // ── メインエントリー ──────────────────────────────────────────
 // 管理者限定の指導録音。署名セッションで毎回権限を検証し、共有シートには保存しない。
 function coachVoiceSignature(payload, user, secret) {
@@ -2401,18 +2420,19 @@ function dispatch(req) {
     // ── MVP更新 ───────────────────────────────────────────────
     case "updateMvp": {
       const sh = getSheet("スケジュール");
-      if (!sh || sh.getLastRow() < 2) return {};
+      if (!sh || sh.getLastRow() < 2) throw new Error("MVPを保存する日程が見つかりません。");
       const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
-      const mvpCol = headers.indexOf("MVP") + 1;
-      if (mvpCol === 0) return {};
-      const ids = sh.getRange(1, 1, sh.getLastRow(), 1).getValues();
-      for (let i = 1; i < ids.length; i++) {
+      const mvpCol = headers.indexOf("MVP") + 1,idCol=headers.indexOf("ID")+1;
+      if (!mvpCol||!idCol) throw new Error("日程のMVP欄を確認できません。");
+      const ids = sh.getRange(2, idCol, sh.getLastRow()-1, 1).getValues();
+      for (let i = 0; i < ids.length; i++) {
         if (String(ids[i][0]).trim() === String(req.scheduleId).trim()) {
-          sh.getRange(i + 1, mvpCol).setValue(req.mvp || "");
-          return {};
+          const selected=resolveMvpSelection(req);
+          sh.getRange(i + 2, mvpCol).setValue(selected.name);
+          return {mvp:selected.name,memberId:selected.memberId};
         }
       }
-      return {};
+      throw new Error("MVPを保存する日程が見つかりません。");
     }
 
     // ── 出欠取得 ─────────────────────────────────────────────

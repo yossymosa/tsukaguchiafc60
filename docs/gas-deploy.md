@@ -23,7 +23,7 @@ $gasNode = 'C:\Users\yossy\AppData\Local\OpenAI\Codex\runtimes\cua_node\5c41f77a
 `prepared-content.json`（`{"files":[{"name":"…","type":"SERVER_JS","source":"…"},…]}`）を作ります。
 既存の全ファイルと `appsscript` の内容を保持します。バックアップにはソースが含まれるため、リポジトリ内には置きません。
 
-オンラインのコードは `コード`・`youtube`・`coach-voice-notes`・`timetree-readonly` とマニフェストに分かれています。
+オンラインのコードは `コード`・`youtube`・`coach-voice-notes`・`timetree-readonly`・`schedule-mvp` とマニフェストに分かれています。
 ローカルの `gas-readwrite (5).js` はまとめて検証するためのソースです。
 それでオンラインの全ファイルを置き換えると重複や既存処理の欠落が起きるため、差分だけを反映します。
 
@@ -45,6 +45,11 @@ Google 認証はメモリー内で更新し、トークンを出力・GitHubへ�
 2026年11月12日、管理者専用 TimeTree 閲覧を v78 → **v79** として既存URLへ公開しました。
 公開コードで全58件のテストを通過し、公開応答と管理者用APIの未認証アクセス拒否も確認済みです。
 実際の TimeTree アカウントへの接続は管理者がアプリ内で行います。
+
+2026年11月21日、MVPをその日程の出欠が「○」の選手だけから保存するチェックを **v80** として公開しました。
+`schedule-mvp` を追加し、`コード` の `updateMvp` だけを差し替えています。
+既存の名前指定も維持し、新画面では選手IDで同名の選手を区別します。
+公開するGASコードを使った全85件のテストと、公開版のソース一致・稼働応答を確認済みです。
 
 API仕様: [Apps Script のデプロイ更新](https://developers.google.com/apps-script/api/reference/rest/v1/projects.deployments/update)、
 [Google OAuth のトークン更新](https://developers.google.com/identity/protocols/oauth2/web-server#offline)。

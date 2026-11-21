@@ -90,7 +90,7 @@ button:active{transform:translateY(1px);}
   .app-tabbar{box-shadow:none;}
   .page-intro{border-color:var(--line-soft);}
 </style>
-<link rel="stylesheet" href="/app-motion.css?v=3"/>
+<link rel="stylesheet" href="/app-motion.css?v=4"/>
 </head>
 <body>
 <div id="app"></div>
@@ -1625,7 +1625,6 @@ function Login({onLogin}) {
         h("div",{className:"login-brand-copy"},
           h("div",{className:"login-title"},"塚口AFC Jr"),
           h("div",{className:"login-subtitle"},"AMAGASAKI FOOTBALL CLUB"))),
-      h("p",{className:"login-welcome"},"日々の挑戦を、チームの力に。"),
       h("div",{style:{display:"flex",gap:0,marginBottom:18,borderBottom:"1px solid #D8E0E8"}},
         h("button",{onClick:()=>{setMode("login");setErr("");},style:{flex:1,padding:"10px 0",border:"none",borderBottom:mode==="login"?"2px solid #1D4E89":"2px solid transparent",cursor:"pointer",fontWeight:800,background:"transparent",color:mode==="login"?"#102A43":"#64748B"}},"ログイン"),
         h("button",{onClick:()=>{setMode("signup");setErr("");},style:{flex:1,padding:"10px 0",border:"none",borderBottom:mode==="signup"?"2px solid #1D4E89":"2px solid transparent",cursor:"pointer",fontWeight:800,background:"transparent",color:mode==="signup"?"#102A43":"#64748B"}},"新規登録")),
@@ -3860,8 +3859,62 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
 }
 
 // ── ホームタブ ─────────────────────────────────────────────────
+function getMonthlyLeaders(results=[],schedules=[],members=[],todayKey=todayLocal()) {
+  const month=String(todayKey).slice(0,7),byId=new Map(),byName=new Map();
+  members.forEach(member=>{
+    const id=String(member.id||"").trim(),name=String(member.name||"").trim();
+    if(!id) return;
+    byId.set(id,member);
+    if(name) byName.set(name,byName.has(name)?null:member);
+  });
+  const goals=new Map(),assists=new Map(),seen=new Set();
+  const add=(map,id,name)=>{
+    const key=String(id||"").trim(),member=key?byId.get(key):byName.get(String(name||"").trim());
+    if(!member) return;
+    const memberId=String(member.id).trim();map.set(memberId,(map.get(memberId)||0)+1);
+  };
+  results.forEach(result=>{
+    const scheduleId=String(result.scheduleId||"").trim();
+    const linked=scheduleId?schedules.find(schedule=>String(schedule.id||"").trim()===scheduleId):findLinkedScheduleForResult(result,schedules);
+    const type=(scheduleId?linked?.type:result.type)||result.type||linked?.type;
+    const date=nd(result.date||linked?.date);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date.slice(0,7)!==month||isFiveGradeAccompanyType(type)) return;
+    const id=String(result.id||"").trim();if(id&&seen.has(id)) return;if(id)seen.add(id);
+    let records=result.goals;
+    if(typeof records==="string"){try{records=JSON.parse(records);}catch{return;}}
+    if(!Array.isArray(records)) return;
+    records.forEach(goal=>{
+      if(!goal||["them","their"].includes(String(goal.team||""))||goal.goalType==="オウンゴール") return;
+      add(goals,goal.scorerId,goal.scorerName);add(assists,goal.assistId,goal.assistName);
+    });
+  });
+  const rank=map=>{
+    const number=member=>/^\d+$/.test(String(member.number??"").trim())?Number(member.number):9999;
+    const rows=[...map].map(([id,value])=>({member:byId.get(id),value})).sort((a,b)=>
+      b.value-a.value||number(a.member)-number(b.member)||String(a.member.name).localeCompare(String(b.member.name),"ja")||String(a.member.id).localeCompare(String(b.member.id)));
+    return rows.slice(0,3).map((row,index)=>({...row,rank:rows.findIndex(item=>item.value===row.value)+1}));
+  };
+  return {goals:rank(goals),assists:rank(assists)};
+}
+function MonthlyRankings({leaders,month}) {
+  return h("section",{className:"home-monthly-leaders","aria-label":"今月のゴール・アシストランキング","data-reveal":""},
+    h("div",{className:"monthly-leaders-heading"},h("h2",{},"今月のランキング"),h("span",{},Number(month.slice(5,7))+"月")),
+    h("div",{className:"monthly-leaders-grid"},
+      [{key:"goals",label:"ゴール",unit:"G"},{key:"assists",label:"アシスト",unit:"A"}].map(category=>
+        h("div",{key:category.key,className:"monthly-leaders-card motion-surface"},
+          h("h3",{},category.label),
+          h("ol",{},[0,1,2].map(index=>{
+            const row=leaders[category.key][index];
+            return h("li",{key:index,className:"monthly-leader"+(!row?" is-empty":"")},
+              h("span",{className:"monthly-leader-rank","data-rank":row?.rank||index+1},(row?.rank||index+1)+"位"),
+              h("span",{className:"monthly-leader-name",title:row?.member.name||""},row?.member.name||"記録なし"),
+              h("span",{className:"monthly-leader-value"},row?row.value:"—",row&&h("small",{},category.unit)));
+          }))))),
+    h("p",{className:"monthly-leaders-note"},"上位3人・同数は同順位。5年帯同・オウンゴールは集計対象外です。"));
+}
 function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoToMatch,onGoToDay,onOpenDashTab,onOpenTab}) {
   const [todayKey,setTodayKey]=useState(()=>todayLocal());
+  const monthlyLeaders=useMemo(()=>getMonthlyLeaders(results,schedules,members,todayKey),[results,schedules,members,todayKey]);
   const parseNewsTs = v => {
     const d = new Date(String(v || ""));
     return isNaN(d.getTime()) ? 0 : d.getTime();
@@ -4076,6 +4129,7 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
     : h("div",{className:"home-empty-event motion-surface","data-reveal":""},h(AppIcon,{name:"cal",size:26}),
         h("div",{},h("strong",{},"次の予定を待っています"),h("p",{},"新しい予定は日程から確認できます")),
         h("button",{onClick:()=>onOpenTab&&onOpenTab("cal"),"aria-label":"日程を見る"},h(AppIcon,{name:"arrow"}))),
+    h(MonthlyRankings,{leaders:monthlyLeaders,month:todayKey.slice(0,7)}),
     // ② シーズン戦績
     h("div",{className:"home-section","data-reveal":"",style:{marginBottom:20}},
       h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"var(--navy)",letterSpacing:1.2,marginBottom:8}},"SEASON SUMMARY"),
@@ -10366,6 +10420,61 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
 }
 
 // ── その日の試合まとめページ ─────────────────────────────────────
+function getAttendingMvpMembers(members=[],attendance=[]) {
+  const status=new Map(),seen=new Set();
+  attendance.forEach(row=>status.set(String(row.memberId||"").trim(),String(row.status||"").trim()));
+  return members.filter(member=>{
+    const id=String(member.id||"").trim();
+    if(!id||seen.has(id)||status.get(id)!=="○") return false;
+    seen.add(id);return true;
+  }).sort((a,b)=>{
+    const number=member=>/^\d+$/.test(String(member.number??"").trim())?Number(member.number):9999;
+    return number(a)-number(b)||String(a.name||"").localeCompare(String(b.name||""),"ja");
+  });
+}
+function ScheduleMvpPanel({schedule,members,isAdmin,onSaveMvp}) {
+  const scheduleId=String(schedule.id||"").trim(),active=useRef(true);
+  const [attendance,setAttendance]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState("");
+  const [selectedId,setSelectedId]=useState(""),[saving,setSaving]=useState(false),[reload,setReload]=useState(0);
+  const candidates=useMemo(()=>getAttendingMvpMembers(members,attendance),[members,attendance]);
+  const selected=candidates.find(member=>String(member.id).trim()===selectedId);
+  const currentMvp=members.find(member=>String(member.id)===String(schedule.mvp))?.name||schedule.mvp||"";
+  useEffect(()=>()=>{active.current=false;},[]);
+  useEffect(()=>{
+    if(!isAdmin) return;
+    let cancelled=false;setLoading(true);setError("");setAttendance([]);setSelectedId("");
+    api("getAttend",{scheduleId}).then(result=>{
+      if(cancelled) return;
+      if(!Array.isArray(result?.attend)) throw new Error("出席者の情報を読み取れませんでした。");
+      setAttendance(result.attend);
+      const options=getAttendingMvpMembers(members,result.attend);
+      const saved=options.filter(member=>String(member.id)===String(schedule.mvp)||member.name===schedule.mvp);
+      setSelectedId(saved.length===1?String(saved[0].id).trim():"");setLoading(false);
+    }).catch(err=>{if(!cancelled){setError("出席者を読み込めませんでした。再読み込みしてください。");setLoading(false);}});
+    return ()=>{cancelled=true;};
+  },[scheduleId,isAdmin,reload]);
+  const save=async()=>{
+    if(!isAdmin||loading||saving||error||!selected) return;
+    setSaving(true);setError("");
+    try{await onSaveMvp(scheduleId,selected.name,String(selected.id).trim());}
+    catch(err){if(active.current){setSelectedId("");setError(err?.message||"MVPを保存できませんでした。出欠を確認してください。");}}
+    finally{if(active.current)setSaving(false);}
+  };
+  return h("section",{className:"motion-surface schedule-mvp","aria-label":"この日程のMVP"},
+    h("h3",{},"MVP"),
+    currentMvp&&h("div",{className:"schedule-mvp-current"},h("span",{},"今回のMVP"),h("strong",{},currentMvp)),
+    isAdmin&&h(Fragment,{},
+      h("label",{htmlFor:"schedule-mvp-select"},"出席した選手から選ぶ"),
+      h("select",{id:"schedule-mvp-select",value:selected?selectedId:"",disabled:loading||saving||!!error||!candidates.length,onChange:event=>setSelectedId(event.target.value),style:css.inp},
+        h("option",{value:""},loading?"出席者を読み込み中…":candidates.length?"選んでください":"出席者がいません"),
+        candidates.map(member=>h("option",{key:member.id,value:String(member.id).trim()},(String(member.number??"").trim()?"#"+member.number+" ":"")+member.name))),
+      h("p",{className:"schedule-mvp-note"},"この日程の出欠が「○」の選手だけを表示しています。"),
+      error&&h("p",{className:"schedule-mvp-error",role:"alert"},error),
+      h("div",{className:"schedule-mvp-actions"},
+        h("button",{type:"button",onClick:()=>setReload(value=>value+1),disabled:loading||saving,style:css.bG},"出席者を再読み込み"),
+        h("button",{type:"button",onClick:save,disabled:loading||saving||!!error||!selected,style:css.bS},saving?"保存中…":"MVPを保存"))));
+}
+
 function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users=[],initialTab="",onGoToMatch,onAdd,onEdit,onDelete,onDeleteSchedule,onBack,onHome,onSaveMvp,onYoutubeUpdated}) {
   const dayPageRef = useRef(null);
   const isEventDay = normalizeType(schedule.type) === "event";
@@ -10392,8 +10501,6 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
 
   // 公式戦・カップ戦のみ
   const isTournamentTarget=["official","cup","公式戦","カップ戦"].includes(schedule.type);
-  const [mvp,setMvp]=useState(schedule.mvp||"");
-  const [mvpSaving,setMvpSaving]=useState(false);
   const [rank,setRank]=useState(schedule.rank||"");
   const [rankSaving,setRankSaving]=useState(false);
   const extractTimeFromDate = value => {
@@ -10548,11 +10655,6 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       alert("日程更新エラー: " + e.message);
     }
     setEditSchSaving(false);
-  };
-  const saveMvp=async()=>{
-    setMvpSaving(true);
-    await onSaveMvp(schedule.id,mvp);
-    setMvpSaving(false);
   };
   const saveRank=async()=>{
     setRankSaving(true);
@@ -10885,26 +10987,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
       dayTab==="attend"&&h(AttendSection,{schedule,members,user,isAdmin,canWrite,users}),
 
       // MVP入力欄（公式戦・カップ戦のみ・matchesタブ）
-      dayTab==="matches"&&isTournamentTarget&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:16,marginTop:14,border:"1px solid #D8E0E8",boxShadow:"none"}},
-        h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"var(--navy)",letterSpacing:1.2,marginBottom:12}},"MVP"),
-        // 現在のMVP表示
-        schedule.mvp&&h("div",{style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,marginBottom:12}},
-          h("div",{},
-            h("div",{style:{fontSize:11,color:"var(--muted)",marginBottom:2}},"今回のMVP"),
-            h("div",{style:{fontSize:16,fontWeight:900,color:"var(--blue)"}},schedule.mvp))),
-        // admin: 入力欄
-        isAdmin&&h(Fragment,{},
-          h("div",{style:{fontSize:12,fontWeight:600,color:"var(--muted)",marginBottom:8}},"MVPを選ぶ"),
-          h("select",{value:mvp,onChange:e=>setMvp(e.target.value),style:css.inp},
-            h("option",{value:""},"選んでください"),
-            ["FW","MF","DF","GK"].map(pos=>h("optgroup",{key:pos,label:pos},
-              members.filter(m=>m.position===pos).sort((a,b)=>Number(a.number)-Number(b.number))
-                .map(m=>h("option",{key:m.id,value:m.name},"#"+m.number+" "+m.name))))),
-          h("button",{onClick:saveMvp,disabled:mvpSaving||!mvp,
-            style:{...css.bS,width:"100%",marginTop:10,padding:12,fontSize:13,
-              background:mvpSaving?"#94A3B8":"#102A43",
-              cursor:mvpSaving||!mvp?"not-allowed":"pointer"}},
-             mvpSaving?"保存中...":"MVP を保存")))));
+      dayTab==="matches"&&isTournamentTarget&&h(ScheduleMvpPanel,{key:String(schedule.id),schedule,members,isAdmin,onSaveMvp})));
 }
 
 
@@ -12187,9 +12270,13 @@ function App() {
       setLoading(false);
     }
   };
-  const handleSaveMvp=async(scheduleId,mvpName)=>{
-    try{await api("updateMvp",{scheduleId,mvp:mvpName});await load("更新中...");}
-    catch(e){alert("MVP保存エラー: "+e.message);}
+  const handleSaveMvp=async(scheduleId,mvpName,memberId)=>{
+    const response=await api("updateMvp",{scheduleId,mvp:mvpName,memberId});
+    const savedMvp=response.mvp??mvpName;
+    setPage(previous=>previous?.type==="dayDetail"&&String(previous.schedule?.id)===String(scheduleId)
+      ?{...previous,schedule:{...previous.schedule,mvp:savedMvp}}:previous);
+    await load("更新中...");
+    return response;
   };
   const handleDeleteResult=async(r)=>{
     if(!confirm("「vs "+r.opponent+"」を削除しますか？"))return;
