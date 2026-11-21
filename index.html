@@ -4129,7 +4129,6 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
     : h("div",{className:"home-empty-event motion-surface","data-reveal":""},h(AppIcon,{name:"cal",size:26}),
         h("div",{},h("strong",{},"次の予定を待っています"),h("p",{},"新しい予定は日程から確認できます")),
         h("button",{onClick:()=>onOpenTab&&onOpenTab("cal"),"aria-label":"日程を見る"},h(AppIcon,{name:"arrow"}))),
-    h(MonthlyRankings,{leaders:monthlyLeaders,month:todayKey.slice(0,7)}),
     // ② シーズン戦績
     h("div",{className:"home-section","data-reveal":"",style:{marginBottom:20}},
       h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"var(--navy)",letterSpacing:1.2,marginBottom:8}},"SEASON SUMMARY"),
@@ -4146,7 +4145,9 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
         )
       )
     ),
-    // ③ 未回答一覧
+    // ③ 今月のランキング
+    h(MonthlyRankings,{leaders:monthlyLeaders,month:todayKey.slice(0,7)}),
+    // ④ 未回答一覧
     h("div",{className:"home-section","data-reveal":"",style:{marginBottom:20}},
       h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"var(--navy)",letterSpacing:1.2,marginBottom:8}},"ACTION REQUIRED"),
       pendingList.length===0&&h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:18,textAlign:"center",color:"var(--muted)",fontSize:13,border:"1px solid #D8E0E8"}},"未回答はありません"),
@@ -4167,7 +4168,7 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
               h("div",{style:{fontSize:12,color:"var(--muted-soft)",fontWeight:700}},"›"))),
           h("div",{style:{fontSize:12,color:"var(--ink)",lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:700}},summary));
       })),
-    // ④ 最近の試合結果
+    // ⑤ 最近の試合結果
     h("div",{className:"home-section","data-reveal":"",style:{marginBottom:20}},
       h("div",{style:{fontFamily:"'Barlow Condensed','Noto Sans JP',sans-serif",fontSize:14,fontWeight:700,color:"var(--navy)",letterSpacing:1.2,marginBottom:8}},"LATEST RESULTS"),
       recent.length===0&&h(EmptyState,{icon:"match",title:"試合記録がありません",detail:"試合の記録が登録されると、ここに表示されます。"}),
