@@ -1919,6 +1919,19 @@ function GoalEditButton({onEdit,...props}) {
   });
 }
 
+function parseMatchClockInput(minutes, seconds) {
+  const minText = String(minutes ?? "").trim(), secText = String(seconds ?? "").trim();
+  if (!/^\d+$/.test(minText) || !/^\d+$/.test(secText)) return null;
+  const min = Number(minText), sec = Number(secText);
+  if (!Number.isSafeInteger(min) || !Number.isInteger(sec) || sec > 59 || !Number.isSafeInteger(min * 60 + sec)) return null;
+  return min * 60 + sec;
+}
+function matchClockHalfTime(totalSec, half, options, perHalfSeconds) {
+  const index = Math.max(0, options.indexOf(half));
+  const local = Math.max(0, Math.floor(Number(totalSec) || 0) - index * perHalfSeconds);
+  return {minute:Math.floor(local / 60),second:local % 60};
+}
+
 function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap={},onToggleFavorite,onBack,onHome,onSaved,onShotSaved}) {
   const coachVoiceLeaveGuard=useRef(()=>true);
   const halfSortOrder = h => {
@@ -2058,6 +2071,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const clockResumeRef = useRef(null);
   const [matchClockSec,setMatchClockSec]=useState(()=>Math.max(0, Number(goalDraftInit?.matchClockSec || 0) || 0));
   const [clockRunning,setClockRunning]=useState(false);
+  const [clockInput,setClockInput]=useState({minute:"0",second:"00"});
   const clockBaseSecRef = useRef(0);
   const clockStartMsRef = useRef(0);
   const goalAutoSaveTimerRef = useRef(null);
@@ -2649,8 +2663,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   };
   const getGoalTimeFromClock = offsetSec => {
     const baseSec = Math.max(0, getClockSecNow() + Number(offsetSec || 0));
-    const t = clockToTime(baseSec);
-    return {half:getHalfByClockSec(baseSec), minute:String(t.minute), second:String(t.second).padStart(2,"0")};
+    const half = getHalfByClockSec(baseSec);
+    const t = matchClockHalfTime(baseSec,half,visibleHalfOptions,perHalfSeconds);
+    return {half, minute:String(t.minute), second:String(t.second).padStart(2,"0")};
   };
   const applyClockToGoalDraft = (team, offsetSec=0) => {
     const time = getGoalTimeFromClock(offsetSec);
@@ -2662,8 +2677,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   };
   const applyClockToSubDraft = () => {
     const baseSec = getClockSecNow();
-    const t = clockToTime(baseSec);
     const hf = getHalfByClockSec(baseSec);
+    const t = matchClockHalfTime(baseSec,hf,visibleHalfOptions,perHalfSeconds);
     setSubForm(prev => ({...prev, half:hf, minute:String(t.minute), second:String(t.second).padStart(2,"0")}));
   };
   const startMatchClock = () => {
@@ -2688,6 +2703,24 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     clockStartMsRef.current = 0;
     clockResumeRef.current = null;
     if (isAdmin) setMatchStatus("pre");
+  };
+  const openClockInput = () => {
+    const time = clockToTime(getClockSecNow());
+    setClockInput({minute:String(time.minute),second:String(time.second).padStart(2,"0")});
+    setModal("clockInput");
+  };
+  const applyClockInput = start => {
+    const seconds = parseMatchClockInput(clockInput.minute,clockInput.second);
+    if (seconds === null) return alert("分と秒を正しく入力してください（秒は0〜59）。");
+    clockBaseSecRef.current = seconds;
+    clockStartMsRef.current = Date.now();
+    clockResumeRef.current = null;
+    setMatchClockSec(seconds);
+    if (start && !clockRunning) {
+      setClockRunning(true);
+      if (isAdmin) setMatchStatus("pre");
+    }
+    setModal(null);
   };
   const currentClockLabel = formatClockLabel(getClockSecNow());
   const currentHalfKey = getHalfByClockSec(getClockSecNow());
@@ -2927,8 +2960,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const openAddSub = () => {
     const firstHalf = visibleHalfOptions[0] || "1st";
     const baseSec = getClockSecNow();
-    const t = clockToTime(baseSec);
     const hf = getHalfByClockSec(baseSec) || firstHalf;
+    const t = matchClockHalfTime(baseSec,hf,visibleHalfOptions,perHalfSeconds);
     setSubEdit(null);
     setSubForm({half:hf,minute:String(t.minute),second:String(t.second).padStart(2,"0"),outMemberId:"",inMemberId:"",note:""});
     setModal("substitution");
@@ -3642,6 +3675,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
         }
        },"リセット")
     ),
+    h("button",{type:"button",onClick:openClockInput,style:{...css.bG,width:"100%",padding:"9px 12px",fontSize:12,marginBottom:8}},"時間を指定する"),
     h("div",{style:{display:"flex",gap:8}},
       h("button",{
         onClick:()=>isAdmin&&setMatchStatus("pre"),
@@ -3866,6 +3900,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
        },"↑ 試合上部へ戻る"),
       formationBlock)),
 
+    modal==="clockInput"&&h(Modal,{title:"タイマーの時間を指定",onClose:()=>setModal(null)},
+      h("div",{style:{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:12}},"試合開始からの通し時間を入力してください。ハーフは試合形式に合わせて自動で切り替わります。"),
+      h("div",{style:{display:"flex",gap:10,marginBottom:18}},
+        h("label",{style:{flex:1,fontSize:12,fontWeight:700}},"分",h("input",{type:"number",inputMode:"numeric",min:0,value:clockInput.minute,onInput:e=>setClockInput(p=>({...p,minute:e.target.value})),style:{...css.inp,fontSize:20,textAlign:"center"}})),
+        h("label",{style:{flex:1,fontSize:12,fontWeight:700}},"秒",h("input",{type:"number",inputMode:"numeric",min:0,max:59,value:clockInput.second,onInput:e=>setClockInput(p=>({...p,second:e.target.value})),style:{...css.inp,fontSize:20,textAlign:"center"}}))),
+      h("div",{style:{display:"flex",gap:8}},
+        h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),
+        h("button",{onClick:()=>applyClockInput(false),style:css.bG},"設定"),
+        !clockRunning&&h("button",{onClick:()=>applyClockInput(true),style:css.bS},"設定して開始"))),
     modal==="keeperSave"&&h(Modal,{title:keeperSaveEdit===null?"キーパーセーブを記録":"キーパーセーブを編集",onClose:()=>setModal(null)},
       h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:700,marginBottom:8}},"ハーフ"),
         h("div",{className:"match-half-tabs"},visibleHalfOptions.map(hf=>h("button",{key:hf,type:"button","aria-pressed":keeperSaveForm.half===hf,onClick:()=>setKeeperSaveForm(p=>({...p,half:hf})),style:{flex:1,padding:10,border:"1px solid #D8E0E8",borderRadius:6,background:keeperSaveForm.half===hf?"#102A43":"#fff",color:keeperSaveForm.half===hf?"#fff":"#64748B",fontWeight:800}},halfTabLabel(hf))))),
