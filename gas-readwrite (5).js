@@ -56,7 +56,7 @@ const MAPS = {
     "塚口PK数":"ourPkCount", "相手PK数":"theirPkCount",
     "塚口オフサイド":"ourOffsides", "相手オフサイド":"theirOffsides",
     "フォーメーション":"formation", "フォーメーション配置":"formationSlots",
-    "交代履歴":"substitutions", "試合状態":"matchStatus", "シュート数未記録":"shotCountMissing"
+    "交代履歴":"substitutions", "キーパーセーブ":"keeperSaves", "試合状態":"matchStatus", "シュート数未記録":"shotCountMissing"
   },
   goal: {
     // 既存列 + 追加列（アシストID・チーム区分・得点種別）
@@ -2199,7 +2199,7 @@ function dispatch(req) {
         ["塚口PK数", "ourPkCount"], ["相手PK数", "theirPkCount"],
         ["塚口オフサイド", "ourOffsides"], ["相手オフサイド", "theirOffsides"],
         ["フォーメーション", "formation"], ["フォーメーション配置", "formationSlots", true],
-        ["交代履歴", "substitutions", true], ["メモ", "memo"], ["試合状態", "matchStatus"],
+        ["交代履歴", "substitutions", true], ["キーパーセーブ", "keeperSaves", true], ["メモ", "memo"], ["試合状態", "matchStatus"],
         ["シュート数未記録", "shotCountMissing"]
       ];
       const needsResultUpdate = resultWrites.some(item => req[item[1]] !== undefined);
@@ -2274,7 +2274,7 @@ function dispatch(req) {
         });
       });
 
-      return {};
+      return {keeperSavesSupported:true};
     }
 
     // ── メンバー追加 ──────────────────────────────────────────

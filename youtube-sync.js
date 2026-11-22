@@ -466,6 +466,8 @@ function buildYoutubeResultContext_(resultSh, headers, row, scheduleDetails, goa
     scheduleTitle: String(schedule.title || "").trim(),
     location: String(schedule.location || "").trim(),
     goals: goalsByResult[resultId] || [],
+    keeperSaves: parseYoutubeJsonArray_(value("キーパーセーブ")),
+    formatLabel: String(value("試合形式") || ""),
     pkOur: value("PK塚口"), pkTheir: value("PK相手"),
     pkKickers: value("PKキッカー"), pkTheirSeq: value("PK相手シーケンス"),
   };
@@ -536,16 +538,31 @@ function makeYoutubeDescriptionFromContext_(context, half) {
   const scoreLine = "塚口AFC " + allOur + " - " + allTheir + " " + context.opponent
     + "\n1st " + h1Our + "-" + h1Their + "  2nd " + h2Our + "-" + h2Their
     + (has3rd ? "  3rd " + h3Our + "-" + h3Their : "");
+  const formatMinutes = Number((String(context.formatLabel || "").match(/(\d+)\s*分/) || [])[1]) || 10;
+  const eventSeconds = event => { const order = youtubeHalfOrder_(event.half); return Math.max(0, (Number(event.minute) || 0) * 60 + (Number(event.second) || 0)) + (halfKey || order === 99 ? 0 : order * formatMinutes * 60); };
+  const timeLabel = seconds => {
+    const hour = Math.floor(seconds / 3600), minute = Math.floor(seconds % 3600 / 60), second = seconds % 60;
+    return hour ? hour + ":" + String(minute).padStart(2, "0") + ":" + String(second).padStart(2, "0") : minute + ":" + String(second).padStart(2, "0");
+  };
   const events = goals.filter(goal => !halfKey || normalizeYoutubeHalf_(goal.half) === halfKey)
     .map(goal => {
       const own = String(goal.team || "") !== "them";
       const type = goal.goalType && goal.goalType !== "通常" ? "(" + goal.goalType + ")" : "";
       const text = own
-        ? youtubeTimeLabel_(goal.minute, goal.second) + " [得点]" + (goal.scorerName || "不明") + type + (goal.assistName ? " アシスト " + goal.assistName : "")
-        : youtubeTimeLabel_(goal.minute, goal.second) + " 失点" + type;
-      return {half: youtubeHalfOrder_(goal.half), minute: Number(goal.minute) || 0, second: Number(goal.second) || 0, text: text};
-    }).sort((a, b) => a.half - b.half || a.minute - b.minute || a.second - b.second);
-  return scoreLine + "\n\n" + ["0:00 スタート"].concat(events.map(event => event.text)).join("\n");
+        ? "[得点]" + (goal.scorerName || "不明") + type + (goal.assistName ? " アシスト " + goal.assistName : "")
+        : "失点" + type;
+      return {seconds:eventSeconds(goal), text:text};
+    }).concat(parseYoutubeJsonArray_(context.keeperSaves).filter(save => !halfKey || normalizeYoutubeHalf_(save.half) === halfKey)
+      .map(save => ({seconds:eventSeconds(save), text:"[キーパーセーブ]" + (save.memberName || "不明")})))
+    .sort((a, b) => a.seconds - b.seconds);
+  const lines = ["0:00 スタート"];
+  const grouped = {};
+  events.forEach(event => { grouped[event.seconds] = grouped[event.seconds] ? grouped[event.seconds] + " / " + event.text : event.text; });
+  const times = Object.keys(grouped).map(Number).sort((a,b)=>a-b);
+  const nonzero = times.filter(seconds=>seconds>0);
+  if (nonzero.length === 1 && nonzero[0] >= 20) lines.push("0:10 試合開始");
+  times.forEach(seconds=>{if (seconds === 0) lines[0] += " / " + grouped[seconds]; else lines.push(timeLabel(seconds) + " " + grouped[seconds]);});
+  return scoreLine + "\n\n" + lines.join("\n");
 }
 
 function parseYoutubeJsonArray_(value) {

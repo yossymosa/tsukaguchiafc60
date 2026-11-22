@@ -1701,6 +1701,13 @@ function secondsToYoutubeTime(totalSeconds) {
     : minute + ":" + String(second).padStart(2,"0");
 }
 
+function parseKeeperSaves(value) {
+  try {
+    const items = typeof value === "string" ? JSON.parse(value || "[]") : value;
+    return Array.isArray(items) ? items.filter(item => item && typeof item === "object") : [];
+  } catch (e) { return []; }
+}
+
 // チャプター形式の説明欄生成（通し / 1st / 2nd / 3rd）
 function makeYtDesc(match, members, half) {
   const normalizeHalf = h =>
@@ -1765,6 +1772,11 @@ function makeYtDesc(match, members, half) {
       const seconds = videoTime(g);
       return { seconds,
                text:secondsToYoutubeTime(seconds)+" [得点]"+scorerName+type+assistStr };
+    }),
+    ...parseKeeperSaves(match.keeperSaves).filter(s => !halfKey || normalizeHalf(s.half) === halfKey).map(s => {
+      const member = members.find(m => String(m.id) === String(s.memberId));
+      const seconds = videoTime(s);
+      return {seconds, text:secondsToYoutubeTime(seconds)+" [キーパーセーブ]"+(member?.name || s.memberName || "不明")};
     }),
     ...thG.map(g => {
       const type = g.goalType && g.goalType!=="通常" ? "("+g.goalType+")" : "";
@@ -2034,6 +2046,9 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     }
   };
   const [substitutions,setSubstitutions]=useState(()=>parseSubstitutions(goalDraftInit?.substitutions ?? match.substitutions));
+  const [keeperSaves,setKeeperSaves]=useState(()=>parseKeeperSaves(goalDraftInit?.keeperSaves ?? match.keeperSaves));
+  const [keeperSaveEdit,setKeeperSaveEdit]=useState(null);
+  const [keeperSaveForm,setKeeperSaveForm]=useState({half:"1st",minute:"",second:"00",memberId:""});
   const [subEdit,setSubEdit]=useState(null);
   const [subForm,setSubForm]=useState({half:"1st",minute:"",second:"00",outMemberId:"",inMemberId:"",note:""});
   const goalPageRef = useRef(null);
@@ -2400,7 +2415,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const resolvedMatchType = normalizeType(schedule?.type || match?.type || "");
   const tc=getTC(resolvedMatchType || match?.type || schedule?.type || "");
   const dt=fmt(match.date||schedule?.date);
-  const visibleHalfOptions = getHalfOptionsByFormatLabel(match?.formatLabel || "", goals, theirG);
+  const visibleHalfOptions = getHalfOptionsByFormatLabel(match?.formatLabel || "", [...goals,...keeperSaves], theirG);
   const isFirst=h=>normalizeHalfLabel(h)==="1st";
   const isSecond=h=>normalizeHalfLabel(h)==="2nd";
   const isThird=h=>normalizeHalfLabel(h)==="3rd";
@@ -2533,6 +2548,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const buildGoalSavePayload = (overrides={}) => {
     const goalsForSave = Array.isArray(overrides.goals) ? overrides.goals : goals;
     const theirGoalsForSave = Array.isArray(overrides.theirGoals) ? overrides.theirGoals : theirG;
+    const keeperSavesForSave = Array.isArray(overrides.keeperSaves) ? overrides.keeperSaves : keeperSaves;
     const safeFormation = normalizeFormationLabel(formation || "");
     const normalizedSlots = normalizeFormationSlotsKeys(safeFormation ? formationSlots : {});
     const savePayload = {
@@ -2557,6 +2573,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       formation:safeFormation || "",
       formationSlots:safeFormation ? normalizedSlots : {},
       substitutions,
+      keeperSaves:keeperSavesForSave,
       memo:matchMemo,
       matchStatus:matchStatus,
       shotCountMissing: shotCountMissing ? "1" : "",
@@ -2584,6 +2601,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       formation: safeFormation || "",
       formationSlots: safeFormation ? normalizedSlots : {},
       substitutions,
+      keeperSaves:keeperSavesForSave,
       memo: matchMemo,
       matchStatus,
       youtubeUrl: ytUrls.full,
@@ -2722,6 +2740,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       setMatchStatus(normalized==="finished" ? "finished" : (isMatchFinished(match) ? "finished" : "pre"));
     }
     setSubstitutions(parseSubstitutions((draft?.substitutions ?? match?.substitutions) || []));
+    setKeeperSaves(parseKeeperSaves(draft?.keeperSaves ?? match?.keeperSaves));
     setSubEdit(null);
     setSubForm({half:"1st",minute:"",second:"00",outMemberId:"",inMemberId:"",note:""});
     setYtUrls({
@@ -2780,7 +2799,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       clockBaseSecRef.current = 0;
       clockStartMsRef.current = 0;
     }
-  }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.pkOur, match?.pkTheir, match?.pkKickers, match?.pkTheirSeq, match?.formation, match?.formationSlots, match?.substitutions, match?.youtubeUrl, match?.youtubeUrl1st, match?.youtubeUrl2nd, match?.youtubeUrl3rd, match?.youtubeUrlPk, match?.youtubeRecordingFiles]);
+  }, [match?.id, match?.memo, match?.matchStatus, match?.shotStats, match?.shotCountMissing, match?.ourShots, match?.theirShots, match?.ourCorners, match?.theirCorners, match?.ourFreeKicks, match?.theirFreeKicks, match?.ourPkCount, match?.theirPkCount, match?.ourOffsides, match?.theirOffsides, match?.pkOur, match?.pkTheir, match?.pkKickers, match?.pkTheirSeq, match?.formation, match?.formationSlots, match?.substitutions, match?.keeperSaves, match?.youtubeUrl, match?.youtubeUrl1st, match?.youtubeUrl2nd, match?.youtubeUrl3rd, match?.youtubeUrlPk, match?.youtubeRecordingFiles]);
   useEffect(() => {
     writeShotCache(match?.id, shotByHalf, theirShotsByHalf);
   }, [match?.id, JSON.stringify(shotByHalf), JSON.stringify(theirShotsByHalf)]);
@@ -2796,6 +2815,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       memo: matchMemo,
       matchStatus,
       substitutions,
+      keeperSaves,
       formation,
       formationSlots,
       hasPk,
@@ -2819,14 +2839,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     goalAutoSaveTimerRef.current = setTimeout(async () => {
       try {
         const { savePayload } = buildGoalSavePayload();
-        await api("saveGoals", savePayload);
+        const response = await api("saveGoals", savePayload);
+        if (savePayload.keeperSaves.length && !response.keeperSavesSupported) throw new Error("キーパーセーブの保存に対応したGASへの更新が必要です。");
         clearGoalDraft(match.id);
       } catch (e) {}
     }, 1200);
     return () => {
       if (goalAutoSaveTimerRef.current) clearTimeout(goalAutoSaveTimerRef.current);
     };
-  }, [match?.id, goals, theirG, JSON.stringify(shotByHalf), JSON.stringify(theirShotsByHalf), JSON.stringify(matchStats), shotCountMissing, ytUrls.full, ytUrls.first, ytUrls.second, ytUrls.pk, matchMemo, matchStatus, JSON.stringify(substitutions), formation, JSON.stringify(formationSlots), hasPk, JSON.stringify(pkKickers), JSON.stringify(pkTheirSeq), matchClockSec, clockRunning, isAdmin, canWrite, loading]);
+  }, [match?.id, goals, theirG, JSON.stringify(keeperSaves), JSON.stringify(shotByHalf), JSON.stringify(theirShotsByHalf), JSON.stringify(matchStats), shotCountMissing, ytUrls.full, ytUrls.first, ytUrls.second, ytUrls.pk, matchMemo, matchStatus, JSON.stringify(substitutions), formation, JSON.stringify(formationSlots), hasPk, JSON.stringify(pkKickers), JSON.stringify(pkTheirSeq), matchClockSec, clockRunning, isAdmin, canWrite, loading]);
   useEffect(() => {
     let active = true;
     if (!scheduleIdForAttend) {
@@ -2966,7 +2987,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setMatchClockSec(seconds);
     clockResumeRef.current = {matchId:String(match?.id || ""), seconds, running:true};
   };
-  const persistGoalChange = async({nextGoals=goals,nextTheirGoals=theirG}={}) => {
+  const persistGoalChange = async({nextGoals=goals,nextTheirGoals=theirG,nextKeeperSaves=keeperSaves}={}) => {
     if (!isAdmin || !canWrite) return false;
     if (goalAutoSaveTimerRef.current) clearTimeout(goalAutoSaveTimerRef.current);
     goalAutoSaveTimerRef.current = null;
@@ -2975,11 +2996,13 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     try {
       const {safeFormation, normalizedSlots, savePayload, patchForUi} = buildGoalSavePayload({
         goals: nextGoals,
-        theirGoals: nextTheirGoals
+        theirGoals: nextTheirGoals,
+        keeperSaves: nextKeeperSaves
       });
       writeLineupCache(match?.id, safeFormation || "", normalizedSlots);
       writeShotCache(match?.id, shotByHalf, theirShotsByHalfSafe);
-      await api("saveGoals", savePayload);
+      const response = await api("saveGoals", savePayload);
+      if (savePayload.keeperSaves.length && !response.keeperSavesSupported) throw new Error("キーパーセーブの保存に対応したGASへの更新が必要です。");
       clearGoalDraft(match?.id);
       if (typeof onShotSaved === "function") {
         await onShotSaved(patchForUi);
@@ -2988,7 +3011,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       }
       return true;
     } catch (e) {
-      alert("得点記録を保存できませんでした。\\n" + (e?.message || "通信を確認して、もう一度お試しください。"));
+      alert("試合記録を保存できませんでした。\n" + (e?.message || "通信を確認して、もう一度お試しください。"));
       return false;
     } finally {
       setLoading(false);
@@ -3015,6 +3038,26 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setModal(null);
     await persistGoalChange({nextGoals:goals,nextTheirGoals});
   };
+  const openKeeperSave = (index=null) => {
+    if (loading || modal) return;
+    const existing = index === null ? null : keeperSaves[index];
+    const time = clockRunning ? getGoalTimeFromClock(-20) : {half:visibleHalfOptions[0] || "1st",minute:"",second:"00"};
+    setKeeperSaveEdit(index);
+    setKeeperSaveForm(existing ? {...existing,minute:String(existing.minute),second:String(existing.second || 0).padStart(2,"0")} : {...time,memberId:""});
+    setModal("keeperSave");
+  };
+  const saveKeeperSave = async () => {
+    if (!keeperSaveForm.memberId) return alert("選手を選んでください");
+    const minute = Number(keeperSaveForm.minute), second = Number(keeperSaveForm.second);
+    if (String(keeperSaveForm.minute).trim() === "" || !Number.isInteger(minute) || minute < 0 || !Number.isInteger(second) || second < 0 || second > 59) return alert("時間を正しく入力してください");
+    const member = membersSorted.find(m => String(m.id) === String(keeperSaveForm.memberId));
+    const item = {half:keeperSaveForm.half,minute,second,memberId:String(keeperSaveForm.memberId),memberName:member?.name || keeperSaveForm.memberName || ""};
+    const nextKeeperSaves = [...keeperSaves];
+    if (keeperSaveEdit === null) nextKeeperSaves.push(item); else nextKeeperSaves[keeperSaveEdit] = item;
+    setKeeperSaves(nextKeeperSaves);
+    setModal(null);
+    await persistGoalChange({nextKeeperSaves});
+  };
   const openGoalEditor=(event,g,isUs)=>{
     event?.preventDefault();
     event?.stopPropagation();
@@ -3035,7 +3078,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       const {safeFormation, normalizedSlots, savePayload, patchForUi} = buildGoalSavePayload();
       writeLineupCache(match?.id, safeFormation || "", normalizedSlots);
       writeShotCache(match?.id, shotByHalf, theirShotsByHalfSafe);
-      await api("saveGoals",savePayload);
+      const response = await api("saveGoals",savePayload);
+      if (savePayload.keeperSaves.length && !response.keeperSavesSupported) throw new Error("キーパーセーブの保存に対応したGASへの更新が必要です。");
       writeLineupCache(match?.id, safeFormation || "", safeFormation ? normalizedSlots : {});
       clearGoalDraft(match?.id);
         if (typeof onShotSaved === "function") {
@@ -3304,6 +3348,17 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       );
     })
   );
+  const keeperSavesBlock = h("div",{className:"match-section",style:{background:"#fff",borderRadius:8,padding:14,marginBottom:8,border:"1px solid #D8E0E8"}},
+    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
+      h("div",{className:"match-section-heading",style:{fontSize:14,fontWeight:800,color:"var(--navy)"}},"キーパーセーブ"),
+      isAdmin && h("button",{type:"button",onClick:()=>openKeeperSave(),disabled:loading||!!modal,style:{...css.bG,padding:"7px 10px",fontSize:11}},"＋ セーブを記録")),
+    keeperSaves.length===0 ? h("div",{style:{fontSize:12,color:"var(--muted-soft)"}},"セーブ記録なし") :
+      keeperSaves.map((s,index)=>({...s,index})).sort((a,b)=>halfSortOrder(a.half)-halfSortOrder(b.half)||Number(a.minute)-Number(b.minute)||Number(a.second)-Number(b.second)||a.index-b.index).map(s=>
+        h("div",{key:s.index,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderTop:"1px solid #F1F5F9"}},
+          h("div",{style:{fontSize:11,fontWeight:800,color:"var(--muted)",minWidth:80}},`${halfLabelMap[normHalf(s.half)] || s.half} ${Number(s.minute||0)}:${String(Number(s.second||0)).padStart(2,"0")}`),
+          h("div",{style:{flex:1,fontSize:12,fontWeight:700}},memberNameById(s.memberId)||s.memberName||"不明"),
+          isAdmin&&h("button",{type:"button",onClick:()=>openKeeperSave(s.index),disabled:loading,style:{...css.bG,padding:"5px 8px",fontSize:11}},"編集"),
+          isAdmin&&h("button",{type:"button",disabled:loading,onClick:async()=>{const nextKeeperSaves=keeperSaves.filter((_,i)=>i!==s.index);setKeeperSaves(nextKeeperSaves);await persistGoalChange({nextKeeperSaves});},style:{...css.bG,padding:"5px 8px",fontSize:11,color:"#865550"}},"削除"))));
   const substitutionTimeline = [...(substitutions || [])]
     .map((s, idx) => ({...s, _idx: idx}))
     .sort((a,b)=>halfSortOrder(a.half)-halfSortOrder(b.half)||Number(a.minute)-Number(b.minute)||Number(a.second)-Number(b.second)||a._idx-b._idx);
@@ -3736,6 +3791,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       matchStatusBlock,
       matchStatsBlock,
       goalsTimelineBlock,
+      keeperSavesBlock,
       matchInputBlock,
       youtubeInputBlock,
       // PK戦の入力は管理者向けに折りたたみ、結果自体は上部に常時表示する
@@ -3810,6 +3866,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
        },"↑ 試合上部へ戻る"),
       formationBlock)),
 
+    modal==="keeperSave"&&h(Modal,{title:keeperSaveEdit===null?"キーパーセーブを記録":"キーパーセーブを編集",onClose:()=>setModal(null)},
+      h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:700,marginBottom:8}},"ハーフ"),
+        h("div",{className:"match-half-tabs"},visibleHalfOptions.map(hf=>h("button",{key:hf,type:"button","aria-pressed":keeperSaveForm.half===hf,onClick:()=>setKeeperSaveForm(p=>({...p,half:hf})),style:{flex:1,padding:10,border:"1px solid #D8E0E8",borderRadius:6,background:keeperSaveForm.half===hf?"#102A43":"#fff",color:keeperSaveForm.half===hf?"#fff":"#64748B",fontWeight:800}},halfTabLabel(hf))))),
+      h("button",{type:"button",onClick:()=>setKeeperSaveForm(p=>({...p,...getGoalTimeFromClock(-20)})),style:{...css.bG,marginBottom:12,padding:"6px 10px",fontSize:11}},"現在時刻-20秒を反映"),
+      h("div",{style:{display:"flex",gap:10,marginBottom:14}},
+        h("label",{style:{flex:1,fontSize:12}},"分",h("input",{type:"number",min:0,value:keeperSaveForm.minute,onInput:e=>setKeeperSaveForm(p=>({...p,minute:e.target.value})),style:css.inp})),
+        h("label",{style:{flex:1,fontSize:12}},"秒",h("input",{type:"number",min:0,max:59,value:keeperSaveForm.second,onInput:e=>setKeeperSaveForm(p=>({...p,second:e.target.value})),style:css.inp}))),
+      h("label",{style:{display:"block",fontSize:12,marginBottom:20}},"選手",h("select",{value:keeperSaveForm.memberId,onChange:e=>setKeeperSaveForm(p=>({...p,memberId:e.target.value})),style:css.inp},h("option",{value:""},"選手を選んでください"),membersSorted.map(m=>h("option",{key:m.id,value:m.id},"#"+(m.number||"-")+" "+m.name)))),
+      h("div",{style:{display:"flex",gap:10}},h("button",{onClick:()=>setModal(null),style:css.bG},"キャンセル"),h("button",{onClick:saveKeeperSave,style:css.bS},"保存"))),
     // 得点モーダル
     modal==="our"&&h(Modal,{title:"得点を追加",onClose:()=>setModal(null)},
       h("div",{style:{marginBottom:14}},h("div",{style:{fontSize:12,fontWeight:700,color:"var(--muted)",marginBottom:8}},"ハーフ"),
@@ -8354,10 +8419,14 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     .sort((a,b)=>nd(b.date).localeCompare(nd(a.date)));
 
   // ランキング集計
-  const scorerMap={},assistMap={},mvpMap={};
+  const scorerMap={},assistMap={},keeperSaveMap={},mvpMap={};
   // PK成功率: 各選手のPK得点(goalType==="PK")を集計
   const pkScoreMap={},pkTotalMap={};
   filtered.forEach(r=>{
+    parseKeeperSaves(r.keeperSaves).forEach(s=>{
+      const id = s.memberId || (s.memberName && members.find(m=>m.name===s.memberName)?.id) || "";
+      if(id) keeperSaveMap[id]=(keeperSaveMap[id]||0)+1;
+    });
     (r.goals||[]).forEach(g=>{
       const scId = g.scorerId || (g.scorerName && members.find(m=>m.name===g.scorerName)?.id) || "";
       const isOwnGoal = g.goalType==="オウンゴール";
@@ -8390,9 +8459,10 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
 
   // 個人成績: メンバー別集計
   const personalStats = useMemo(()=>members.map(m=>{
-    let goals=0,assists=0,shots=0,pkMade=0,pkTotal=0,mvpCount=0;
+    let goals=0,assists=0,saves=0,shots=0,pkMade=0,pkTotal=0,mvpCount=0;
     let shotRateGoals=0, shotRateShots=0;
     filtered.forEach(r=>{
+      saves += parseKeeperSaves(r.keeperSaves).filter(s=>String(s.memberId || (members.find(x=>x.name===s.memberName)?.id) || "")===String(m.id)).length;
       const isShotRateTarget = !isTrueFlag(r.shotCountMissing);
       const shotMap = parseResultShotStats(r);
       const myShotsInResult = Math.max(0, Number(shotMap[m.id] || 0) || 0);
@@ -8425,8 +8495,8 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
       const mv=members.find(x=>x.name===s.mvp||x.id===s.mvp);
       if(mv&&mv.id===m.id) mvpCount++;
     });
-    return {...m,goals,assists,shots,pkMade,pkTotal,mvpCount,shotRateGoals,shotRateShots};
-  }).filter(m=>m.goals>0||m.assists>0||m.shots>0||m.mvpCount>0).sort((a,b)=>b.goals-a.goals||b.shots-a.shots||b.assists-a.assists)
+    return {...m,goals,assists,saves,shots,pkMade,pkTotal,mvpCount,shotRateGoals,shotRateShots};
+  }).filter(m=>m.goals>0||m.assists>0||m.saves>0||m.shots>0||m.mvpCount>0).sort((a,b)=>b.goals-a.goals||b.shots-a.shots||b.assists-a.assists)
   ,[filtered,members,schedules,periodRange]);
 
   return h(Fragment,{},
@@ -8626,6 +8696,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
     dashTab==="rank"&&h(Fragment,{},
       h(RankList,{title:"得点ランキング",icon:"⚽",data:toRank(scorerMap,members),unit:"点"}),
       h(RankList,{title:"アシストランキング",icon:"🅰",data:toRank(assistMap,members),unit:"A"}),
+      h(RankList,{title:"キーパーセーブランキング",icon:"🧤",data:toRank(keeperSaveMap,members),unit:"回"}),
       h(RankList,{title:"MVP獲得",icon:"🏅",data:toRank(mvpMap,members),unit:"回"}),
 
       // PK得点ランキング
@@ -8689,6 +8760,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
             h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6,textAlign:"center"}},
               [{l:"⚽ ゴール",v:m.goals,c:"#1D4E89"},
                {l:"🅰 アシスト",v:m.assists,c:"#2196F3"},
+               {l:"🧤 セーブ",v:m.saves,c:"#7C3AED"},
                {l:"🎯 シュート",v:m.shots,c:"#0EA5E9"},
                {l:"シュート成功率",v:shotRate,c:"#0F766E"},
                {l:"🥅 PK成功率",v:pkRate,c:"#FFC107"},
