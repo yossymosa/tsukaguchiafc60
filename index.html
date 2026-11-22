@@ -1926,12 +1926,14 @@ function parseMatchClockInput(minutes, seconds) {
   if (!Number.isSafeInteger(min) || !Number.isInteger(sec) || sec > 59 || !Number.isSafeInteger(min * 60 + sec)) return null;
   return min * 60 + sec;
 }
-function matchClockHalfTime(totalSec, half, options, perHalfSeconds) {
-  const index = Math.max(0, options.indexOf(half));
-  const local = Math.max(0, Math.floor(Number(totalSec) || 0) - index * perHalfSeconds);
-  return {minute:Math.floor(local / 60),second:local % 60};
+function restoreMatchClockDraft(draft, options, perHalf) {
+  const halves = options.length ? options : ["1st"];
+  const seconds = Math.max(0, Number(draft?.matchClockSec || 0) || 0);
+  if (draft?.clockHalf && halves.includes(normalizeHalfLabel(draft.clockHalf))) return {half:normalizeHalfLabel(draft.clockHalf),seconds};
+  if (draft?.clockHalf) return {half:halves[0],seconds};
+  const index = Math.min(halves.length - 1, Math.floor(seconds / perHalf));
+  return {half:halves[index],seconds:seconds - index * perHalf};
 }
-
 function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap={},onToggleFavorite,onBack,onHome,onSaved,onShotSaved}) {
   const coachVoiceLeaveGuard=useRef(()=>true);
   const halfSortOrder = h => {
@@ -2071,6 +2073,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const clockResumeRef = useRef(null);
   const [matchClockSec,setMatchClockSec]=useState(()=>Math.max(0, Number(goalDraftInit?.matchClockSec || 0) || 0));
   const [clockRunning,setClockRunning]=useState(false);
+  const [clockHalf,setClockHalf]=useState(()=>normalizeHalfLabel(goalDraftInit?.clockHalf || "1st"));
   const [clockInput,setClockInput]=useState({minute:"0",second:"00"});
   const clockBaseSecRef = useRef(0);
   const clockStartMsRef = useRef(0);
@@ -2637,8 +2640,6 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const ourShotCellsView = ourShotCells;
   const theirShotCellsView = theirShotCells;
   const activeTheirShots = Math.max(0, Number(theirShotsByHalfSafe[safeActiveShotHalf] || 0) || 0);
-  const parsedFormatForClock = parseFormatSelection(match?.formatLabel || "");
-  const perHalfSeconds = Math.max(60, Number(parsedFormatForClock.time || DEFAULT_FORMAT_TIME) * 60 || (DEFAULT_FORMAT_TIME * 60));
   const getClockSecNow = () => {
     if (!clockRunning) return Math.max(0, Number(matchClockSec || 0) || 0);
     const elapsed = Math.floor((Date.now() - Number(clockStartMsRef.current || 0)) / 1000);
@@ -2655,17 +2656,10 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     const t = clockToTime(totalSec);
     return `${String(t.minute).padStart(2,"0")}:${String(t.second).padStart(2,"0")}`;
   };
-  const getHalfByClockSec = totalSec => {
-    const options = visibleHalfOptions.length ? visibleHalfOptions : ["1st"];
-    const idx = Math.max(0, Math.floor(Math.max(0, Number(totalSec || 0) || 0) / perHalfSeconds));
-    const capped = Math.min(options.length - 1, idx);
-    return options[capped] || options[0] || "1st";
-  };
   const getGoalTimeFromClock = offsetSec => {
     const baseSec = Math.max(0, getClockSecNow() + Number(offsetSec || 0));
-    const half = getHalfByClockSec(baseSec);
-    const t = matchClockHalfTime(baseSec,half,visibleHalfOptions,perHalfSeconds);
-    return {half, minute:String(t.minute), second:String(t.second).padStart(2,"0")};
+    const t = clockToTime(baseSec);
+    return {half:clockHalf, minute:String(t.minute), second:String(t.second).padStart(2,"0")};
   };
   const applyClockToGoalDraft = (team, offsetSec=0) => {
     const time = getGoalTimeFromClock(offsetSec);
@@ -2677,9 +2671,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   };
   const applyClockToSubDraft = () => {
     const baseSec = getClockSecNow();
-    const hf = getHalfByClockSec(baseSec);
-    const t = matchClockHalfTime(baseSec,hf,visibleHalfOptions,perHalfSeconds);
-    setSubForm(prev => ({...prev, half:hf, minute:String(t.minute), second:String(t.second).padStart(2,"0")}));
+    const t = clockToTime(baseSec);
+    setSubForm(prev => ({...prev, half:clockHalf, minute:String(t.minute), second:String(t.second).padStart(2,"0")}));
   };
   const startMatchClock = () => {
     if (clockRunning) return;
@@ -2704,6 +2697,14 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     clockResumeRef.current = null;
     if (isAdmin) setMatchStatus("pre");
   };
+  const selectClockHalf = half => {
+    if (clockRunning || half === clockHalf) return;
+    setClockHalf(half);
+    setMatchClockSec(0);
+    clockBaseSecRef.current = 0;
+    clockStartMsRef.current = 0;
+    clockResumeRef.current = null;
+  };
   const openClockInput = () => {
     const time = clockToTime(getClockSecNow());
     setClockInput({minute:String(time.minute),second:String(time.second).padStart(2,"0")});
@@ -2723,7 +2724,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setModal(null);
   };
   const currentClockLabel = formatClockLabel(getClockSecNow());
-  const currentHalfKey = getHalfByClockSec(getClockSecNow());
+  const currentHalfKey = clockHalf;
   const currentClockHalf = ({"1st":"前半","2nd":"後半","3rd":"3rd"})[currentHalfKey] || currentHalfKey;
   const all=[
     ...goals.map((g,idx)=>({...g,team:"us",sourceIdx:idx})),
@@ -2735,6 +2736,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     setNg(prev => visibleHalfOptions.includes(prev.half) ? prev : {...prev, half:firstHalf});
     setNtg(prev => visibleHalfOptions.includes(prev.half) ? prev : {...prev, half:firstHalf});
     setActiveShotHalf(prev => visibleHalfOptions.includes(prev) ? prev : firstHalf);
+    setClockHalf(prev => visibleHalfOptions.includes(prev) ? prev : firstHalf);
     setEditNg(prev => {
       if (!prev) return prev;
       return visibleHalfOptions.includes(prev.half) ? prev : {...prev, half:firstHalf};
@@ -2825,10 +2827,15 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       clockStartMsRef.current = savedClock.running ? Date.now() : 0;
       setMatchClockSec(seconds);
       setClockRunning(!!savedClock.running);
+      setClockHalf(normalizeHalfLabel(savedClock.half || "1st"));
       clockResumeRef.current = null;
     } else {
       setClockRunning(false);
-      setMatchClockSec(Math.max(0, Number(draft?.matchClockSec || 0) || 0));
+      const options = getHalfOptionsByFormatLabel(match?.formatLabel || "", match?.goals || [], match?.theirGoals || []);
+      const perHalf = Math.max(60, Number(parseFormatSelection(match?.formatLabel || "").time || DEFAULT_FORMAT_TIME) * 60);
+      const restored = restoreMatchClockDraft(draft, options, perHalf);
+      setClockHalf(restored.half);
+      setMatchClockSec(restored.seconds);
       clockBaseSecRef.current = 0;
       clockStartMsRef.current = 0;
     }
@@ -2855,6 +2862,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       pkKickers,
       pkTheirSeq,
       matchClockSec,
+      clockHalf,
       clockRunning,
       updatedAt: Date.now(),
     };
@@ -2880,7 +2888,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
     return () => {
       if (goalAutoSaveTimerRef.current) clearTimeout(goalAutoSaveTimerRef.current);
     };
-  }, [match?.id, goals, theirG, JSON.stringify(keeperSaves), JSON.stringify(shotByHalf), JSON.stringify(theirShotsByHalf), JSON.stringify(matchStats), shotCountMissing, ytUrls.full, ytUrls.first, ytUrls.second, ytUrls.pk, matchMemo, matchStatus, JSON.stringify(substitutions), formation, JSON.stringify(formationSlots), hasPk, JSON.stringify(pkKickers), JSON.stringify(pkTheirSeq), matchClockSec, clockRunning, isAdmin, canWrite, loading]);
+  }, [match?.id, goals, theirG, JSON.stringify(keeperSaves), JSON.stringify(shotByHalf), JSON.stringify(theirShotsByHalf), JSON.stringify(matchStats), shotCountMissing, ytUrls.full, ytUrls.first, ytUrls.second, ytUrls.pk, matchMemo, matchStatus, JSON.stringify(substitutions), formation, JSON.stringify(formationSlots), hasPk, JSON.stringify(pkKickers), JSON.stringify(pkTheirSeq), matchClockSec, clockHalf, clockRunning, isAdmin, canWrite, loading]);
   useEffect(() => {
     let active = true;
     if (!scheduleIdForAttend) {
@@ -2947,21 +2955,20 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const openAddOurGoal = () => {
     if (loading || modal) return;
     // 前回キャンセル時の選手を引き継がず、得点入力は毎回まっさらな状態で開く。
-    const time = clockRunning ? getGoalTimeFromClock(-20) : {half:visibleHalfOptions[0] || "1st",minute:"",second:"00"};
+    const time = clockRunning ? getGoalTimeFromClock(-20) : {half:clockHalf,minute:"",second:"00"};
     setNg({scorerId:"",scorerName:"",assistId:"",assistName:"",goalType:"通常",...time});
     setModal("our");
   };
   const openAddTheirGoal = () => {
     if (loading || modal) return;
-    const time = clockRunning ? getGoalTimeFromClock(-20) : {half:visibleHalfOptions[0] || "1st",minute:"",second:"00"};
+    const time = clockRunning ? getGoalTimeFromClock(-20) : {half:clockHalf,minute:"",second:"00"};
     setNtg({goalType:"通常",...time});
     setModal("their");
   };
   const openAddSub = () => {
-    const firstHalf = visibleHalfOptions[0] || "1st";
     const baseSec = getClockSecNow();
-    const hf = getHalfByClockSec(baseSec) || firstHalf;
-    const t = matchClockHalfTime(baseSec,hf,visibleHalfOptions,perHalfSeconds);
+    const hf = clockHalf;
+    const t = clockToTime(baseSec);
     setSubEdit(null);
     setSubForm({half:hf,minute:String(t.minute),second:String(t.second).padStart(2,"0"),outMemberId:"",inMemberId:"",note:""});
     setModal("substitution");
@@ -3013,12 +3020,11 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   };
 
   const preserveLiveClockForRefresh = () => {
-    if (!clockRunning) return;
     const seconds = getClockSecNow();
     clockBaseSecRef.current = seconds;
-    clockStartMsRef.current = Date.now();
+    clockStartMsRef.current = clockRunning ? Date.now() : 0;
     setMatchClockSec(seconds);
-    clockResumeRef.current = {matchId:String(match?.id || ""), seconds, running:true};
+    clockResumeRef.current = {matchId:String(match?.id || ""), seconds, half:clockHalf, running:clockRunning};
   };
   const persistGoalChange = async({nextGoals=goals,nextTheirGoals=theirG,nextKeeperSaves=keeperSaves}={}) => {
     if (!isAdmin || !canWrite) return false;
@@ -3074,7 +3080,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   const openKeeperSave = (index=null) => {
     if (loading || modal) return;
     const existing = index === null ? null : keeperSaves[index];
-    const time = clockRunning ? getGoalTimeFromClock(-20) : {half:visibleHalfOptions[0] || "1st",minute:"",second:"00"};
+    const time = clockRunning ? getGoalTimeFromClock(-20) : {half:clockHalf,minute:"",second:"00"};
     setKeeperSaveEdit(index);
     setKeeperSaveForm(existing ? {...existing,minute:String(existing.minute),second:String(existing.second || 0).padStart(2,"0")} : {...time,memberId:""});
     setModal("keeperSave");
@@ -3648,6 +3654,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       ),
       h("div",{style:{fontSize:11,fontWeight:700,color:"#334155"}},currentClockHalf)
     ),
+    h("div",{className:"match-half-tabs",style:{marginBottom:6}},visibleHalfOptions.map(hf=>h("button",{key:hf,type:"button","aria-pressed":clockHalf===hf,disabled:clockRunning,onClick:()=>selectClockHalf(hf),style:{flex:1,padding:"8px",border:"1px solid #D8E0E8",borderRadius:6,background:clockHalf===hf?"#102A43":"#fff",color:clockHalf===hf?"#fff":"#64748B",fontSize:12,fontWeight:800,opacity:clockRunning&&clockHalf!==hf?0.5:1}},halfTabLabel(hf)))),
+    h("div",{style:{fontSize:11,color:"var(--muted)",marginBottom:8}},"ハーフを切り替えるとタイマーは00:00に戻ります。変更は停止中にできます。"),
     isAdmin && h("div",{style:{display:"flex",gap:8,marginBottom:8}},
       h("button",{
         onClick:startMatchClock,
@@ -3901,7 +3909,7 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
       formationBlock)),
 
     modal==="clockInput"&&h(Modal,{title:"タイマーの時間を指定",onClose:()=>setModal(null)},
-      h("div",{style:{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:12}},"試合開始からの通し時間を入力してください。ハーフは試合形式に合わせて自動で切り替わります。"),
+      h("div",{style:{fontSize:12,color:"var(--muted)",lineHeight:1.6,marginBottom:12}},currentClockHalf+"の開始からの時間を入力してください。"),
       h("div",{style:{display:"flex",gap:10,marginBottom:18}},
         h("label",{style:{flex:1,fontSize:12,fontWeight:700}},"分",h("input",{type:"number",inputMode:"numeric",min:0,value:clockInput.minute,onInput:e=>setClockInput(p=>({...p,minute:e.target.value})),style:{...css.inp,fontSize:20,textAlign:"center"}})),
         h("label",{style:{flex:1,fontSize:12,fontWeight:700}},"秒",h("input",{type:"number",inputMode:"numeric",min:0,max:59,value:clockInput.second,onInput:e=>setClockInput(p=>({...p,second:e.target.value})),style:{...css.inp,fontSize:20,textAlign:"center"}}))),

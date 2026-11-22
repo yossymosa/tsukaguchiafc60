@@ -8,15 +8,15 @@ function section(start, end) {
   assert(a >= 0 && b > a, `missing ${start}`);
   return source.slice(a, b);
 }
-const context = vm.createContext({});
+const context = vm.createContext({normalizeHalfLabel:value=>value});
 vm.runInContext(section("function parseMatchClockInput(", "function GoalPage("), context);
-const parse = context.parseMatchClockInput, local = context.matchClockHalfTime;
+const parse = context.parseMatchClockInput, restore = context.restoreMatchClockDraft;
 assert.equal(parse("12", "05"), 725);
 assert.equal(parse("0", "00"), 0);
 for (const [m,s] of [["", "0"], ["1", ""], ["-1", "0"], ["1", "60"], ["1.5", "0"], ["99999999999999999999", "0"]]) assert.equal(parse(m,s), null);
-assert.deepEqual({...local(725,"2nd",["1st","2nd"],600)}, {minute:2,second:5});
-assert.deepEqual({...local(1300,"3rd",["1st","2nd","3rd"],600)}, {minute:1,second:40});
-assert.deepEqual({...local(1500,"2nd",["1st","2nd"],600)}, {minute:15,second:0});
+assert.deepEqual({...restore({matchClockSec:725},["1st","2nd"],600)}, {half:"2nd",seconds:125});
+assert.deepEqual({...restore({matchClockSec:900,clockHalf:"2nd"},["1st","2nd"],600)}, {half:"2nd",seconds:900});
+assert.deepEqual({...restore(null,["1st","2nd"],600)}, {half:"1st",seconds:0});
 
 function fixture(running, input) {
   const ref = {current:0}, started = {current:0}, resume = {current:{}};
@@ -36,10 +36,19 @@ assert.equal(f.state.running,true); assert.equal(f.state.seconds,190); assert.eq
 f = fixture(false,{minute:"5",second:"61"}); f.apply(true);
 assert.equal(f.state.running,false); assert.equal(f.state.seconds,null); assert.equal(f.state.modal,"clockInput"); assert(f.state.alert);
 
-const goalsContext = vm.createContext({getClockSecNow:()=>630,getHalfByClockSec:s=>s<600?"1st":"2nd",
-  visibleHalfOptions:["1st","2nd"],perHalfSeconds:600,matchClockHalfTime:local});
+const goalsContext = vm.createContext({getClockSecNow:()=>630,clockHalf:"2nd",
+  clockToTime:seconds=>({minute:Math.floor(seconds/60),second:seconds%60})});
 vm.runInContext(section("  const getGoalTimeFromClock =", "  const applyClockToGoalDraft =")+"\nthis.getGoalTime = getGoalTimeFromClock;",goalsContext);
-assert.deepEqual({...goalsContext.getGoalTime(-20)},{half:"2nd",minute:"0",second:"10"});
-goalsContext.getClockSecNow=()=>610;
-assert.deepEqual({...goalsContext.getGoalTime(-20)},{half:"1st",minute:"9",second:"50"});
-console.log("Match clock: input, start, running adjustment and half-relative event times passed");
+assert.deepEqual({...goalsContext.getGoalTime(-20)},{half:"2nd",minute:"10",second:"10"});
+goalsContext.getClockSecNow=()=>10;
+assert.deepEqual({...goalsContext.getGoalTime(-20)},{half:"2nd",minute:"0",second:"00"});
+function switchHalf(running, selected) {
+  const state={half:selected,seconds:42};
+  const c=vm.createContext({clockRunning:running,clockHalf:selected,setClockHalf:v=>state.half=v,setMatchClockSec:v=>state.seconds=v,
+    clockBaseSecRef:{current:42},clockStartMsRef:{current:1},clockResumeRef:{current:{}}});
+  vm.runInContext(section("  const selectClockHalf =", "  const openClockInput =")+"\nthis.select = selectClockHalf;",c);
+  c.select("2nd"); return state;
+}
+assert.deepEqual(switchHalf(false,"1st"),{half:"2nd",seconds:0});
+assert.deepEqual(switchHalf(true,"1st"),{half:"1st",seconds:42});
+console.log("Match clock: per-half selection, input, start, restoration and event times passed");
