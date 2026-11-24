@@ -34,7 +34,7 @@ function harness({picker,existing=false}={}){
   const upload=()=>buttons().find(n=>/本をアップロード$/.test(text(n)));
   function choose(file,index=0){const input=nodes().filter(n=>n.type==="input"&&n.props.accept==="application/octet-stream")[index];assert.ok(input);const target={files:file?[file]:[]};Object.defineProperty(target,"value",{set(){target.files=[];}});input.props.onInput({currentTarget:target});input.props.onChange({currentTarget:target});render();}
   async function settle(){for(let i=0;i<20;i++)await Promise.resolve();render();}
-  render();return {render,nodes,text,buttons,upload,choose,settle,calls,timers,unmount:()=>cleanups.forEach(fn=>fn?.())};
+  render();buttons().find(n=>text(n)==="動画をアップロード").props.onClick();render();return {render,nodes,text,buttons,upload,choose,settle,calls,timers,unmount:()=>cleanups.forEach(fn=>fn?.())};
 }
 function unreadVideo(name="大きい試合動画.MOV"){
   const file={name,type:"video/quicktime"};

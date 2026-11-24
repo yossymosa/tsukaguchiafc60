@@ -596,6 +596,9 @@ const getYouTubeVideoIdFromUrl = rawUrl => {
 const updateYouTubeVideoTextOnly = async ({accessToken,videoUrl,title,description}) => {
   const videoId = getYouTubeVideoIdFromUrl(videoUrl);
   if (!videoId) throw new Error("YouTube動画URLが正しくありません。");
+  const safeTitle=String(title || ""), safeDescription=String(description || "");
+  if (!safeTitle.trim() || safeTitle.length>100) throw new Error("YouTubeタイトルは1〜100文字にしてください。");
+  if (new TextEncoder().encode(safeDescription).length>5000) throw new Error("YouTube概要欄が長すぎます（5000バイト以内）。");
   const lookup = await youtubeApiJson(
     "https://www.googleapis.com/youtube/v3/videos?part=snippet&id="+encodeURIComponent(videoId),
     accessToken
@@ -604,12 +607,13 @@ const updateYouTubeVideoTextOnly = async ({accessToken,videoUrl,title,descriptio
   if (!current?.snippet) throw new Error("対象動画が見つからないか、更新権限がありません。");
   const currentSnippet = current.snippet || {};
   const snippet = {
-    title:String(title || "").slice(0,100),
-    description:String(description || "").slice(0,5000),
+    title:safeTitle,
+    description:safeDescription,
     categoryId:String(currentSnippet.categoryId || "17")
   };
   if (Array.isArray(currentSnippet.tags)) snippet.tags = currentSnippet.tags.slice();
   if (currentSnippet.defaultLanguage) snippet.defaultLanguage = String(currentSnippet.defaultLanguage);
+  if (currentSnippet.defaultAudioLanguage) snippet.defaultAudioLanguage = String(currentSnippet.defaultAudioLanguage);
   return youtubeApiJson("https://www.googleapis.com/youtube/v3/videos?part=snippet",accessToken,{
     method:"PUT",
     headers:{"Content-Type":"application/json; charset=UTF-8"},
@@ -9800,6 +9804,16 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
   ]));
   const resultSignature = (results || []).map(row => [row.id,row.youtubeRecordingFiles,row.youtubeUrl,row.youtubeUrl1st,row.youtubeUrl2nd,row.youtubeUrl3rd,row.youtubeUrlPk].join("|")).join("¦");
   const [plans,setPlans] = useState(()=>buildPlans(results));
+  const [youtubeMode,setYoutubeMode] = useState("");
+  const [editorVideos,setEditorVideos] = useState([]);
+  const [editorNextPage,setEditorNextPage] = useState("");
+  const [editorLoaded,setEditorLoaded] = useState(false);
+  const [editorLoading,setEditorLoading] = useState(false);
+  const [editorQuery,setEditorQuery] = useState("");
+  const [editorVideoId,setEditorVideoId] = useState("");
+  const [editorSlotKey,setEditorSlotKey] = useState("");
+  const [editorMessage,setEditorMessage] = useState("");
+  const [editorError,setEditorError] = useState("");
   const [saving,setSaving] = useState("");
   const [savedNotice,setSavedNotice] = useState("");
   const [syncing,setSyncing] = useState(false);
@@ -9968,12 +9982,12 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
     setShareMessage("");
     setShareError("");
   };
-  const establishYouTubeConnection = async ({prompt="select_account",announce=true}={}) => {
+  const establishYouTubeConnection = async ({prompt="select_account",announce=true,needPlaylist=true}={}) => {
     const tokenResponse = await requestYouTubeAccessToken({prompt});
     const accessToken = String(tokenResponse?.accessToken || "");
     if (!accessToken) throw new Error("YouTubeを操作するための認証情報を取得できませんでした。");
     const channel = await getYouTubeChannelForUpload(accessToken);
-    const playlist = await getOrCreateTargetYouTubePlaylist(accessToken);
+    const playlist = needPlaylist ? await getOrCreateTargetYouTubePlaylist(accessToken) : null;
     setYoutubeAccessToken(accessToken);
     setYoutubeTokenExpiresAt(Number(tokenResponse?.expiresAt || 0));
     setYoutubeChannel(channel);
@@ -10042,7 +10056,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
   };
   const getYoutubeTemplateForSlot = slot => {
     const part = String(slot?.part?.key || "");
-    const half = part === "pk" ? "PK戦" : String(slot?.part?.label || "試合動画");
+    const half = part === "pk" ? "PK戦" : part === "full" ? "" : String(slot?.part?.label || "試合動画");
     return {
       title:makeYtTitle(slot.row,schedule,half),
       description:part === "pk" ? makeYtPkDesc(slot.row) : makeYtDesc(slot.row,members,half)
@@ -10070,6 +10084,63 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
       part:String(slot?.part?.key || ""),
       videoUrl:String(videoUrl || "").trim()
     });
+  };
+  const editorSlotsForSchedule = () => (results || []).flatMap((row,index) => {
+    const parts = [{...videoParts[0],urlKeys:["youtubeUrl"]},...videoPartsForRow(row),...(hasPkForRow(row)?[videoParts[4]]:[])];
+    return parts.map(part=>({slotKey:String(row?.id || "")+":"+part.key,resultId:String(row?.id || ""),row,part,
+      gameLabel:"第"+(row?.gameNumber || index+1)+"試合",opponent:String(row?.opponent || "相手未設定")}));
+  });
+  const loadEditorVideos = async (more=false) => {
+    if (editorLoading || metadataUpdating || uploading || youtubeReconciling || (more && !editorNextPage)) return;
+    setEditorLoading(true); setEditorError(""); setEditorMessage("");
+    try {
+      let token=youtubeAccessToken, channel=youtubeChannel;
+      if (!token || !channel || Number(youtubeTokenExpiresAt || 0)<=Date.now()+30000) {
+        const connection=await establishYouTubeConnection({prompt:"select_account",announce:false,needPlaylist:false});
+        token=connection.accessToken; channel=connection.channel;
+      }
+      if (!channel?.uploadsPlaylistId) throw new Error("チャンネルの動画一覧を取得できませんでした。");
+      const query=new URLSearchParams({part:"snippet,contentDetails",playlistId:channel.uploadsPlaylistId,maxResults:"50"});
+      if (more) query.set("pageToken",editorNextPage);
+      const data=await youtubeApiJson("https://www.googleapis.com/youtube/v3/playlistItems?"+query.toString(),token);
+      const items=(Array.isArray(data?.items)?data.items:[]).map(item=>{
+        const id=String(item?.contentDetails?.videoId || item?.snippet?.resourceId?.videoId || "").trim();
+        if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
+        return {id,title:String(item?.snippet?.title || "無題の動画"),publishedAt:String(item?.contentDetails?.videoPublishedAt || item?.snippet?.publishedAt || "")};
+      }).filter(Boolean);
+      setEditorVideos(current=>more?[...current,...items.filter(item=>!current.some(old=>old.id===item.id))]:items);
+      setEditorNextPage(String(data?.nextPageToken || "")); setEditorLoaded(true);
+      if (!more) setEditorVideoId("");
+    } catch(e) {setEditorError("動画一覧を取得できませんでした。"+String(e?.message || e));}
+    finally {setEditorLoading(false);}
+  };
+  const updateSelectedExistingVideo = async () => {
+    if (metadataUpdating || uploading || youtubeReconciling || editorLoading) return;
+    const slot=editorSlotsForSchedule().find(item=>item.slotKey===editorSlotKey);
+    const video=editorVideos.find(item=>item.id===editorVideoId);
+    if (!slot || !video) {setEditorError("動画と対象の試合・ハーフを選んでください。"); return;}
+    const other=editorSlotsForSchedule().find(item=>item.slotKey!==slot.slotKey && getYouTubeVideoIdFromUrl(getSavedYoutubeUrl(item.row,item.part))===video.id);
+    if (other) {setEditorError("この動画は既に「"+other.gameLabel+" / "+other.part.label+"」にリンクされています。別の動画を選んでください。");return;}
+    const prior=getSavedYoutubeUrl(slot.row,slot.part), videoUrl="https://www.youtube.com/watch?v="+video.id;
+    if (prior && getYouTubeVideoIdFromUrl(prior)!==video.id && !confirm("この試合枠には別の動画が登録されています。新しく選んだ動画にリンクを変更しますか？")) return;
+    setMetadataUpdating(true); setEditorError(""); setEditorMessage("");
+    let textUpdated=false, linkSaved=false;
+    try {
+      let token=youtubeAccessToken;
+      if (!token || !youtubeChannel || Number(youtubeTokenExpiresAt || 0)<=Date.now()+30000) {
+        const connection=await establishYouTubeConnection({prompt:"select_account",announce:false,needPlaylist:false});
+        token=connection.accessToken;
+      }
+      const template=getYoutubeTemplateForSlot(slot);
+      await updateYouTubeVideoTextOnly({accessToken:token,videoUrl,title:template.title,description:template.description});
+      textUpdated=true;
+      await saveYoutubeLinkForSlot(slot,videoUrl); linkSaved=true;
+      setEditorVideos(current=>current.map(item=>item.id===video.id?{...item,title:template.title}:item));
+      setEditorMessage("タイトル・概要欄を更新し、試合にリンクしました。公開設定は変更していません。");
+      try {await onUpdated?.();} catch(e) {setEditorError("リンクは保存されましたが画面を更新できませんでした。画面を開き直してください。");}
+    } catch(e) {
+      setEditorError((textUpdated&&!linkSaved?"動画情報は更新されましたが、試合へのリンクを保存できませんでした。もう一度反映してください。":"動画情報を更新できませんでした。")+" "+String(e?.message || e));
+    } finally {setMetadataUpdating(false);}
   };
   const getLinkedYoutubeSlotsForMetadata = () => {
     const seen = new Set();
@@ -10117,7 +10188,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
       let channel = youtubeChannel;
       if (!tokenIsFresh || !channel) {
         setShareMessage("YouTubeのチャンネルを選択しています...");
-        const connected = await establishYouTubeConnection({prompt:"select_account",announce:false});
+        const connected = await establishYouTubeConnection({prompt:"select_account",announce:false,needPlaylist:false});
         accessToken = connected.accessToken;
         channel = connected.channel;
       }
@@ -10451,6 +10522,49 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
   const selectedShareVideos = getSelectedShareVideos();
   const pendingShareVideos = selectedShareVideos.filter(slot => uploadStates[slot.slotKey]?.phase !== "done");
   const linkedMetadataSlots = getLinkedYoutubeSlotsForMetadata();
+  const modeChooser = h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,marginBottom:12}},
+    [{key:"upload",label:"動画をアップロード"},{key:"edit",label:"アップ済み動画を編集"}].map(item=>h("button",{key:item.key,type:"button",disabled:uploading||metadataUpdating||youtubeReconciling||editorLoading||youtubeConnecting,
+      "aria-pressed":youtubeMode===item.key,onClick:()=>{setYoutubeMode(item.key);setShareMessage("");setShareError("");setEditorMessage("");setEditorError("");},
+      style:{padding:"11px 8px",border:"1px solid "+(youtubeMode===item.key?"#102A43":"#CBD5E1"),borderRadius:7,background:youtubeMode===item.key?"#102A43":"#fff",color:youtubeMode===item.key?"#fff":"#334155",fontSize:12,fontWeight:800,cursor:"pointer"}},item.label)));
+  if (!showFileNameFlow && !youtubeMode) return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:14,marginBottom:10,border:"1px solid #D8E0E8"}},
+    h("div",{style:{fontSize:14,fontWeight:900,color:"var(--navy)",marginBottom:10}},"YouTube動画"),
+    h("div",{style:{fontSize:12,color:"var(--muted)",marginBottom:10}},"操作を選んでください。"),modeChooser);
+  if (!showFileNameFlow && youtubeMode==="edit") {
+    const slots=editorSlotsForSchedule(), slot=slots.find(item=>item.slotKey===editorSlotKey);
+    const video=editorVideos.find(item=>item.id===editorVideoId);
+    const needle=String(editorQuery||"").trim().toLowerCase();
+    const shown=editorVideos.filter(item=>item.id===editorVideoId || !needle || (item.title+" "+item.publishedAt).toLowerCase().includes(needle));
+    const template=slot?getYoutubeTemplateForSlot(slot):null;
+    const busy=editorLoading||metadataUpdating||uploading||youtubeReconciling||youtubeConnecting;
+    return h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:14,marginBottom:10,border:"1px solid #D8E0E8"}},
+      h("div",{style:{fontSize:14,fontWeight:900,color:"var(--navy)",marginBottom:10}},"YouTube動画"),modeChooser,
+      h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.7,marginBottom:10}},"ライブ配信後など、チームのYouTubeにある動画を選びます。試合記録からタイトル・概要欄を作成し、選んだ試合へリンクします。"),
+      h("div",{style:{fontSize:11,color:"var(--muted)",lineHeight:1.6,marginBottom:10}},"ライブ終了後はYouTube側で動画の処理が完了するまで一覧に表示されないことがあります。"),
+      h("div",{style:{fontSize:11,color:"var(--muted)",lineHeight:1.6,marginBottom:10}},"概要欄の時刻は試合開始と動画開始が同じ前提です。配信を早めに始めた場合はYouTubeで時刻を調整してください。"),
+      h("button",{type:"button",onClick:()=>loadEditorVideos(false),disabled:busy,style:{...css.bG,width:"100%",padding:10,fontSize:12,marginBottom:10}},editorLoading?"動画を読み込み中...":editorLoaded?"動画一覧を読み直す":"YouTubeの動画を読み込む"),
+      youtubeChannel&&h("div",{style:{fontSize:11,color:"#456C5B",fontWeight:800,marginBottom:10}},"接続先: "+YOUTUBE_TARGET_CHANNEL_HANDLE+"（"+youtubeChannel.title+"）"),
+      editorLoaded&&h(Fragment,{},
+        h("label",{style:{display:"block",fontSize:12,fontWeight:800,marginBottom:8}},"動画を検索",h("input",{type:"search",value:editorQuery,onInput:e=>setEditorQuery(e.currentTarget.value),placeholder:"動画タイトル・日付",style:{...css.inp,marginTop:5}})),
+        h("label",{style:{display:"block",fontSize:12,fontWeight:800,marginBottom:8}},"YouTubeの動画",h("select",{value:editorVideoId,onChange:e=>setEditorVideoId(e.currentTarget.value),disabled:busy,style:{...css.inp,marginTop:5}},
+          h("option",{value:""},shown.length?"動画を選んでください":"動画が見つかりません"),shown.map(item=>h("option",{key:item.id,value:item.id},(item.publishedAt?item.publishedAt.slice(0,10)+"　":"")+item.title)))),
+        editorNextPage&&h("button",{type:"button",onClick:()=>loadEditorVideos(true),disabled:busy,style:{...css.bG,padding:"8px 10px",fontSize:11,marginBottom:10}},"さらに動画を読み込む"),
+        video&&h("a",{href:"https://www.youtube.com/watch?v="+video.id,target:"_blank",rel:"noopener noreferrer",style:{display:"block",fontSize:11,color:"var(--blue)",marginBottom:10}},"選択した動画をYouTubeで確認 ↗"),
+        h("label",{style:{display:"block",fontSize:12,fontWeight:800,marginBottom:10}},"対象の試合・ハーフ",h("select",{value:editorSlotKey,onChange:e=>setEditorSlotKey(e.currentTarget.value),disabled:busy,style:{...css.inp,marginTop:5}},
+          h("option",{value:""},"試合・ハーフを選んでください"),slots.map(item=>h("option",{key:item.slotKey,value:item.slotKey},item.gameLabel+" vs "+item.opponent+" / "+item.part.label)))),
+        slot&&getSavedYoutubeUrl(slot.row,slot.part)&&h("div",{style:{fontSize:11,color:"#786753",marginBottom:8}},"この枠には動画が登録されています。別の動画を選ぶとリンク先を変更します。"),
+        video&&template&&h("div",{style:{padding:10,background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6,marginBottom:10}},
+          h("div",{style:{fontSize:11,fontWeight:900,marginBottom:4}},"更新後のタイトル"),h("div",{style:{fontSize:12,overflowWrap:"anywhere",marginBottom:9}},template.title),
+          h("div",{style:{fontSize:11,fontWeight:900,marginBottom:4}},"更新後の概要欄"),h("div",{style:{fontSize:11,whiteSpace:"pre-wrap",overflowWrap:"anywhere",maxHeight:180,overflowY:"auto"}},template.description)),
+        h("button",{type:"button",onClick:updateSelectedExistingVideo,disabled:busy||!video||!slot,style:{...css.bS,width:"100%",padding:12,fontSize:13,opacity:busy||!video||!slot?0.55:1}},metadataUpdating?"更新中...":"タイトル・概要欄を更新してリンク")),
+      editorMessage&&h("div",{role:"status",style:{marginTop:10,fontSize:11,color:"#456C5B",whiteSpace:"pre-wrap"}},editorMessage),
+      editorError&&h("div",{role:"alert",style:{marginTop:10,fontSize:11,color:"#865550",whiteSpace:"pre-wrap"}},editorError),
+      h("details",{style:{marginTop:12,padding:"8px 10px",background:"#F8FAFC",border:"1px solid #D8E0E8",borderRadius:6}},
+        h("summary",{style:{fontSize:11,fontWeight:800,cursor:"pointer"}},"リンク済み動画をまとめて更新"),
+        h("div",{style:{fontSize:11,color:"#475569",lineHeight:1.6,margin:"8px 0"}},"試合にリンク済みの "+linkedMetadataSlots.length+" 本のタイトルと概要欄を現在の記録で更新します。"),
+        h("button",{onClick:updateLinkedYoutubeMetadata,disabled:busy||!linkedMetadataSlots.length,style:{...css.bG,padding:"8px 10px",fontSize:11}},"リンク済み動画を更新"),
+        shareMessage&&h("div",{role:"status",style:{fontSize:11,color:"#456C5B",marginTop:8}},shareMessage),
+        shareError&&h("div",{role:"alert",style:{fontSize:11,color:"#865550",marginTop:8,whiteSpace:"pre-wrap"}},shareError)));
+  }
   const filePickerLabel = (slot,photos=false) => {
     const disabled=uploading||metadataUpdating||youtubeReconciling;
     // iOS の標準経路は Files にする。動画形式の検証は選択後に行う。
@@ -10463,6 +10577,7 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
   };
   if (!showFileNameFlow) return h(Fragment,{},
     h("div",{className:"motion-surface",style:{background:"#fff",borderRadius:8,padding:"14px",marginBottom:10,border:"1px solid #D8E0E8"}},
+      modeChooser,
       h("div",{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:800,color:"var(--navy)",letterSpacing:1.2,marginBottom:4}},"YOUTUBE DIRECT UPLOAD"),
       h("div",{style:{fontSize:12,color:"#475569",lineHeight:1.8,marginBottom:12}},"動画を選ぶ → ファイル名を確認 → アップロード。選択時は動画を送信しません。タイトル・概要欄は自動で設定し、限定公開で試合動画の再生リストへ保存します。"),
       h("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"9px 10px",background:youtubeChannel?"#F0FDF4":"#F8FAFC",border:"1px solid "+(youtubeChannel?"#C9DAD1":"#D8E0E8"),borderRadius:7,marginBottom:9}},
@@ -10507,15 +10622,6 @@ function ScheduleYoutubeVideoPanel({schedule,results,members=[],user,isAdmin,onU
           h("div",{style:{fontSize:10,lineHeight:1.45,color:"#526B91"}},"YouTube内の同じタイトルの動画を探してアプリへリンクします。リンク先が削除済みの場合も最新動画へ直します。同タイトルが複数なら件数を表示し、最新の1本をリンクします。")
         ),
         h("button",{onClick:reconcileYoutubeLinks,disabled:youtubeReconciling||uploading||metadataUpdating||youtubeConnecting,style:{...css.bG,padding:"9px 10px",fontSize:11,whiteSpace:"nowrap",opacity:youtubeReconciling||uploading||metadataUpdating||youtubeConnecting?0.55:1,cursor:youtubeReconciling||uploading||metadataUpdating||youtubeConnecting?"wait":"pointer"}},youtubeReconciling?"照合中...":"照合する")
-      ),
-      h("div",{style:{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:10,marginBottom:10,padding:"10px 11px",borderRadius:7,background:"#F8FAFC",border:"1px solid #D8E0E8"}},
-        h("div",{style:{minWidth:0}},
-          h("div",{style:{fontSize:12,fontWeight:900,color:"#173B75",marginBottom:2}},"登録済み動画の情報を更新"),
-          h("div",{style:{fontSize:10,lineHeight:1.45,color:"#526B91"}},linkedMetadataSlots.length
-            ? "現在の得点・前後半・対戦相手から、リンク済み動画 "+linkedMetadataSlots.length+" 本のタイトルと概要欄だけを更新します。動画本体や公開設定は変更しません。"
-            : "リンク済みのYouTube動画があると、動画を再アップロードせずにタイトルと概要欄を更新できます。")
-        ),
-        h("button",{onClick:updateLinkedYoutubeMetadata,disabled:metadataUpdating||uploading||youtubeConnecting||youtubeReconciling||!linkedMetadataSlots.length,style:{...css.bG,padding:"9px 10px",fontSize:11,whiteSpace:"nowrap",opacity:metadataUpdating||uploading||youtubeConnecting||youtubeReconciling||!linkedMetadataSlots.length?0.55:1,cursor:metadataUpdating||uploading||youtubeConnecting||youtubeReconciling?"wait":"pointer"}},metadataUpdating?"更新中...":"情報を更新")
       ),
     )
   );
