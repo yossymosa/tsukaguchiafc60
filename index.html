@@ -1673,7 +1673,7 @@ function makeYtTitle(match, schedule, half) {
   const dt = fmt(match.date || schedule?.date);
   const dateStr = dt.y + "/" + Number(dt.m) + "/" + Number(dt.d);
   const opponent = String(match.opponent || "").trim();
-  const tc = getTC(normalizeType(schedule?.type || match.type || "") || schedule?.type || match.type || "");
+  const tc = getTC(normalizeType(match.matchType || schedule?.type || match.type || "") || match.matchType || schedule?.type || match.type || "");
   const gameNo = match.gameNumber ? "第" + match.gameNumber + "試合" : "";
   const loc = schedule?.location ? "@" + schedule.location : "";
   const formatLabel = String(match?.formatLabel || "").trim();
@@ -1686,7 +1686,7 @@ function makeLegacyYtTitle(match, schedule, half) {
   const dt = fmt(match.date || schedule?.date);
   const dateStr = dt.y + "/" + Number(dt.m) + "/" + Number(dt.d);
   const opponent = String(match.opponent || "").trim();
-  const tc = getTC(normalizeType(schedule?.type || match.type || "") || schedule?.type || match.type || "");
+  const tc = getTC(normalizeType(match.matchType || schedule?.type || match.type || "") || match.matchType || schedule?.type || match.type || "");
   const gameNo = match.gameNumber ? "第" + match.gameNumber + "試合" : "";
   const loc = schedule?.location ? "@" + schedule.location : "";
   const tournament = String(schedule?.title || "").trim();
@@ -2433,8 +2433,8 @@ function GoalPage({match,schedule,members,isAdmin,canWrite=true,user,favoriteMap
   // PK表示文字列
   const pkOurStr=pkKickers.map(k=>k.success?"○":"×").join("");
   const pkTheirStr=pkTheirSeq.map(s=>s?"○":"×").join("");
-  const resolvedMatchType = normalizeType(schedule?.type || match?.type || "");
-  const tc=getTC(resolvedMatchType || match?.type || schedule?.type || "");
+  const resolvedMatchType = normalizeType(match?.matchType || schedule?.type || match?.type || "");
+  const tc=getTC(resolvedMatchType || match?.matchType || schedule?.type || match?.type || "");
   const dt=fmt(match.date||schedule?.date);
   const visibleHalfOptions = getHalfOptionsByFormatLabel(match?.formatLabel || "", [...goals,...keeperSaves], theirG);
   const isFirst=h=>normalizeHalfLabel(h)==="1st";
@@ -4144,7 +4144,7 @@ function HomeTab({results,schedules,news,pendingNotices=[],members,isAdmin,onGoT
   };
   const getResultType = r => {
     const linked = findLinkedScheduleForResult(r, schedules);
-    return linked?.type || r.type || "";
+    return r.matchType || linked?.type || r.type || "";
   };
   useEffect(()=>{
     const updateToday=()=>setTodayKey(todayLocal());
@@ -7908,7 +7908,15 @@ function AttendSection({schedule, members, user, isAdmin, canWrite=true, users=[
 }
 
 // ── 試合結果編集モーダル ─────────────────────────────────────
-function EditResultModal({result, members, onSave, onClose}) {
+function MatchTypeSelector({value,onChange,scheduleType}) {
+  const options=[{value:"",label:"日程に合わせる"},{value:"official",label:"公式戦"},{value:"training",label:"トレマ"}];
+  return h("div",{style:{marginBottom:16}},
+    h("div",{style:{fontSize:12,fontWeight:600,color:"var(--muted)",marginBottom:8}},"この試合の種類"),
+    h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},options.map(option=>h("button",{key:option.value,type:"button","aria-pressed":value===option.value,onClick:()=>onChange(option.value),
+      style:{flex:"1 1 90px",padding:"9px 6px",border:"1px solid "+(value===option.value?"#102A43":"#D8E0E8"),borderRadius:6,background:value===option.value?"#102A43":"#fff",color:value===option.value?"#fff":"#475569",fontSize:12,fontWeight:800,cursor:"pointer"}},option.label))),
+    h("div",{style:{fontSize:11,color:"var(--muted)",marginTop:6}},"日程の種類: "+getTC(scheduleType).lb));
+}
+function EditResultModal({result, members, schedule, onSave, onClose}) {
   const parsedFormat = parseFormatSelection(result.formatLabel || "");
   const [fr, setFr] = useState({
     id:          result.id,
@@ -7921,6 +7929,7 @@ function EditResultModal({result, members, onSave, onClose}) {
     scheduleId:  result.scheduleId||"",
     date:        result.date||"",
     type:        result.type||"",
+    matchType:   result.matchType||"",
     memo:        result.memo||"",
     formation:   normalizeFormationLabel(result.formation)||"",
   });
@@ -7932,6 +7941,7 @@ function EditResultModal({result, members, onSave, onClose}) {
     });
   };
   return h(Modal, {title:"✏️ 試合を修正", onClose},
+    h(MatchTypeSelector,{value:fr.matchType,onChange:value=>setFr(p=>({...p,matchType:value})),scheduleType:schedule?.type||result.type}),
     h("div",{style:{marginBottom:14}},
       h("div",{style:{fontSize:12,fontWeight:600,color:"var(--muted)",marginBottom:6}},"対戦相手"),
       h("input",{value:fr.opponent,onChange:e=>setFr(p=>({...p,opponent:e.target.value})),
@@ -7982,7 +7992,7 @@ function EditResultModal({result, members, onSave, onClose}) {
 function MatchListByMonth({results,schedules,onGoToMatch}) {
   const getResultType = r => {
     const linked = findLinkedScheduleForResult(r, schedules);
-    return linked?.type || r.type || "";
+    return r.matchType || linked?.type || r.type || "";
   };
   // 月別グループ作成（降順：新しい月を左）
   const groups = useMemo(() => {
@@ -8275,6 +8285,7 @@ function AddMatchModal({schedule,results,schedules=[],onSave,onClose}) {
     formatLabel:"",
     formatTime:latestParsedFormat.time||DEFAULT_FORMAT_TIME,
     formatMode:latestParsedFormat.mode||DEFAULT_FORMAT_MODE,
+    matchType:"",
     memo:"",
     matchStatus:"pre",
     formation:normalizeFormationLabel(latestResult?.formation)||"3-2-2",
@@ -8308,6 +8319,7 @@ function AddMatchModal({schedule,results,schedules=[],onSave,onClose}) {
   };
   return h(Modal,{title:"試合を追加",onClose:submitting?(()=>{}):onClose},
     submitting && h("div",{style:{position:"fixed",inset:0,zIndex:5001,background:"rgba(255,255,255,0.01)",cursor:"wait"}}),
+    h(MatchTypeSelector,{value:fr.matchType,onChange:value=>setFr(p=>({...p,matchType:value})),scheduleType:schedule.type}),
     h("div",{style:{marginBottom:16}},
       h("div",{style:{fontSize:12,fontWeight:600,color:"var(--muted)",marginBottom:6}},"対戦相手"),
       h("input",{value:fr.opponent,onChange:e=>setFr(p=>({...p,opponent:e.target.value})),placeholder:"〇〇FC",style:css.inp}),
@@ -8394,7 +8406,7 @@ function DashTab({results,members,schedules,liftings=[],isAdmin=false,initialDas
   const grade4FiscalStart = currentFiscalStart;
   const getResultType=row=>{
     const linked=findLinkedScheduleForResult(row, schedules);
-    return normalizeType(row.type || linked?.type || "");
+    return normalizeType(row.matchType || linked?.type || row.type || "");
   };
   function typeMatch(r,typeF){
     if(typeF==="all") return true;
@@ -11166,7 +11178,7 @@ function DayPage({schedule,results,schedules,members,isAdmin,canWrite,user,users
               h("div",{style:{fontSize:12,fontWeight:900,color:"var(--muted)"}},r.gameNumber||1)),
             h("div",{style:{flex:1,minWidth:0}},
               h("div",{style:{fontSize:11,color:"var(--muted)",fontWeight:700,marginBottom:2}},
-                r.formatLabel||"試合形式未設定"),
+                getTC(r.matchType || schedule.type || r.type).lb+" / "+(r.formatLabel||"試合形式未設定")),
               h("div",{style:{fontSize:16,fontWeight:900,color:getOpponentColor(r),lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
                 "vs "+r.opponent),
               h("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
@@ -12446,7 +12458,7 @@ function App() {
       await api("addResult",{result:{
         scheduleId:fr.scheduleId,date:fr.date,opponent:fr.opponent,opponentColor:normalizeOpponentColor(fr.opponentColor),
         formatLabel:fr.formatLabel||"",gameNumber:fr.gameNumber||1,
-        type:fr.type,memo:fr.memo||"",
+        type:fr.type,matchType:fr.matchType||"",memo:fr.memo||"",
         matchStatus:fr.matchStatus||"pre",
         formation:fr.formation||"",
         formationSlots:fr.formationSlots||"",
@@ -12685,7 +12697,7 @@ function App() {
 
   if(page?.type==="dayDetail") return h(Fragment,{},
     loading&&h(Loader,{msg:loadMsg}),
-    editResult&&h(EditResultModal,{result:editResult,members,onSave:async fr=>{
+    editResult&&h(EditResultModal,{result:editResult,members,schedule:page.schedule,onSave:async fr=>{
       setLoading(true);setLoadMsg("更新中...");
       try{await api("updateResult",{result:fr});await load("更新中...");}
       catch(e){alert("更新エラー: "+e.message);}

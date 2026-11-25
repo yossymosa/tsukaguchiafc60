@@ -462,7 +462,7 @@ function buildYoutubeResultContext_(resultSh, headers, row, scheduleDetails, goa
     date: value(HEADER_DATE),
     opponent: String(value(HEADER_OPPONENT) || "").trim(),
     gameNumber: String(value(HEADER_GAME_NUMBER) || "").trim(),
-    type: String(value("種類") || schedule.type || "").trim(),
+    type: String(value("試合種別") || schedule.type || value("種類") || "").trim(),
     scheduleTitle: String(schedule.title || "").trim(),
     location: String(schedule.location || "").trim(),
     goals: goalsByResult[resultId] || [],

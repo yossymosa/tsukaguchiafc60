@@ -45,7 +45,7 @@ const MAPS = {
     // 既存列 + 追加列（スケジュールID・種類・YouTube・PK）
     "ID":"id", "日付":"date", "相手チーム":"opponent", "相手カラー":"opponentColor",
     "試合形式":"formatLabel", "第○試合":"gameNumber", "メモ":"memo",
-    "スケジュールID":"scheduleId", "種類":"type",
+    "スケジュールID":"scheduleId", "種類":"type", "試合種別":"matchType",
     "YouTubeURL":"youtubeUrl", "前半URL":"youtubeUrl1st", "後半URL":"youtubeUrl2nd", "3rdURL":"youtubeUrl3rd", "PK戦URL":"youtubeUrlPk",
     "YouTube撮影ファイル":"youtubeRecordingFiles",
     "PK塚口":"pkOur", "PK相手":"pkTheir",
@@ -1956,6 +1956,7 @@ function dispatch(req) {
         memo:         r.memo         || "",
         scheduleId:   r.scheduleId   || "",
         type:         r.type         || "",
+        matchType:    r.matchType    || "",
         youtubeUrl:   r.youtubeUrl   || "",
         youtubeUrl1st:r.youtubeUrl1st|| "",
         youtubeUrl2nd:r.youtubeUrl2nd|| "",
@@ -2576,7 +2577,7 @@ function dispatch(req) {
       for (let i = 1; i < ids.length; i++) {
         if (String(ids[i][0]).trim() === String(req.result.id).trim()) {
           const row = i + 1;
-          const colMap = {"相手チーム":"opponent","相手カラー":"opponentColor","試合形式":"formatLabel","第○試合":"gameNumber"};
+          const colMap = {"相手チーム":"opponent","相手カラー":"opponentColor","試合形式":"formatLabel","第○試合":"gameNumber","試合種別":"matchType"};
           for (const [colName, key] of Object.entries(colMap)) {
             const ci = headers.indexOf(colName);
             if (ci >= 0 && req.result[key] !== undefined) {
